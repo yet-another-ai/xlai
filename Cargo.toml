@@ -25,8 +25,17 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"
 wasm-bindgen = "0.2"
 
 [workspace.lints.rust]
-unsafe_code = "warn"
+unconditional_panic = "deny"
 
 [workspace.lints.clippy]
-all = "warn"
-pedantic = "warn"
+panic = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+todo = "deny"
+unimplemented = "deny"
+panic_in_result_fn = "deny"
+
+[profile.release]
+debug = "line-tables-only"
+lto = true
+codegen-units = 1
