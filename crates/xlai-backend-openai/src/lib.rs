@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use async_stream::try_stream;
 use futures_util::StreamExt;
 use reqwest::Client;
@@ -317,7 +319,7 @@ impl OpenAiChatResponse {
             content: choice.message.content.unwrap_or_default(),
             tool_name: None,
             tool_call_id: None,
-            metadata: Default::default(),
+            metadata: BTreeMap::new(),
         };
 
         let tool_calls = choice
@@ -333,7 +335,7 @@ impl OpenAiChatResponse {
             tool_calls,
             usage: self.usage.map(Into::into),
             finish_reason: finish_reason_from_api(choice.finish_reason.as_deref()),
-            metadata: Default::default(),
+            metadata: BTreeMap::new(),
         })
     }
 }
@@ -386,17 +388,20 @@ struct OpenAiFunctionCall {
 
 #[derive(Deserialize)]
 struct OpenAiUsage {
-    prompt_tokens: u32,
-    completion_tokens: u32,
-    total_tokens: u32,
+    #[serde(rename = "prompt_tokens")]
+    prompt: u32,
+    #[serde(rename = "completion_tokens")]
+    completion: u32,
+    #[serde(rename = "total_tokens")]
+    total: u32,
 }
 
 impl From<OpenAiUsage> for TokenUsage {
     fn from(value: OpenAiUsage) -> Self {
         Self {
-            input_tokens: value.prompt_tokens,
-            output_tokens: value.completion_tokens,
-            total_tokens: value.total_tokens,
+            input_tokens: value.prompt,
+            output_tokens: value.completion,
+            total_tokens: value.total,
         }
     }
 }
@@ -468,12 +473,12 @@ impl StreamState {
                 content: self.message_content,
                 tool_name: None,
                 tool_call_id: None,
-                metadata: Default::default(),
+                metadata: BTreeMap::new(),
             },
             tool_calls,
             usage: None,
             finish_reason: self.finish_reason,
-            metadata: Default::default(),
+            metadata: BTreeMap::new(),
         })
     }
 }

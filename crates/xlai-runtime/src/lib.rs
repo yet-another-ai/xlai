@@ -78,6 +78,11 @@ impl RuntimeBuilder {
         self.with_chat_model(Arc::new(OpenAiChatModel::new(config)))
     }
 
+    /// Builds an `XlaiRuntime` from the configured capabilities.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no runtime capabilities were configured.
     pub fn build(self) -> Result<XlaiRuntime, XlaiError> {
         let runtime = XlaiRuntime {
             chat_model: self.chat_model,
@@ -127,6 +132,12 @@ impl XlaiRuntime {
         self.capabilities.contains(&capability)
     }
 
+    /// Executes a single chat request with the configured chat model.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no chat model is configured or if the underlying
+    /// model request fails.
     pub async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, XlaiError> {
         let chat_model = self
             .chat_model
@@ -136,6 +147,11 @@ impl XlaiRuntime {
         chat_model.generate(request).await
     }
 
+    /// Starts a streaming chat request with the configured chat model.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no chat model is configured.
     pub fn stream_chat(
         &self,
         request: ChatRequest,
@@ -153,6 +169,12 @@ impl XlaiRuntime {
         }))
     }
 
+    /// Executes an embedding request with the configured embedding model.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no embedding model is configured or if the
+    /// underlying provider request fails.
     pub async fn embed(&self, request: EmbeddingRequest) -> Result<EmbeddingResponse, XlaiError> {
         let embedding_model = self
             .embedding_model
@@ -162,6 +184,12 @@ impl XlaiRuntime {
         embedding_model.embed(request).await
     }
 
+    /// Executes a tool call through the configured runtime tool executor.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no tool executor is configured or if the tool call
+    /// fails.
     pub async fn call_tool(&self, call: ToolCall) -> Result<ToolResult, XlaiError> {
         let tool_executor = self
             .tool_executor
@@ -171,6 +199,12 @@ impl XlaiRuntime {
         tool_executor.call_tool(call).await
     }
 
+    /// Resolves skills through the configured skill store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no skill store is configured or if skill resolution
+    /// fails.
     pub async fn resolve_skills(&self, ids: &[SkillId]) -> Result<Vec<Skill>, XlaiError> {
         let skill_store = self
             .skill_store
@@ -180,6 +214,12 @@ impl XlaiRuntime {
         skill_store.resolve_skills(ids).await
     }
 
+    /// Searches the configured knowledge store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no knowledge store is configured or if the search
+    /// fails.
     pub async fn search_knowledge(
         &self,
         query: KnowledgeQuery,
@@ -192,6 +232,12 @@ impl XlaiRuntime {
         knowledge_store.search(query).await
     }
 
+    /// Searches the configured vector store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no vector store is configured or if the search
+    /// fails.
     pub async fn search_vectors(
         &self,
         query: VectorSearchQuery,
@@ -241,6 +287,10 @@ mod tests {
 
     use super::{ChatExecutionEvent, RuntimeBuilder, ToolCallExecutionMode};
 
+    fn empty_metadata() -> std::collections::BTreeMap<String, String> {
+        std::collections::BTreeMap::new()
+    }
+
     #[tokio::test]
     async fn chat_executes_registered_tools_across_round_trips() {
         let requests = Arc::new(Mutex::new(Vec::new()));
@@ -256,14 +306,14 @@ mod tests {
                     }],
                     usage: None,
                     finish_reason: FinishReason::ToolCalls,
-                    metadata: Default::default(),
+                    metadata: empty_metadata(),
                 },
                 ChatResponse {
                     message: assistant_message("Paris is sunny."),
                     tool_calls: Vec::new(),
                     usage: None,
                     finish_reason: FinishReason::Completed,
-                    metadata: Default::default(),
+                    metadata: empty_metadata(),
                 },
             ],
         ));
@@ -282,7 +332,7 @@ mod tests {
                     arguments["city"].as_str().unwrap_or("unknown")
                 ),
                 is_error: false,
-                metadata: Default::default(),
+                metadata: empty_metadata(),
             })
         });
 
@@ -323,7 +373,7 @@ mod tests {
                     }],
                     usage: None,
                     finish_reason: FinishReason::ToolCalls,
-                    metadata: Default::default(),
+                    metadata: empty_metadata(),
                 }),
             ],
             vec![
@@ -336,7 +386,7 @@ mod tests {
                     tool_calls: Vec::new(),
                     usage: None,
                     finish_reason: FinishReason::Completed,
-                    metadata: Default::default(),
+                    metadata: empty_metadata(),
                 }),
             ],
         ]));
@@ -355,7 +405,7 @@ mod tests {
                     arguments["city"].as_str().unwrap_or("unknown")
                 ),
                 is_error: false,
-                metadata: Default::default(),
+                metadata: empty_metadata(),
             })
         });
 
@@ -381,8 +431,9 @@ mod tests {
                     saw_tool_result = true;
                     assert_eq!(result.content, "weather for Paris: sunny");
                 }
-                ChatExecutionEvent::Model(ChatChunk::MessageStart { .. })
-                | ChatExecutionEvent::Model(ChatChunk::ToolCallDelta(_)) => {}
+                ChatExecutionEvent::Model(
+                    ChatChunk::MessageStart { .. } | ChatChunk::ToolCallDelta(_),
+                ) => {}
             }
         }
 
@@ -420,14 +471,14 @@ mod tests {
                     ],
                     usage: None,
                     finish_reason: FinishReason::ToolCalls,
-                    metadata: Default::default(),
+                    metadata: empty_metadata(),
                 },
                 ChatResponse {
                     message: assistant_message("Paris is sunny and 9am."),
                     tool_calls: Vec::new(),
                     usage: None,
                     finish_reason: FinishReason::Completed,
-                    metadata: Default::default(),
+                    metadata: empty_metadata(),
                 },
             ],
         ));
@@ -455,7 +506,7 @@ mod tests {
                         tool_name: "lookup_weather".to_owned(),
                         content: "weather for Paris: sunny".to_owned(),
                         is_error: false,
-                        metadata: Default::default(),
+                        metadata: empty_metadata(),
                     })
                 }
             });
@@ -475,7 +526,7 @@ mod tests {
                         tool_name: "lookup_time".to_owned(),
                         content: "time for Paris: 9am".to_owned(),
                         is_error: false,
-                        metadata: Default::default(),
+                        metadata: empty_metadata(),
                     })
                 }
             });
@@ -526,14 +577,14 @@ mod tests {
                     ],
                     usage: None,
                     finish_reason: FinishReason::ToolCalls,
-                    metadata: Default::default(),
+                    metadata: empty_metadata(),
                 },
                 ChatResponse {
                     message: assistant_message("Paris is sunny and 9am."),
                     tool_calls: Vec::new(),
                     usage: None,
                     finish_reason: FinishReason::Completed,
-                    metadata: Default::default(),
+                    metadata: empty_metadata(),
                 },
             ],
         ));
@@ -565,7 +616,7 @@ mod tests {
                         tool_name: "lookup_weather".to_owned(),
                         content: "weather for Paris: sunny".to_owned(),
                         is_error: false,
-                        metadata: Default::default(),
+                        metadata: empty_metadata(),
                     })
                 }
             });
@@ -585,7 +636,7 @@ mod tests {
                         tool_name: "lookup_time".to_owned(),
                         content: "time for Paris: 9am".to_owned(),
                         is_error: false,
-                        metadata: Default::default(),
+                        metadata: empty_metadata(),
                     })
                 }
             });
@@ -624,14 +675,14 @@ mod tests {
                     ],
                     usage: None,
                     finish_reason: FinishReason::ToolCalls,
-                    metadata: Default::default(),
+                    metadata: empty_metadata(),
                 },
                 ChatResponse {
                     message: assistant_message("Paris is sunny and 9am."),
                     tool_calls: Vec::new(),
                     usage: None,
                     finish_reason: FinishReason::Completed,
-                    metadata: Default::default(),
+                    metadata: empty_metadata(),
                 },
             ],
         ));
@@ -660,7 +711,7 @@ mod tests {
                         tool_name: "lookup_weather".to_owned(),
                         content: "weather for Paris: sunny".to_owned(),
                         is_error: false,
-                        metadata: Default::default(),
+                        metadata: empty_metadata(),
                     })
                 }
             });
@@ -681,7 +732,7 @@ mod tests {
                         tool_name: "lookup_time".to_owned(),
                         content: "time for Paris: 9am".to_owned(),
                         is_error: false,
-                        metadata: Default::default(),
+                        metadata: empty_metadata(),
                     })
                 }
             });
@@ -732,7 +783,7 @@ mod tests {
             content: content.to_owned(),
             tool_name: None,
             tool_call_id: None,
-            metadata: Default::default(),
+            metadata: empty_metadata(),
         }
     }
 
@@ -755,10 +806,7 @@ mod tests {
             "recording-test"
         }
 
-        fn generate<'a>(
-            &'a self,
-            request: ChatRequest,
-        ) -> BoxFuture<'a, Result<ChatResponse, XlaiError>> {
+        fn generate(&self, request: ChatRequest) -> BoxFuture<'_, Result<ChatResponse, XlaiError>> {
             Box::pin(async move {
                 self.requests.lock().expect("requests lock").push(request);
                 self.responses
@@ -789,10 +837,10 @@ mod tests {
             "streaming-test"
         }
 
-        fn generate<'a>(
-            &'a self,
+        fn generate(
+            &self,
             _request: ChatRequest,
-        ) -> BoxFuture<'a, Result<ChatResponse, XlaiError>> {
+        ) -> BoxFuture<'_, Result<ChatResponse, XlaiError>> {
             Box::pin(async {
                 Err(XlaiError::new(
                     xlai_core::ErrorKind::Unsupported,
@@ -801,10 +849,10 @@ mod tests {
             })
         }
 
-        fn generate_stream<'a>(
-            &'a self,
+        fn generate_stream(
+            &self,
             _request: ChatRequest,
-        ) -> BoxStream<'a, Result<ChatChunk, XlaiError>> {
+        ) -> BoxStream<'_, Result<ChatChunk, XlaiError>> {
             let chunks = self
                 .streams
                 .lock()

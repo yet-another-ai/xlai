@@ -141,17 +141,29 @@ impl Chat {
             .collect()
     }
 
+    /// Sends a single user prompt through this chat session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configured model request fails, if a tool callback
+    /// fails, or if the chat exceeds the maximum number of tool round trips.
     pub async fn prompt(&self, content: impl Into<String>) -> Result<ChatResponse, XlaiError> {
         self.execute(vec![ChatMessage {
             role: MessageRole::User,
             content: content.into(),
             tool_name: None,
             tool_call_id: None,
-            metadata: Default::default(),
+            metadata: BTreeMap::new(),
         }])
         .await
     }
 
+    /// Executes a chat turn with the provided message history.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configured model request fails, if a tool callback
+    /// fails, or if the chat exceeds the maximum number of tool round trips.
     pub async fn execute(&self, mut messages: Vec<ChatMessage>) -> Result<ChatResponse, XlaiError> {
         for _ in 0..self.max_tool_round_trips {
             let response = self
@@ -186,7 +198,7 @@ impl Chat {
             content: content.into(),
             tool_name: None,
             tool_call_id: None,
-            metadata: Default::default(),
+            metadata: BTreeMap::new(),
         }])
     }
 
@@ -215,7 +227,7 @@ impl Chat {
                         .map(|tool| tool.definition.clone())
                         .collect(),
                     skill_ids: Vec::new(),
-                    metadata: Default::default(),
+                    metadata: BTreeMap::new(),
                     temperature,
                     max_output_tokens,
                 };
@@ -275,7 +287,7 @@ impl Chat {
             messages,
             available_tools: self.tool_definitions(),
             skill_ids: Vec::new(),
-            metadata: Default::default(),
+            metadata: BTreeMap::new(),
             temperature: self.temperature,
             max_output_tokens: self.max_output_tokens,
         }
