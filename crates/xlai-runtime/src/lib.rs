@@ -274,7 +274,7 @@ fn missing_dependency(name: &str) -> XlaiError {
 mod tests {
     use std::collections::VecDeque;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Mutex, MutexGuard};
 
     use futures_util::{StreamExt, stream};
     use serde_json::json;
@@ -291,8 +291,16 @@ mod tests {
         std::collections::BTreeMap::new()
     }
 
+    fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+        match mutex.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
-    async fn chat_executes_registered_tools_across_round_trips() {
+    async fn chat_executes_registered_tools_across_round_trips() -> Result<(), XlaiError> {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let model = Arc::new(RecordingChatModel::new(
             requests.clone(),
@@ -318,10 +326,7 @@ mod tests {
             ],
         ));
 
-        let runtime = RuntimeBuilder::new()
-            .with_chat_model(model)
-            .build()
-            .expect("runtime should build");
+        let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
         let mut chat = runtime.chat_session();
         chat.register_tool(weather_tool_definition(), |arguments| async move {
@@ -336,11 +341,11 @@ mod tests {
             })
         });
 
-        let response = chat.prompt("What's the weather in Paris?").await.unwrap();
+        let response = chat.prompt("What's the weather in Paris?").await?;
 
         assert_eq!(response.message.content, "Paris is sunny.");
 
-        let requests = requests.lock().expect("requests lock");
+        let requests = lock_unpoisoned(&requests);
         assert_eq!(requests.len(), 2);
         assert_eq!(requests[1].available_tools.len(), 1);
         assert_eq!(requests[1].messages.len(), 3);
@@ -354,10 +359,13 @@ mod tests {
             Some("tool_1")
         );
         assert_eq!(requests[1].messages[2].content, "weather for Paris: sunny");
+
+        Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
-    async fn chat_stream_emits_model_and_tool_events() {
+    async fn chat_stream_emits_model_and_tool_events() -> Result<(), XlaiError> {
         let model = Arc::new(StreamingChatModel::new(vec![
             vec![
                 ChatChunk::MessageStart {
@@ -391,10 +399,7 @@ mod tests {
             ],
         ]));
 
-        let runtime = RuntimeBuilder::new()
-            .with_chat_model(model)
-            .build()
-            .expect("runtime should build");
+        let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
         let mut chat = runtime.chat_session();
         chat.register_tool(weather_tool_definition(), |arguments| async move {
@@ -416,7 +421,7 @@ mod tests {
         let mut finished_messages = Vec::new();
 
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event? {
                 ChatExecutionEvent::Model(ChatChunk::ContentDelta(delta)) => {
                     content_deltas.push(delta);
                 }
@@ -447,10 +452,13 @@ mod tests {
             finished_messages,
             vec!["Looking up weather", "Paris is sunny."]
         );
+
+        Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
-    async fn chat_executes_multiple_tool_calls_concurrently_by_default() {
+    async fn chat_executes_multiple_tool_calls_concurrently_by_default() -> Result<(), XlaiError> {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let model = Arc::new(RecordingChatModel::new(
             requests.clone(),
@@ -485,10 +493,7 @@ mod tests {
 
         let active_calls = Arc::new(AtomicUsize::new(0));
         let max_active_calls = Arc::new(AtomicUsize::new(0));
-        let runtime = RuntimeBuilder::new()
-            .with_chat_model(model)
-            .build()
-            .expect("runtime should build");
+        let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
         let mut chat = runtime.chat_session();
         {
@@ -532,10 +537,7 @@ mod tests {
             });
         }
 
-        let response = chat
-            .prompt("What's the weather and time in Paris?")
-            .await
-            .unwrap();
+        let response = chat.prompt("What's the weather and time in Paris?").await?;
         assert_eq!(response.message.content, "Paris is sunny and 9am.");
 
         assert!(
@@ -543,7 +545,7 @@ mod tests {
             "default mode should overlap tool executions",
         );
 
-        let requests = requests.lock().expect("requests lock");
+        let requests = lock_unpoisoned(&requests);
         assert_eq!(requests.len(), 2);
         assert_eq!(requests[1].messages.len(), 4);
         assert_eq!(
@@ -554,10 +556,13 @@ mod tests {
             requests[1].messages[3].tool_name.as_deref(),
             Some("lookup_time")
         );
+
+        Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
-    async fn chat_can_execute_multiple_tool_calls_concurrently() {
+    async fn chat_can_execute_multiple_tool_calls_concurrently() -> Result<(), XlaiError> {
         let model = Arc::new(RecordingChatModel::new(
             Arc::new(Mutex::new(Vec::new())),
             vec![
@@ -592,10 +597,7 @@ mod tests {
         let active_calls = Arc::new(AtomicUsize::new(0));
         let max_active_calls = Arc::new(AtomicUsize::new(0));
 
-        let runtime = RuntimeBuilder::new()
-            .with_chat_model(model)
-            .build()
-            .expect("runtime should build");
+        let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
         let mut chat = runtime
             .chat_session()
@@ -642,19 +644,20 @@ mod tests {
             });
         }
 
-        let response = chat
-            .prompt("What's the weather and time in Paris?")
-            .await
-            .unwrap();
+        let response = chat.prompt("What's the weather and time in Paris?").await?;
         assert_eq!(response.message.content, "Paris is sunny and 9am.");
         assert!(
             max_active_calls.load(Ordering::SeqCst) >= 2,
             "concurrent mode should overlap tool executions",
         );
+
+        Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
-    async fn chat_can_execute_multiple_tool_calls_sequentially_when_requested() {
+    async fn chat_can_execute_multiple_tool_calls_sequentially_when_requested()
+    -> Result<(), XlaiError> {
         let execution_order = Arc::new(Mutex::new(Vec::new()));
         let model = Arc::new(RecordingChatModel::new(
             Arc::new(Mutex::new(Vec::new())),
@@ -687,10 +690,7 @@ mod tests {
             ],
         ));
 
-        let runtime = RuntimeBuilder::new()
-            .with_chat_model(model)
-            .build()
-            .expect("runtime should build");
+        let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
         let mut chat = runtime
             .chat_session()
@@ -700,13 +700,10 @@ mod tests {
             chat.register_tool(weather_tool_definition(), move |arguments| {
                 let execution_order = execution_order.clone();
                 async move {
-                    execution_order
-                        .lock()
-                        .expect("execution order lock")
-                        .push(format!(
-                            "weather:{}",
-                            arguments["city"].as_str().unwrap_or("unknown")
-                        ));
+                    lock_unpoisoned(&execution_order).push(format!(
+                        "weather:{}",
+                        arguments["city"].as_str().unwrap_or("unknown")
+                    ));
                     Ok(xlai_core::ToolResult {
                         tool_name: "lookup_weather".to_owned(),
                         content: "weather for Paris: sunny".to_owned(),
@@ -721,13 +718,10 @@ mod tests {
             chat.register_tool(time_tool_definition(), move |arguments| {
                 let execution_order = execution_order.clone();
                 async move {
-                    execution_order
-                        .lock()
-                        .expect("execution order lock")
-                        .push(format!(
-                            "time:{}",
-                            arguments["city"].as_str().unwrap_or("unknown")
-                        ));
+                    lock_unpoisoned(&execution_order).push(format!(
+                        "time:{}",
+                        arguments["city"].as_str().unwrap_or("unknown")
+                    ));
                     Ok(xlai_core::ToolResult {
                         tool_name: "lookup_time".to_owned(),
                         content: "time for Paris: 9am".to_owned(),
@@ -738,17 +732,16 @@ mod tests {
             });
         }
 
-        let response = chat
-            .prompt("What's the weather and time in Paris?")
-            .await
-            .unwrap();
+        let response = chat.prompt("What's the weather and time in Paris?").await?;
         assert_eq!(response.message.content, "Paris is sunny and 9am.");
 
-        let execution_order = execution_order.lock().expect("execution order lock");
+        let execution_order = lock_unpoisoned(&execution_order);
         assert_eq!(
             *execution_order,
             vec!["weather:Paris".to_owned(), "time:Paris".to_owned()]
         );
+
+        Ok(())
     }
 
     fn weather_tool_definition() -> ToolDefinition {
@@ -808,14 +801,10 @@ mod tests {
 
         fn generate(&self, request: ChatRequest) -> BoxFuture<'_, Result<ChatResponse, XlaiError>> {
             Box::pin(async move {
-                self.requests.lock().expect("requests lock").push(request);
-                self.responses
-                    .lock()
-                    .expect("responses lock")
-                    .pop_front()
-                    .ok_or_else(|| {
-                        XlaiError::new(xlai_core::ErrorKind::Provider, "missing response")
-                    })
+                lock_unpoisoned(&self.requests).push(request);
+                lock_unpoisoned(&self.responses).pop_front().ok_or_else(|| {
+                    XlaiError::new(xlai_core::ErrorKind::Provider, "missing response")
+                })
             })
         }
     }
@@ -853,10 +842,7 @@ mod tests {
             &self,
             _request: ChatRequest,
         ) -> BoxStream<'_, Result<ChatChunk, XlaiError>> {
-            let chunks = self
-                .streams
-                .lock()
-                .expect("streams lock")
+            let chunks = lock_unpoisoned(&self.streams)
                 .pop_front()
                 .unwrap_or_default();
 

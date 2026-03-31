@@ -44,7 +44,7 @@ jobs:
           - name: wasm32
             runner: ubuntu-latest
             target: wasm32-unknown-unknown
-            artifact_path: target/wasm32-unknown-unknown/release/libxlai_wasm.wasm
+            artifact_path: target/wasm32-unknown-unknown/release/xlai_wasm.wasm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
