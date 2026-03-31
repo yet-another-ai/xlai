@@ -18,7 +18,9 @@ jobs:
   e2e:
     name: End-To-End Tests - ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
-    environment: e2e
+    environment:
+      name: e2e
+      deployment: false
     strategy:
       fail-fast: false
       matrix:
