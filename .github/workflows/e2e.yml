@@ -16,9 +16,19 @@ env:
 
 jobs:
   e2e:
-    name: End-To-End Tests
-    runs-on: ubuntu-latest
+    name: End-To-End Tests - ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
     environment: e2e
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            runner: ubuntu-latest
+          - name: macos
+            runner: macos-latest
+          - name: windows
+            runner: windows-latest
 
     steps:
       - name: Checkout
@@ -39,7 +49,3 @@ jobs:
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
         run: cargo test --workspace -- --ignored
-
-      - name: sccache stats
-        shell: bash
-        run: sccache --show-stats

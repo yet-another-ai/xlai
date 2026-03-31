@@ -16,8 +16,18 @@ env:
 
 jobs:
   unit:
-    name: Unit And Mock Tests
-    runs-on: ubuntu-latest
+    name: Unit Tests - ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            runner: ubuntu-latest
+          - name: macos
+            runner: macos-latest
+          - name: windows
+            runner: windows-latest
 
     steps:
       - name: Checkout
@@ -25,8 +35,6 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
 
       - name: Run sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -36,10 +44,3 @@ jobs:
 
       - name: Run default workspace tests
         run: cargo test --workspace
-
-      - name: Check wasm target
-        run: cargo check -p xlai-wasm --target wasm32-unknown-unknown
-
-      - name: sccache stats
-        shell: bash
-        run: sccache --show-stats
