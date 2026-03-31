@@ -28,6 +28,7 @@ xlai/
 ├── crates/
 │   ├── xlai-backend-openai/
 │   ├── xlai-core/
+│   ├── xlai-ffi/
 │   ├── xlai-native/
 │   ├── xlai-runtime/
 │   └── xlai-wasm/
@@ -38,12 +39,14 @@ xlai/
 
 - `crates/xlai-core`
   Shared domain types and traits for chat, tools, embeddings, knowledge, and vector search.
+- `crates/xlai-ffi`
+  Native C ABI facade crate for future FFI integrations.
 - `crates/xlai-runtime`
   Runtime builder, chat session API, streaming, and tool-calling orchestration.
 - `crates/xlai-native`
   Native Rust-facing facade crate that re-exports the runtime API.
 - `crates/xlai-wasm`
-  Browser-facing facade crate built with `wasm-bindgen`.
+  Browser-facing `wasm-bindgen` facade crate for web integration.
 - `crates/xlai-backend-openai`
   OpenAI-compatible backend implementation using `reqwest`.
 

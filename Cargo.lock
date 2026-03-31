@@ -1675,6 +1675,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "xlai-ffi"
+version = "0.1.0"
+dependencies = [
+ "xlai-native",
+]
+
+[[package]]
 name = "xlai-native"
 version = "0.1.0"
 dependencies = [
