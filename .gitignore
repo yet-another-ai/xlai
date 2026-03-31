@@ -1,0 +1,29 @@
+# Cargo / Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Coverage / profiling
+*.profraw
+*.profdata
+coverage/
+lcov.info
+
+# wasm-pack (browser builds)
+/pkg/
+wasm-pack.log
+
+# Environment / secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDEs
+.idea/
+*.swp
+*.swo
+*~

@@ -1,0 +1,19 @@
+[package]
+name = "xlai-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+async-stream.workspace = true
+futures-util.workspace = true
+serde_json.workspace = true
+xlai-backend-openai = { path = "../xlai-backend-openai" }
+xlai-core = { path = "../xlai-core" }
+
+[dev-dependencies]
+tokio.workspace = true

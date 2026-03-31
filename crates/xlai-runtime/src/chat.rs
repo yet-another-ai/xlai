@@ -1,0 +1,275 @@
+use std::collections::BTreeMap;
+use std::future::Future;
+use std::sync::Arc;
+
+use async_stream::try_stream;
+use futures_util::StreamExt;
+use serde_json::Value;
+use xlai_core::{
+    BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatRequest, ChatResponse, ErrorKind,
+    MaybeSend, MessageRole, RuntimeBound, ToolCall, ToolDefinition, ToolResult, XlaiError,
+};
+
+use crate::XlaiRuntime;
+
+#[cfg(not(target_arch = "wasm32"))]
+type ToolCallback = dyn Fn(Value) -> BoxFuture<'static, Result<ToolResult, XlaiError>> + Send + Sync;
+#[cfg(target_arch = "wasm32")]
+type ToolCallback = dyn Fn(Value) -> BoxFuture<'static, Result<ToolResult, XlaiError>>;
+
+#[derive(Clone)]
+struct RegisteredTool {
+    definition: ToolDefinition,
+    callback: Arc<ToolCallback>,
+}
+
+#[derive(Clone, Debug)]
+pub enum ChatExecutionEvent {
+    Model(ChatChunk),
+    ToolCall(ToolCall),
+    ToolResult(ToolResult),
+}
+
+#[derive(Clone)]
+pub struct Chat {
+    runtime: Arc<XlaiRuntime>,
+    model: Option<String>,
+    system_prompt: Option<String>,
+    temperature: Option<f32>,
+    max_output_tokens: Option<u32>,
+    max_tool_round_trips: usize,
+    tools: BTreeMap<String, RegisteredTool>,
+}
+
+impl Chat {
+    #[must_use]
+    pub fn new(runtime: Arc<XlaiRuntime>) -> Self {
+        Self {
+            runtime,
+            model: None,
+            system_prompt: None,
+            temperature: None,
+            max_output_tokens: None,
+            max_tool_round_trips: 8,
+            tools: BTreeMap::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_system_prompt(mut self, system_prompt: impl Into<String>) -> Self {
+        self.system_prompt = Some(system_prompt.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_temperature(mut self, temperature: f32) -> Self {
+        self.temperature = Some(temperature);
+        self
+    }
+
+    #[must_use]
+    pub fn with_max_output_tokens(mut self, max_output_tokens: u32) -> Self {
+        self.max_output_tokens = Some(max_output_tokens);
+        self
+    }
+
+    #[must_use]
+    pub fn with_max_tool_round_trips(mut self, max_tool_round_trips: usize) -> Self {
+        self.max_tool_round_trips = max_tool_round_trips;
+        self
+    }
+
+    pub fn register_tool<F, Fut>(&mut self, definition: ToolDefinition, callback: F) -> &mut Self
+    where
+        F: Fn(Value) -> Fut + RuntimeBound + 'static,
+        Fut: Future<Output = Result<ToolResult, XlaiError>> + MaybeSend + 'static,
+    {
+        let tool_name = definition.name.clone();
+        let callback = Arc::new(move |arguments| -> BoxFuture<'static, Result<ToolResult, XlaiError>> {
+            Box::pin(callback(arguments))
+        });
+
+        self.tools.insert(
+            tool_name,
+            RegisteredTool {
+                definition,
+                callback,
+            },
+        );
+        self
+    }
+
+    #[must_use]
+    pub fn tool_definitions(&self) -> Vec<ToolDefinition> {
+        self.tools
+            .values()
+            .map(|tool| tool.definition.clone())
+            .collect()
+    }
+
+    pub async fn prompt(&self, content: impl Into<String>) -> Result<ChatResponse, XlaiError> {
+        self.execute(vec![ChatMessage {
+            role: MessageRole::User,
+            content: content.into(),
+            tool_name: None,
+            tool_call_id: None,
+            metadata: Default::default(),
+        }])
+        .await
+    }
+
+    pub async fn execute(&self, mut messages: Vec<ChatMessage>) -> Result<ChatResponse, XlaiError> {
+        for _ in 0..self.max_tool_round_trips {
+            let response = self.runtime.chat(self.build_request(messages.clone())).await?;
+            messages.push(response.message.clone());
+
+            if response.tool_calls.is_empty() {
+                return Ok(response);
+            }
+
+            for call in &response.tool_calls {
+                let result = self.execute_tool_call(call.clone()).await?;
+                messages.push(tool_result_message(call, &result));
+            }
+        }
+
+        Err(XlaiError::new(
+            ErrorKind::Tool,
+            "chat exceeded the maximum number of tool round trips",
+        ))
+    }
+
+    #[must_use]
+    pub fn stream_prompt(
+        &self,
+        content: impl Into<String>,
+    ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
+        self.stream(vec![ChatMessage {
+            role: MessageRole::User,
+            content: content.into(),
+            tool_name: None,
+            tool_call_id: None,
+            metadata: Default::default(),
+        }])
+    }
+
+    #[must_use]
+    pub fn stream(
+        &self,
+        mut messages: Vec<ChatMessage>,
+    ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
+        let runtime = Arc::clone(&self.runtime);
+        let model = self.model.clone();
+        let system_prompt = self.system_prompt.clone();
+        let temperature = self.temperature;
+        let max_output_tokens = self.max_output_tokens;
+        let max_tool_round_trips = self.max_tool_round_trips;
+        let tools = self.tools.clone();
+
+        Box::pin(try_stream! {
+            for _ in 0..max_tool_round_trips {
+                let request = ChatRequest {
+                    model: model.clone(),
+                    system_prompt: system_prompt.clone(),
+                    messages: messages.clone(),
+                    available_tools: tools
+                        .values()
+                        .map(|tool| tool.definition.clone())
+                        .collect(),
+                    skill_ids: Vec::new(),
+                    metadata: Default::default(),
+                    temperature,
+                    max_output_tokens,
+                };
+
+                let mut response = None;
+                let mut model_stream = runtime.stream_chat(request)?;
+
+                while let Some(chunk) = model_stream.next().await {
+                    let chunk = chunk?;
+                    if let ChatChunk::Finished(final_response) = &chunk {
+                        response = Some(final_response.clone());
+                    }
+                    yield ChatExecutionEvent::Model(chunk);
+                }
+
+                let response = response.ok_or_else(|| {
+                    XlaiError::new(
+                        ErrorKind::Provider,
+                        "stream ended without a final chat response",
+                    )
+                })?;
+                messages.push(response.message.clone());
+
+                if response.tool_calls.is_empty() {
+                    return;
+                }
+
+                for call in response.tool_calls {
+                    yield ChatExecutionEvent::ToolCall(call.clone());
+
+                    let result = execute_tool_call_from(runtime.as_ref(), &tools, call.clone()).await?;
+                    messages.push(tool_result_message(&call, &result));
+
+                    yield ChatExecutionEvent::ToolResult(result);
+                }
+            }
+
+            Err(XlaiError::new(
+                ErrorKind::Tool,
+                "chat exceeded the maximum number of tool round trips",
+            ))?;
+        })
+    }
+
+    fn build_request(&self, messages: Vec<ChatMessage>) -> ChatRequest {
+        ChatRequest {
+            model: self.model.clone(),
+            system_prompt: self.system_prompt.clone(),
+            messages,
+            available_tools: self.tool_definitions(),
+            skill_ids: Vec::new(),
+            metadata: Default::default(),
+            temperature: self.temperature,
+            max_output_tokens: self.max_output_tokens,
+        }
+    }
+
+    async fn execute_tool_call(&self, call: ToolCall) -> Result<ToolResult, XlaiError> {
+        execute_tool_call_from(self.runtime.as_ref(), &self.tools, call).await
+    }
+}
+
+fn tool_result_message(call: &ToolCall, result: &ToolResult) -> ChatMessage {
+    ChatMessage {
+        role: MessageRole::Tool,
+        content: result.content.clone(),
+        tool_name: Some(call.tool_name.clone()),
+        tool_call_id: Some(call.id.clone()),
+        metadata: result.metadata.clone(),
+    }
+}
+
+async fn execute_tool_call_from(
+    runtime: &XlaiRuntime,
+    tools: &BTreeMap<String, RegisteredTool>,
+    call: ToolCall,
+) -> Result<ToolResult, XlaiError> {
+    if let Some(tool) = tools.get(&call.tool_name) {
+        let result = (tool.callback)(call.arguments).await?;
+        return Ok(ToolResult {
+            tool_name: tool.definition.name.clone(),
+            content: result.content,
+            is_error: result.is_error,
+            metadata: result.metadata,
+        });
+    }
+
+    runtime.call_tool(call).await
+}

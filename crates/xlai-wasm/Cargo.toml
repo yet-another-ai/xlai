@@ -1,0 +1,17 @@
+[package]
+name = "xlai-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+wasm-bindgen.workspace = true
+xlai-core = { path = "../xlai-core" }
+xlai-runtime = { path = "../xlai-runtime" }
