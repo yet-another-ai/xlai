@@ -7,10 +7,9 @@ async fn openai_chat_smoke_test() {
     let _ = dotenvy::dotenv();
 
     let api_key = require_env("OPENAI_API_KEY");
-    let base_url = std::env::var("OPENAI_BASE_URL")
-        .unwrap_or_else(|_| "https://api.openai.com/v1".to_owned());
-    let model =
-        std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4.1-mini".to_owned());
+    let base_url =
+        std::env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com/v1".to_owned());
+    let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4.1-mini".to_owned());
 
     let runtime = RuntimeBuilder::new()
         .with_openai_chat(OpenAiConfig::new(base_url, api_key, model))

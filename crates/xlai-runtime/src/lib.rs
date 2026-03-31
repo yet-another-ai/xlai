@@ -6,13 +6,12 @@ use async_stream::try_stream;
 use futures_util::StreamExt;
 use xlai_core::{
     BoxStream, ChatChunk, ChatModel, ChatRequest, ChatResponse, EmbeddingModel, EmbeddingRequest,
-    EmbeddingResponse, ErrorKind, KnowledgeHit, KnowledgeQuery, KnowledgeStore,
-    RuntimeCapability, Skill, SkillId, SkillStore, ToolCall, ToolExecutor, ToolResult,
-    VectorSearchHit, VectorSearchQuery,
-    VectorStore, XlaiError,
+    EmbeddingResponse, ErrorKind, KnowledgeHit, KnowledgeQuery, KnowledgeStore, RuntimeCapability,
+    Skill, SkillId, SkillStore, ToolCall, ToolExecutor, ToolResult, VectorSearchHit,
+    VectorSearchQuery, VectorStore, XlaiError,
 };
 
-pub use chat::{Chat, ChatExecutionEvent};
+pub use chat::{Chat, ChatExecutionEvent, ToolCallExecutionMode};
 pub use xlai_backend_openai::{OpenAiChatModel, OpenAiConfig};
 
 #[derive(Clone, Default)]
@@ -143,8 +142,7 @@ impl XlaiRuntime {
     ) -> Result<BoxStream<'static, Result<ChatChunk, XlaiError>>, XlaiError> {
         let chat_model = self
             .chat_model
-            .as_ref()
-            .cloned()
+            .clone()
             .ok_or_else(|| missing_dependency("chat model"))?;
 
         Ok(Box::pin(try_stream! {
@@ -229,17 +227,19 @@ fn missing_dependency(name: &str) -> XlaiError {
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
-    use futures_util::{stream, StreamExt};
+    use futures_util::{StreamExt, stream};
     use serde_json::json;
+    use tokio::time::{Duration, sleep};
     use xlai_core::{
         BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatModel, ChatRequest, ChatResponse,
         FinishReason, MessageRole, ToolCall, ToolDefinition, ToolParameter, ToolParameterType,
         XlaiError,
     };
 
-    use super::{ChatExecutionEvent, RuntimeBuilder};
+    use super::{ChatExecutionEvent, RuntimeBuilder, ToolCallExecutionMode};
 
     #[tokio::test]
     async fn chat_executes_registered_tools_across_round_trips() {
@@ -295,8 +295,14 @@ mod tests {
         assert_eq!(requests[1].available_tools.len(), 1);
         assert_eq!(requests[1].messages.len(), 3);
         assert_eq!(requests[1].messages[2].role, MessageRole::Tool);
-        assert_eq!(requests[1].messages[2].tool_name.as_deref(), Some("lookup_weather"));
-        assert_eq!(requests[1].messages[2].tool_call_id.as_deref(), Some("tool_1"));
+        assert_eq!(
+            requests[1].messages[2].tool_name.as_deref(),
+            Some("lookup_weather")
+        );
+        assert_eq!(
+            requests[1].messages[2].tool_call_id.as_deref(),
+            Some("tool_1")
+        );
         assert_eq!(requests[1].messages[2].content, "weather for Paris: sunny");
     }
 
@@ -380,16 +386,337 @@ mod tests {
             }
         }
 
-        assert_eq!(content_deltas, vec!["Looking up weather", "Paris is sunny."]);
+        assert_eq!(
+            content_deltas,
+            vec!["Looking up weather", "Paris is sunny."]
+        );
         assert!(saw_tool_call);
         assert!(saw_tool_result);
-        assert_eq!(finished_messages, vec!["Looking up weather", "Paris is sunny."]);
+        assert_eq!(
+            finished_messages,
+            vec!["Looking up weather", "Paris is sunny."]
+        );
+    }
+
+    #[tokio::test]
+    async fn chat_executes_multiple_tool_calls_concurrently_by_default() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let model = Arc::new(RecordingChatModel::new(
+            requests.clone(),
+            vec![
+                ChatResponse {
+                    message: assistant_message(""),
+                    tool_calls: vec![
+                        ToolCall {
+                            id: "tool_1".to_owned(),
+                            tool_name: "lookup_weather".to_owned(),
+                            arguments: json!({ "city": "Paris" }),
+                        },
+                        ToolCall {
+                            id: "tool_2".to_owned(),
+                            tool_name: "lookup_time".to_owned(),
+                            arguments: json!({ "city": "Paris" }),
+                        },
+                    ],
+                    usage: None,
+                    finish_reason: FinishReason::ToolCalls,
+                    metadata: Default::default(),
+                },
+                ChatResponse {
+                    message: assistant_message("Paris is sunny and 9am."),
+                    tool_calls: Vec::new(),
+                    usage: None,
+                    finish_reason: FinishReason::Completed,
+                    metadata: Default::default(),
+                },
+            ],
+        ));
+
+        let active_calls = Arc::new(AtomicUsize::new(0));
+        let max_active_calls = Arc::new(AtomicUsize::new(0));
+        let runtime = RuntimeBuilder::new()
+            .with_chat_model(model)
+            .build()
+            .expect("runtime should build");
+
+        let mut chat = runtime.chat_session();
+        {
+            let active_calls = active_calls.clone();
+            let max_active_calls = max_active_calls.clone();
+            chat.register_tool(weather_tool_definition(), move |_| {
+                let active_calls = active_calls.clone();
+                let max_active_calls = max_active_calls.clone();
+                async move {
+                    let current = active_calls.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_active_calls.fetch_max(current, Ordering::SeqCst);
+                    sleep(Duration::from_millis(25)).await;
+                    active_calls.fetch_sub(1, Ordering::SeqCst);
+                    Ok(xlai_core::ToolResult {
+                        tool_name: "lookup_weather".to_owned(),
+                        content: "weather for Paris: sunny".to_owned(),
+                        is_error: false,
+                        metadata: Default::default(),
+                    })
+                }
+            });
+        }
+        {
+            let active_calls = active_calls.clone();
+            let max_active_calls = max_active_calls.clone();
+            chat.register_tool(time_tool_definition(), move |_| {
+                let active_calls = active_calls.clone();
+                let max_active_calls = max_active_calls.clone();
+                async move {
+                    let current = active_calls.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_active_calls.fetch_max(current, Ordering::SeqCst);
+                    sleep(Duration::from_millis(25)).await;
+                    active_calls.fetch_sub(1, Ordering::SeqCst);
+                    Ok(xlai_core::ToolResult {
+                        tool_name: "lookup_time".to_owned(),
+                        content: "time for Paris: 9am".to_owned(),
+                        is_error: false,
+                        metadata: Default::default(),
+                    })
+                }
+            });
+        }
+
+        let response = chat
+            .prompt("What's the weather and time in Paris?")
+            .await
+            .unwrap();
+        assert_eq!(response.message.content, "Paris is sunny and 9am.");
+
+        assert!(
+            max_active_calls.load(Ordering::SeqCst) >= 2,
+            "default mode should overlap tool executions",
+        );
+
+        let requests = requests.lock().expect("requests lock");
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[1].messages.len(), 4);
+        assert_eq!(
+            requests[1].messages[2].tool_name.as_deref(),
+            Some("lookup_weather")
+        );
+        assert_eq!(
+            requests[1].messages[3].tool_name.as_deref(),
+            Some("lookup_time")
+        );
+    }
+
+    #[tokio::test]
+    async fn chat_can_execute_multiple_tool_calls_concurrently() {
+        let model = Arc::new(RecordingChatModel::new(
+            Arc::new(Mutex::new(Vec::new())),
+            vec![
+                ChatResponse {
+                    message: assistant_message(""),
+                    tool_calls: vec![
+                        ToolCall {
+                            id: "tool_1".to_owned(),
+                            tool_name: "lookup_weather".to_owned(),
+                            arguments: json!({ "city": "Paris" }),
+                        },
+                        ToolCall {
+                            id: "tool_2".to_owned(),
+                            tool_name: "lookup_time".to_owned(),
+                            arguments: json!({ "city": "Paris" }),
+                        },
+                    ],
+                    usage: None,
+                    finish_reason: FinishReason::ToolCalls,
+                    metadata: Default::default(),
+                },
+                ChatResponse {
+                    message: assistant_message("Paris is sunny and 9am."),
+                    tool_calls: Vec::new(),
+                    usage: None,
+                    finish_reason: FinishReason::Completed,
+                    metadata: Default::default(),
+                },
+            ],
+        ));
+
+        let active_calls = Arc::new(AtomicUsize::new(0));
+        let max_active_calls = Arc::new(AtomicUsize::new(0));
+
+        let runtime = RuntimeBuilder::new()
+            .with_chat_model(model)
+            .build()
+            .expect("runtime should build");
+
+        let mut chat = runtime
+            .chat_session()
+            .with_tool_call_execution_mode(ToolCallExecutionMode::Concurrent);
+
+        {
+            let active_calls = active_calls.clone();
+            let max_active_calls = max_active_calls.clone();
+            chat.register_tool(weather_tool_definition(), move |_| {
+                let active_calls = active_calls.clone();
+                let max_active_calls = max_active_calls.clone();
+                async move {
+                    let current = active_calls.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_active_calls.fetch_max(current, Ordering::SeqCst);
+                    sleep(Duration::from_millis(25)).await;
+                    active_calls.fetch_sub(1, Ordering::SeqCst);
+                    Ok(xlai_core::ToolResult {
+                        tool_name: "lookup_weather".to_owned(),
+                        content: "weather for Paris: sunny".to_owned(),
+                        is_error: false,
+                        metadata: Default::default(),
+                    })
+                }
+            });
+        }
+        {
+            let active_calls = active_calls.clone();
+            let max_active_calls = max_active_calls.clone();
+            chat.register_tool(time_tool_definition(), move |_| {
+                let active_calls = active_calls.clone();
+                let max_active_calls = max_active_calls.clone();
+                async move {
+                    let current = active_calls.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_active_calls.fetch_max(current, Ordering::SeqCst);
+                    sleep(Duration::from_millis(25)).await;
+                    active_calls.fetch_sub(1, Ordering::SeqCst);
+                    Ok(xlai_core::ToolResult {
+                        tool_name: "lookup_time".to_owned(),
+                        content: "time for Paris: 9am".to_owned(),
+                        is_error: false,
+                        metadata: Default::default(),
+                    })
+                }
+            });
+        }
+
+        let response = chat
+            .prompt("What's the weather and time in Paris?")
+            .await
+            .unwrap();
+        assert_eq!(response.message.content, "Paris is sunny and 9am.");
+        assert!(
+            max_active_calls.load(Ordering::SeqCst) >= 2,
+            "concurrent mode should overlap tool executions",
+        );
+    }
+
+    #[tokio::test]
+    async fn chat_can_execute_multiple_tool_calls_sequentially_when_requested() {
+        let execution_order = Arc::new(Mutex::new(Vec::new()));
+        let model = Arc::new(RecordingChatModel::new(
+            Arc::new(Mutex::new(Vec::new())),
+            vec![
+                ChatResponse {
+                    message: assistant_message(""),
+                    tool_calls: vec![
+                        ToolCall {
+                            id: "tool_1".to_owned(),
+                            tool_name: "lookup_weather".to_owned(),
+                            arguments: json!({ "city": "Paris" }),
+                        },
+                        ToolCall {
+                            id: "tool_2".to_owned(),
+                            tool_name: "lookup_time".to_owned(),
+                            arguments: json!({ "city": "Paris" }),
+                        },
+                    ],
+                    usage: None,
+                    finish_reason: FinishReason::ToolCalls,
+                    metadata: Default::default(),
+                },
+                ChatResponse {
+                    message: assistant_message("Paris is sunny and 9am."),
+                    tool_calls: Vec::new(),
+                    usage: None,
+                    finish_reason: FinishReason::Completed,
+                    metadata: Default::default(),
+                },
+            ],
+        ));
+
+        let runtime = RuntimeBuilder::new()
+            .with_chat_model(model)
+            .build()
+            .expect("runtime should build");
+
+        let mut chat = runtime
+            .chat_session()
+            .with_tool_call_execution_mode(ToolCallExecutionMode::Sequential);
+        {
+            let execution_order = execution_order.clone();
+            chat.register_tool(weather_tool_definition(), move |arguments| {
+                let execution_order = execution_order.clone();
+                async move {
+                    execution_order
+                        .lock()
+                        .expect("execution order lock")
+                        .push(format!(
+                            "weather:{}",
+                            arguments["city"].as_str().unwrap_or("unknown")
+                        ));
+                    Ok(xlai_core::ToolResult {
+                        tool_name: "lookup_weather".to_owned(),
+                        content: "weather for Paris: sunny".to_owned(),
+                        is_error: false,
+                        metadata: Default::default(),
+                    })
+                }
+            });
+        }
+        {
+            let execution_order = execution_order.clone();
+            chat.register_tool(time_tool_definition(), move |arguments| {
+                let execution_order = execution_order.clone();
+                async move {
+                    execution_order
+                        .lock()
+                        .expect("execution order lock")
+                        .push(format!(
+                            "time:{}",
+                            arguments["city"].as_str().unwrap_or("unknown")
+                        ));
+                    Ok(xlai_core::ToolResult {
+                        tool_name: "lookup_time".to_owned(),
+                        content: "time for Paris: 9am".to_owned(),
+                        is_error: false,
+                        metadata: Default::default(),
+                    })
+                }
+            });
+        }
+
+        let response = chat
+            .prompt("What's the weather and time in Paris?")
+            .await
+            .unwrap();
+        assert_eq!(response.message.content, "Paris is sunny and 9am.");
+
+        let execution_order = execution_order.lock().expect("execution order lock");
+        assert_eq!(
+            *execution_order,
+            vec!["weather:Paris".to_owned(), "time:Paris".to_owned()]
+        );
     }
 
     fn weather_tool_definition() -> ToolDefinition {
         ToolDefinition {
             name: "lookup_weather".to_owned(),
             description: "Lookup current weather".to_owned(),
+            parameters: vec![ToolParameter {
+                name: "city".to_owned(),
+                description: "The city name".to_owned(),
+                kind: ToolParameterType::String,
+                required: true,
+            }],
+        }
+    }
+
+    fn time_tool_definition() -> ToolDefinition {
+        ToolDefinition {
+            name: "lookup_time".to_owned(),
+            description: "Lookup current time".to_owned(),
             parameters: vec![ToolParameter {
                 name: "city".to_owned(),
                 description: "The city name".to_owned(),
@@ -438,7 +765,9 @@ mod tests {
                     .lock()
                     .expect("responses lock")
                     .pop_front()
-                    .ok_or_else(|| XlaiError::new(xlai_core::ErrorKind::Provider, "missing response"))
+                    .ok_or_else(|| {
+                        XlaiError::new(xlai_core::ErrorKind::Provider, "missing response")
+                    })
             })
         }
     }

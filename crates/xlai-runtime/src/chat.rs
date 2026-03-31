@@ -4,16 +4,18 @@ use std::sync::Arc;
 
 use async_stream::try_stream;
 use futures_util::StreamExt;
+use futures_util::future::try_join_all;
 use serde_json::Value;
 use xlai_core::{
-    BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatRequest, ChatResponse, ErrorKind,
-    MaybeSend, MessageRole, RuntimeBound, ToolCall, ToolDefinition, ToolResult, XlaiError,
+    BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatRequest, ChatResponse, ErrorKind, MaybeSend,
+    MessageRole, RuntimeBound, ToolCall, ToolDefinition, ToolResult, XlaiError,
 };
 
 use crate::XlaiRuntime;
 
 #[cfg(not(target_arch = "wasm32"))]
-type ToolCallback = dyn Fn(Value) -> BoxFuture<'static, Result<ToolResult, XlaiError>> + Send + Sync;
+type ToolCallback =
+    dyn Fn(Value) -> BoxFuture<'static, Result<ToolResult, XlaiError>> + Send + Sync;
 #[cfg(target_arch = "wasm32")]
 type ToolCallback = dyn Fn(Value) -> BoxFuture<'static, Result<ToolResult, XlaiError>>;
 
@@ -30,6 +32,19 @@ pub enum ChatExecutionEvent {
     ToolResult(ToolResult),
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ToolCallExecutionMode {
+    #[default]
+    Concurrent,
+    Sequential,
+}
+
+#[derive(Clone)]
+struct ToolExecutionOutcome {
+    call: ToolCall,
+    result: ToolResult,
+}
+
 #[derive(Clone)]
 pub struct Chat {
     runtime: Arc<XlaiRuntime>,
@@ -38,6 +53,7 @@ pub struct Chat {
     temperature: Option<f32>,
     max_output_tokens: Option<u32>,
     max_tool_round_trips: usize,
+    tool_call_execution_mode: ToolCallExecutionMode,
     tools: BTreeMap<String, RegisteredTool>,
 }
 
@@ -51,6 +67,7 @@ impl Chat {
             temperature: None,
             max_output_tokens: None,
             max_tool_round_trips: 8,
+            tool_call_execution_mode: ToolCallExecutionMode::Concurrent,
             tools: BTreeMap::new(),
         }
     }
@@ -85,15 +102,26 @@ impl Chat {
         self
     }
 
+    #[must_use]
+    pub fn with_tool_call_execution_mode(
+        mut self,
+        tool_call_execution_mode: ToolCallExecutionMode,
+    ) -> Self {
+        self.tool_call_execution_mode = tool_call_execution_mode;
+        self
+    }
+
     pub fn register_tool<F, Fut>(&mut self, definition: ToolDefinition, callback: F) -> &mut Self
     where
         F: Fn(Value) -> Fut + RuntimeBound + 'static,
         Fut: Future<Output = Result<ToolResult, XlaiError>> + MaybeSend + 'static,
     {
         let tool_name = definition.name.clone();
-        let callback = Arc::new(move |arguments| -> BoxFuture<'static, Result<ToolResult, XlaiError>> {
-            Box::pin(callback(arguments))
-        });
+        let callback = Arc::new(
+            move |arguments| -> BoxFuture<'static, Result<ToolResult, XlaiError>> {
+                Box::pin(callback(arguments))
+            },
+        );
 
         self.tools.insert(
             tool_name,
@@ -126,16 +154,19 @@ impl Chat {
 
     pub async fn execute(&self, mut messages: Vec<ChatMessage>) -> Result<ChatResponse, XlaiError> {
         for _ in 0..self.max_tool_round_trips {
-            let response = self.runtime.chat(self.build_request(messages.clone())).await?;
+            let response = self
+                .runtime
+                .chat(self.build_request(messages.clone()))
+                .await?;
             messages.push(response.message.clone());
 
             if response.tool_calls.is_empty() {
                 return Ok(response);
             }
 
-            for call in &response.tool_calls {
-                let result = self.execute_tool_call(call.clone()).await?;
-                messages.push(tool_result_message(call, &result));
+            let outcomes = self.execute_tool_calls(response.tool_calls).await?;
+            for outcome in outcomes {
+                messages.push(tool_result_message(&outcome.call, &outcome.result));
             }
         }
 
@@ -170,6 +201,7 @@ impl Chat {
         let temperature = self.temperature;
         let max_output_tokens = self.max_output_tokens;
         let max_tool_round_trips = self.max_tool_round_trips;
+        let tool_call_execution_mode = self.tool_call_execution_mode;
         let tools = self.tools.clone();
 
         Box::pin(try_stream! {
@@ -211,13 +243,21 @@ impl Chat {
                     return;
                 }
 
-                for call in response.tool_calls {
+                for call in &response.tool_calls {
                     yield ChatExecutionEvent::ToolCall(call.clone());
+                }
 
-                    let result = execute_tool_call_from(runtime.as_ref(), &tools, call.clone()).await?;
-                    messages.push(tool_result_message(&call, &result));
+                let outcomes = execute_tool_calls_from(
+                    runtime.as_ref(),
+                    &tools,
+                    response.tool_calls,
+                    tool_call_execution_mode,
+                )
+                .await?;
 
-                    yield ChatExecutionEvent::ToolResult(result);
+                for outcome in outcomes {
+                    messages.push(tool_result_message(&outcome.call, &outcome.result));
+                    yield ChatExecutionEvent::ToolResult(outcome.result);
                 }
             }
 
@@ -241,8 +281,17 @@ impl Chat {
         }
     }
 
-    async fn execute_tool_call(&self, call: ToolCall) -> Result<ToolResult, XlaiError> {
-        execute_tool_call_from(self.runtime.as_ref(), &self.tools, call).await
+    async fn execute_tool_calls(
+        &self,
+        calls: Vec<ToolCall>,
+    ) -> Result<Vec<ToolExecutionOutcome>, XlaiError> {
+        execute_tool_calls_from(
+            self.runtime.as_ref(),
+            &self.tools,
+            calls,
+            self.tool_call_execution_mode,
+        )
+        .await
     }
 }
 
@@ -272,4 +321,29 @@ async fn execute_tool_call_from(
     }
 
     runtime.call_tool(call).await
+}
+
+async fn execute_tool_calls_from(
+    runtime: &XlaiRuntime,
+    tools: &BTreeMap<String, RegisteredTool>,
+    calls: Vec<ToolCall>,
+    mode: ToolCallExecutionMode,
+) -> Result<Vec<ToolExecutionOutcome>, XlaiError> {
+    match mode {
+        ToolCallExecutionMode::Sequential => {
+            let mut outcomes = Vec::with_capacity(calls.len());
+            for call in calls {
+                let result = execute_tool_call_from(runtime, tools, call.clone()).await?;
+                outcomes.push(ToolExecutionOutcome { call, result });
+            }
+            Ok(outcomes)
+        }
+        ToolCallExecutionMode::Concurrent => {
+            try_join_all(calls.into_iter().map(|call| async {
+                let result = execute_tool_call_from(runtime, tools, call.clone()).await?;
+                Ok(ToolExecutionOutcome { call, result })
+            }))
+            .await
+        }
+    }
 }

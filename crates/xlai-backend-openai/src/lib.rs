@@ -4,8 +4,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use xlai_core::{
-    BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatModel, ChatRequest, ChatResponse,
-    ErrorKind, FinishReason, MessageRole, TokenUsage, ToolCall, ToolCallChunk, ToolDefinition,
+    BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatModel, ChatRequest, ChatResponse, ErrorKind,
+    FinishReason, MessageRole, TokenUsage, ToolCall, ToolCallChunk, ToolDefinition,
     ToolParameterType, XlaiError,
 };
 
@@ -56,10 +56,7 @@ impl ChatModel for OpenAiChatModel {
         "openai-compatible"
     }
 
-    fn generate<'a>(
-        &'a self,
-        request: ChatRequest,
-    ) -> BoxFuture<'a, Result<ChatResponse, XlaiError>> {
+    fn generate(&self, request: ChatRequest) -> BoxFuture<'_, Result<ChatResponse, XlaiError>> {
         Box::pin(async move {
             let endpoint = self.config.chat_completions_url();
             let payload = OpenAiChatRequest::from_core_request(&self.config, request, false);
@@ -86,10 +83,7 @@ impl ChatModel for OpenAiChatModel {
         })
     }
 
-    fn generate_stream<'a>(
-        &'a self,
-        request: ChatRequest,
-    ) -> BoxStream<'a, Result<ChatChunk, XlaiError>> {
+    fn generate_stream(&self, request: ChatRequest) -> BoxStream<'_, Result<ChatChunk, XlaiError>> {
         Box::pin(try_stream! {
             let endpoint = self.config.chat_completions_url();
             let payload = OpenAiChatRequest::from_core_request(&self.config, request, true);
@@ -186,8 +180,13 @@ struct OpenAiChatRequest {
 
 impl OpenAiChatRequest {
     fn from_core_request(config: &OpenAiConfig, request: ChatRequest, stream: bool) -> Self {
-        let tools = (!request.available_tools.is_empty())
-            .then(|| request.available_tools.iter().map(OpenAiTool::from).collect::<Vec<_>>());
+        let tools = (!request.available_tools.is_empty()).then(|| {
+            request
+                .available_tools
+                .iter()
+                .map(OpenAiTool::from)
+                .collect::<Vec<_>>()
+        });
 
         Self {
             model: request.model.unwrap_or_else(|| config.model.clone()),

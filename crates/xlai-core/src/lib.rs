@@ -279,15 +279,9 @@ pub struct VectorSearchHit {
 pub trait ChatModel: RuntimeBound {
     fn provider_name(&self) -> &'static str;
 
-    fn generate<'a>(
-        &'a self,
-        request: ChatRequest,
-    ) -> BoxFuture<'a, Result<ChatResponse, XlaiError>>;
+    fn generate(&self, request: ChatRequest) -> BoxFuture<'_, Result<ChatResponse, XlaiError>>;
 
-    fn generate_stream<'a>(
-        &'a self,
-        request: ChatRequest,
-    ) -> BoxStream<'a, Result<ChatChunk, XlaiError>> {
+    fn generate_stream(&self, request: ChatRequest) -> BoxStream<'_, Result<ChatChunk, XlaiError>> {
         Box::pin(stream::once(async move {
             self.generate(request).await.map(ChatChunk::Finished)
         }))
@@ -297,14 +291,14 @@ pub trait ChatModel: RuntimeBound {
 pub trait EmbeddingModel: RuntimeBound {
     fn provider_name(&self) -> &'static str;
 
-    fn embed<'a>(
-        &'a self,
+    fn embed(
+        &self,
         request: EmbeddingRequest,
-    ) -> BoxFuture<'a, Result<EmbeddingResponse, XlaiError>>;
+    ) -> BoxFuture<'_, Result<EmbeddingResponse, XlaiError>>;
 }
 
 pub trait ToolExecutor: RuntimeBound {
-    fn call_tool<'a>(&'a self, call: ToolCall) -> BoxFuture<'a, Result<ToolResult, XlaiError>>;
+    fn call_tool(&self, call: ToolCall) -> BoxFuture<'_, Result<ToolResult, XlaiError>>;
 }
 
 pub trait SkillStore: RuntimeBound {
@@ -315,15 +309,12 @@ pub trait SkillStore: RuntimeBound {
 }
 
 pub trait KnowledgeStore: RuntimeBound {
-    fn upsert_documents<'a>(
-        &'a self,
+    fn upsert_documents(
+        &self,
         documents: Vec<KnowledgeDocument>,
-    ) -> BoxFuture<'a, Result<(), XlaiError>>;
+    ) -> BoxFuture<'_, Result<(), XlaiError>>;
 
-    fn search<'a>(
-        &'a self,
-        query: KnowledgeQuery,
-    ) -> BoxFuture<'a, Result<Vec<KnowledgeHit>, XlaiError>>;
+    fn search(&self, query: KnowledgeQuery) -> BoxFuture<'_, Result<Vec<KnowledgeHit>, XlaiError>>;
 }
 
 pub trait VectorStore: RuntimeBound {
@@ -333,8 +324,8 @@ pub trait VectorStore: RuntimeBound {
         records: Vec<EmbeddingRecord>,
     ) -> BoxFuture<'a, Result<(), XlaiError>>;
 
-    fn search<'a>(
-        &'a self,
+    fn search(
+        &self,
         query: VectorSearchQuery,
-    ) -> BoxFuture<'a, Result<Vec<VectorSearchHit>, XlaiError>>;
+    ) -> BoxFuture<'_, Result<Vec<VectorSearchHit>, XlaiError>>;
 }
