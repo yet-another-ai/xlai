@@ -1,12 +1,15 @@
 use std::sync::Arc;
 
 mod builtin;
+mod mcp;
 
 use serde_json::Value;
 use tera::Context;
 use xlai_core::{BoxStream, ChatMessage, ChatResponse, ToolDefinition, ToolResult, XlaiError};
 
-use crate::{Chat, ChatExecutionEvent, ToolCallExecutionMode, XlaiRuntime};
+use crate::{Chat, ChatExecutionEvent, XlaiRuntime};
+
+pub use mcp::McpRegistry;
 
 /// High-level agent session API built on top of `Chat`.
 #[derive(Clone)]
@@ -88,16 +91,13 @@ impl Agent {
     }
 
     #[must_use]
-    pub fn with_tool_call_execution_mode(
-        mut self,
-        tool_call_execution_mode: ToolCallExecutionMode,
-    ) -> Self {
-        self.chat = self
-            .chat
-            .with_tool_call_execution_mode(tool_call_execution_mode);
-        self
+    pub fn mcp_registry(&mut self) -> McpRegistry<'_> {
+        McpRegistry::new(&mut self.chat)
     }
 
+    /// Registers an MCP tool directly on the agent.
+    ///
+    /// This is shorthand for `agent.mcp_registry().register_tool(...)`.
     pub fn register_tool<F, Fut>(&mut self, definition: ToolDefinition, callback: F) -> &mut Self
     where
         F: Fn(Value) -> Fut + xlai_core::RuntimeBound + 'static,
@@ -105,7 +105,7 @@ impl Agent {
             + xlai_core::MaybeSend
             + 'static,
     {
-        self.chat.register_tool(definition, callback);
+        self.mcp_registry().register_tool(definition, callback);
         self
     }
 

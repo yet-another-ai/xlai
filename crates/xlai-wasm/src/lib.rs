@@ -1,8 +1,8 @@
 pub use xlai_backend_openai::{OpenAiChatModel, OpenAiConfig};
 pub use xlai_core as core;
 pub use xlai_runtime::{
-    Chat, ChatExecutionEvent, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath,
-    MemoryFileSystem, ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode,
+    Agent, Chat, ChatExecutionEvent, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath,
+    McpRegistry, MemoryFileSystem, ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode,
     WritableFileSystem, XlaiRuntime,
 };
 
@@ -42,6 +42,23 @@ struct WasmChatRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct WasmAgentRequest {
+    prompt: String,
+    api_key: String,
+    #[serde(default)]
+    base_url: Option<String>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    system_prompt: Option<String>,
+    #[serde(default)]
+    temperature: Option<f32>,
+    #[serde(default)]
+    max_output_tokens: Option<u32>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct WasmChatSessionOptions {
     api_key: String,
     #[serde(default)]
@@ -58,6 +75,19 @@ struct WasmChatSessionOptions {
 
 impl From<WasmChatRequest> for WasmChatSessionOptions {
     fn from(value: WasmChatRequest) -> Self {
+        Self {
+            api_key: value.api_key,
+            base_url: value.base_url,
+            model: value.model,
+            system_prompt: value.system_prompt,
+            temperature: value.temperature,
+            max_output_tokens: value.max_output_tokens,
+        }
+    }
+}
+
+impl From<WasmAgentRequest> for WasmChatSessionOptions {
+    fn from(value: WasmAgentRequest) -> Self {
         Self {
             api_key: value.api_key,
             base_url: value.base_url,
@@ -368,6 +398,45 @@ impl WasmChatSession {
     }
 }
 
+#[wasm_bindgen(js_name = AgentSession)]
+pub struct WasmAgentSession {
+    inner: Agent,
+}
+
+#[wasm_bindgen(js_class = AgentSession)]
+impl WasmAgentSession {
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen(js_name = registerTool)]
+    pub fn register_tool(
+        &mut self,
+        definition: JsValue,
+        callback: Function,
+    ) -> Result<(), JsValue> {
+        let definition: ToolDefinition =
+            serde_wasm_bindgen::from_value(definition).map_err(js_error)?;
+
+        self.inner.register_tool(definition, move |arguments| {
+            let callback = callback.clone();
+            async move {
+                let arguments = serde_wasm_bindgen::to_value(&arguments).map_err(tool_js_error)?;
+                let result = callback
+                    .call1(&JsValue::NULL, &arguments)
+                    .map_err(tool_js_value_error)?;
+                let result = JsFuture::from(Promise::resolve(&result))
+                    .await
+                    .map_err(tool_js_value_error)?;
+                serde_wasm_bindgen::from_value::<ToolResult>(result).map_err(tool_js_error)
+            }
+        });
+
+        Ok(())
+    }
+
+    pub async fn prompt(&self, content: String) -> Result<JsValue, JsValue> {
+        serialize_chat_response(self.inner.prompt(content).await.map_err(js_error)?)
+    }
+}
+
 #[must_use]
 pub fn builder() -> RuntimeBuilder {
     RuntimeBuilder::new()
@@ -385,6 +454,14 @@ pub async fn chat(options: JsValue) -> Result<JsValue, JsValue> {
     let prompt = options.prompt.clone();
     let chat = create_chat_session_inner(options.into(), None)?;
     chat.prompt(prompt).await
+}
+
+#[wasm_bindgen]
+pub async fn agent(options: JsValue) -> Result<JsValue, JsValue> {
+    let options: WasmAgentRequest = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
+    let prompt = options.prompt.clone();
+    let agent = create_agent_session_inner(options.into(), None)?;
+    agent.prompt(prompt).await
 }
 
 #[wasm_bindgen(js_name = createChatSession)]
@@ -416,12 +493,49 @@ pub fn create_chat_session_with_file_system(
     create_chat_session_with_dyn_file_system(options, Some(file_system))
 }
 
+#[wasm_bindgen(js_name = createAgentSession)]
+pub fn create_agent_session(options: JsValue) -> Result<WasmAgentSession, JsValue> {
+    let options: WasmChatSessionOptions =
+        serde_wasm_bindgen::from_value(options).map_err(js_error)?;
+    create_agent_session_inner(options, None)
+}
+
+#[wasm_bindgen(js_name = createAgentSessionWithMemoryFileSystem)]
+pub fn create_agent_session_with_memory_file_system(
+    options: JsValue,
+    file_system: &WasmMemoryFileSystem,
+) -> Result<WasmAgentSession, JsValue> {
+    let options: WasmChatSessionOptions =
+        serde_wasm_bindgen::from_value(options).map_err(js_error)?;
+    create_agent_session_inner(options, Some(file_system.inner.clone()))
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen(js_name = createAgentSessionWithFileSystem)]
+pub fn create_agent_session_with_file_system(
+    options: JsValue,
+    file_system: JsValue,
+) -> Result<WasmAgentSession, JsValue> {
+    let options: WasmChatSessionOptions =
+        serde_wasm_bindgen::from_value(options).map_err(js_error)?;
+    let file_system: Arc<dyn FileSystem> = Arc::new(JsFileSystem::new(file_system));
+    create_agent_session_with_dyn_file_system(options, Some(file_system))
+}
+
 fn create_chat_session_inner(
     options: WasmChatSessionOptions,
     file_system: Option<Arc<MemoryFileSystem>>,
 ) -> Result<WasmChatSession, JsValue> {
     let file_system = file_system.map(|file_system| -> Arc<dyn FileSystem> { file_system });
     create_chat_session_with_dyn_file_system(options, file_system)
+}
+
+fn create_agent_session_inner(
+    options: WasmChatSessionOptions,
+    file_system: Option<Arc<MemoryFileSystem>>,
+) -> Result<WasmAgentSession, JsValue> {
+    let file_system = file_system.map(|file_system| -> Arc<dyn FileSystem> { file_system });
+    create_agent_session_with_dyn_file_system(options, file_system)
 }
 
 fn create_chat_session_with_dyn_file_system(
@@ -459,6 +573,43 @@ fn create_chat_session_with_dyn_file_system(
     }
 
     Ok(WasmChatSession { inner: chat })
+}
+
+fn create_agent_session_with_dyn_file_system(
+    options: WasmChatSessionOptions,
+    file_system: Option<Arc<dyn FileSystem>>,
+) -> Result<WasmAgentSession, JsValue> {
+    let mut runtime_builder = RuntimeBuilder::new().with_chat_backend(OpenAiConfig::new(
+        options
+            .base_url
+            .unwrap_or_else(|| DEFAULT_OPENAI_BASE_URL.to_owned()),
+        options.api_key,
+        options
+            .model
+            .unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_owned()),
+    ));
+
+    if let Some(file_system) = file_system {
+        runtime_builder = runtime_builder.with_file_system(file_system);
+    }
+
+    let runtime = runtime_builder.build().map_err(js_error)?;
+
+    let mut agent = runtime.agent_session().map_err(js_error)?;
+
+    if let Some(system_prompt) = options.system_prompt {
+        agent = agent.with_system_prompt(system_prompt);
+    }
+
+    if let Some(temperature) = options.temperature {
+        agent = agent.with_temperature(temperature);
+    }
+
+    if let Some(max_output_tokens) = options.max_output_tokens {
+        agent = agent.with_max_output_tokens(max_output_tokens);
+    }
+
+    Ok(WasmAgentSession { inner: agent })
 }
 
 fn serialize_chat_response(response: ChatResponse) -> Result<JsValue, JsValue> {
@@ -544,7 +695,10 @@ mod tests {
         ChatMessage, FinishReason, FsEntry, FsEntryKind, FsPath, MessageRole, TokenUsage,
     };
 
-    use super::{WasmChatResponse, WasmFsEntry};
+    use super::{
+        WasmAgentRequest, WasmChatResponse, WasmChatSessionOptions, WasmFsEntry,
+        create_agent_session_inner,
+    };
 
     #[test]
     fn wasm_chat_response_uses_js_friendly_field_values() {
@@ -589,5 +743,42 @@ mod tests {
 
         assert_eq!(entry.path, "/docs/readme.md");
         assert_eq!(entry.kind, "file");
+    }
+
+    #[test]
+    fn wasm_agent_request_maps_into_session_options() {
+        let options = WasmChatSessionOptions::from(WasmAgentRequest {
+            prompt: "Hello".to_owned(),
+            api_key: "test-key".to_owned(),
+            base_url: Some("https://example.com/v1".to_owned()),
+            model: Some("gpt-test".to_owned()),
+            system_prompt: Some("Be concise.".to_owned()),
+            temperature: Some(0.2),
+            max_output_tokens: Some(512),
+        });
+
+        assert_eq!(options.api_key, "test-key");
+        assert_eq!(options.base_url.as_deref(), Some("https://example.com/v1"));
+        assert_eq!(options.model.as_deref(), Some("gpt-test"));
+        assert_eq!(options.system_prompt.as_deref(), Some("Be concise."));
+        assert_eq!(options.temperature, Some(0.2));
+        assert_eq!(options.max_output_tokens, Some(512));
+    }
+
+    #[test]
+    fn wasm_agent_session_can_be_created_from_options() {
+        let session = create_agent_session_inner(
+            WasmChatSessionOptions {
+                api_key: "test-key".to_owned(),
+                base_url: Some("https://example.com/v1".to_owned()),
+                model: Some("gpt-test".to_owned()),
+                system_prompt: Some("Use tools.".to_owned()),
+                temperature: Some(0.1),
+                max_output_tokens: Some(256),
+            },
+            None,
+        );
+
+        assert!(session.is_ok());
     }
 }

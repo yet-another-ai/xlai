@@ -127,11 +127,25 @@ pub struct ToolParameter {
     pub required: bool,
 }
 
+/// How tool calls from a single model turn are executed relative to each other.
+///
+/// When any invoked tool in a turn is marked [`Sequential`](Self::Sequential), the
+/// runtime runs **all** tool calls in that turn sequentially in model order (no overlap
+/// with any other tool call in the same turn).
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ToolCallExecutionMode {
+    #[default]
+    Concurrent,
+    Sequential,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolDefinition {
     pub name: String,
     pub description: String,
     pub parameters: Vec<ToolParameter>,
+    #[serde(default)]
+    pub execution_mode: ToolCallExecutionMode,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

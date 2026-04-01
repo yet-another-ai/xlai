@@ -136,8 +136,10 @@ Local `.env` files are ignored by Git.
 This is the current native Rust usage style:
 
 ```rust
-use xlai_native::core::{ToolDefinition, ToolParameter, ToolParameterType, ToolResult};
-use xlai_native::{OpenAiConfig, RuntimeBuilder, ToolCallExecutionMode};
+use xlai_native::core::{
+    ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolResult,
+};
+use xlai_native::{OpenAiConfig, RuntimeBuilder};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -153,8 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut chat = runtime
         .chat_session()
-        .with_system_prompt("Be concise.")
-        .with_tool_call_execution_mode(ToolCallExecutionMode::Concurrent);
+        .with_system_prompt("Be concise.");
 
     chat.register_tool(
         ToolDefinition {
@@ -166,6 +167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 kind: ToolParameterType::String,
                 required: true,
             }],
+            execution_mode: ToolCallExecutionMode::Concurrent,
         },
         |arguments| async move {
             let city = arguments["city"].as_str().unwrap_or("unknown");
@@ -185,17 +187,75 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+Agent sessions are available through the same runtime:
+
+```rust
+use xlai_native::core::{
+    ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolResult,
+};
+use xlai_native::{OpenAiConfig, RuntimeBuilder};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let runtime = RuntimeBuilder::new()
+        .with_chat_backend(OpenAiConfig::new(
+            std::env::var("OPENAI_BASE_URL")
+                .unwrap_or_else(|_| "https://api.openai.com/v1".to_owned()),
+            std::env::var("OPENAI_API_KEY")?,
+            std::env::var("OPENAI_MODEL")
+                .unwrap_or_else(|_| "gpt-4.1-mini".to_owned()),
+        ))
+        .build()?;
+
+    let mut agent = runtime.agent_session()?.with_system_prompt("Use tools when helpful.");
+
+    agent.register_tool(
+        ToolDefinition {
+            name: "lookup_weather".into(),
+            description: "Lookup current weather".into(),
+            parameters: vec![ToolParameter {
+                name: "city".into(),
+                description: "City name".into(),
+                kind: ToolParameterType::String,
+                required: true,
+            }],
+            execution_mode: ToolCallExecutionMode::Concurrent,
+        },
+        |arguments| async move {
+            let city = arguments["city"].as_str().unwrap_or("unknown");
+            Ok(ToolResult {
+                tool_name: "lookup_weather".into(),
+                content: format!("weather for {city}: sunny"),
+                is_error: false,
+                metadata: Default::default(),
+            })
+        },
+    );
+
+    let response = agent.prompt("What's the weather in Paris?").await?;
+    println!("{}", response.message.content);
+
+    Ok(())
+}
+```
+
 ## Tool Calling
 
-`Chat` sessions can register tools directly with async callbacks.
+`Chat` sessions can register tools directly with async callbacks. `Agent` sessions
+also expose an `McpRegistry` via `agent.mcp_registry()` so MCP-provided tools can
+be registered separately from built-in agent tools.
+
+The WebAssembly package mirrors this split with `chat(...)`, `createChatSession(...)`,
+`agent(...)`, and `createAgentSession(...)`.
 
 Current behavior:
 
 - tools are registered per chat session
 - tool calls are exposed to the model through the runtime request
 - local chat-session tools are executed before falling back to a runtime-level tool executor
-- multiple tool calls from the same model turn run concurrently by default
-- sequential execution can be selected explicitly
+- each tool’s `ToolDefinition::execution_mode` controls how its calls interact with other calls in the same model turn
+- if any invoked tool in a turn is `Sequential`, all tool calls in that turn run sequentially in model order (no overlap)
+- otherwise, tool calls in a turn run concurrently
 
 ## Streaming
 
