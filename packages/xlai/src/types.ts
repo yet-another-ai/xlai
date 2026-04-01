@@ -1,7 +1,50 @@
 import type { FileSystemApi } from './filesystem';
 
+export type ImageDetail = 'auto' | 'low' | 'high';
+
+export type MediaSource =
+  | {
+      kind: 'url';
+      url: string;
+    }
+  | {
+      kind: 'inline_data';
+      mime_type: string;
+      data_base64: string;
+    };
+
+export type ContentPart =
+  | {
+      type: 'text';
+      text: string;
+    }
+  | {
+      type: 'image';
+      source: MediaSource;
+      mime_type?: string;
+      detail?: ImageDetail | null;
+    }
+  | {
+      type: 'audio';
+      source: MediaSource;
+      mime_type?: string;
+    }
+  | {
+      type: 'file';
+      source: MediaSource;
+      mime_type?: string;
+      filename?: string;
+    };
+
+export type ChatContent =
+  | string
+  | {
+      parts: ContentPart[];
+    };
+
 export interface ChatOptions {
-  prompt: string;
+  prompt?: string;
+  content?: ChatContent;
   systemPrompt?: string;
   apiKey?: string;
   baseUrl?: string;
@@ -27,7 +70,7 @@ export type ChatFinishReason =
 export interface ChatResponse {
   message: {
     role: 'assistant';
-    content: string;
+    content: ChatContent;
   };
   finishReason: ChatFinishReason;
   usage?: ChatUsage;
@@ -66,7 +109,7 @@ export interface ToolResult {
   toolName?: string;
   content: string;
   isError?: boolean;
-  metadata?: Record<string, string>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ChatSessionOptions {
