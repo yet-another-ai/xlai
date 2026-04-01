@@ -353,7 +353,7 @@ pub trait ToolExecutor: RuntimeBound {
     fn call_tool(&self, call: ToolCall) -> BoxFuture<'_, Result<ToolResult, XlaiError>>;
 }
 
-pub trait SkillStore: RuntimeBound {
+pub trait SkillStore: FileSystem {
     fn resolve_skills<'a>(
         &'a self,
         ids: &'a [SkillId],

@@ -6,12 +6,13 @@ use async_stream::try_stream;
 use futures_util::StreamExt;
 use futures_util::future::try_join_all;
 use serde_json::Value;
+use tera::Context;
 use xlai_core::{
     BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatRequest, ChatResponse, ErrorKind, MaybeSend,
     MessageRole, RuntimeBound, ToolCall, ToolDefinition, ToolResult, XlaiError,
 };
 
-use crate::XlaiRuntime;
+use crate::{EmbeddedPromptStore, XlaiRuntime};
 
 #[cfg(not(target_arch = "wasm32"))]
 type ToolCallback =
@@ -82,6 +83,35 @@ impl Chat {
     pub fn with_system_prompt(mut self, system_prompt: impl Into<String>) -> Self {
         self.system_prompt = Some(system_prompt.into());
         self
+    }
+
+    /// Loads a raw system prompt from the embedded prompt catalog.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the named prompt asset does not exist or is not
+    /// valid UTF-8.
+    pub fn with_system_prompt_asset(
+        mut self,
+        prompt_name: impl AsRef<str>,
+    ) -> Result<Self, XlaiError> {
+        self.system_prompt = Some(EmbeddedPromptStore::load(prompt_name.as_ref())?);
+        Ok(self)
+    }
+
+    /// Renders an embedded system prompt template with `tera`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the prompt asset does not exist, cannot be parsed as
+    /// a template, or fails to render with the provided context.
+    pub fn with_system_prompt_template(
+        mut self,
+        prompt_name: impl AsRef<str>,
+        context: &Context,
+    ) -> Result<Self, XlaiError> {
+        self.system_prompt = Some(EmbeddedPromptStore::render(prompt_name.as_ref(), context)?);
+        Ok(self)
     }
 
     #[must_use]

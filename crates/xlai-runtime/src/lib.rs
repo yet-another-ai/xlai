@@ -1,5 +1,8 @@
+mod agent;
 mod chat;
 mod fs;
+mod prompt;
+mod skill_store;
 
 use std::sync::Arc;
 
@@ -12,10 +15,14 @@ use xlai_core::{
     VectorSearchQuery, VectorStore, XlaiError,
 };
 
+pub use agent::Agent;
 pub use chat::{Chat, ChatExecutionEvent, ToolCallExecutionMode};
 #[cfg(not(target_arch = "wasm32"))]
 pub use fs::LocalFileSystem;
 pub use fs::{MemoryFileSystem, boxed_file_system};
+pub use prompt::EmbeddedPromptStore;
+pub use skill_store::MarkdownSkillStore;
+pub use tera::Context as PromptContext;
 pub use xlai_backend_openai::{OpenAiChatModel, OpenAiConfig};
 pub use xlai_core::{
     DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath, ReadableFileSystem,
@@ -63,6 +70,11 @@ impl RuntimeBuilder {
 
     #[must_use]
     pub fn with_skill_store(mut self, skill_store: Arc<dyn SkillStore>) -> Self {
+        if self.file_system.is_none() {
+            let file_system: Arc<dyn FileSystem> = skill_store.clone();
+            self.file_system = Some(file_system);
+            self.capabilities.push(RuntimeCapability::FileSystem);
+        }
         self.skill_store = Some(skill_store);
         self.capabilities.push(RuntimeCapability::SkillResolution);
         self
@@ -138,6 +150,17 @@ impl XlaiRuntime {
     #[must_use]
     pub fn chat_session(&self) -> Chat {
         Chat::new(Arc::new(self.clone()))
+    }
+
+    /// Creates a high-level agent session with built-in tools enabled for the
+    /// runtime's configured capabilities.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the agent cannot initialize one of its built-in
+    /// tools.
+    pub fn agent_session(&self) -> Result<Agent, XlaiError> {
+        Agent::new(Arc::new(self.clone()))
     }
 
     #[must_use]
@@ -388,11 +411,14 @@ mod tests {
     use tokio::time::{Duration, sleep};
     use xlai_core::{
         BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatModel, ChatRequest, ChatResponse,
-        FinishReason, FsEntryKind, FsPath, MessageRole, RuntimeCapability, ToolCall,
-        ToolDefinition, ToolParameter, ToolParameterType, XlaiError,
+        FinishReason, FsEntryKind, FsPath, MessageRole, RuntimeCapability, Skill, SkillStore,
+        ToolCall, ToolDefinition, ToolParameter, ToolParameterType, WritableFileSystem, XlaiError,
     };
 
-    use super::{ChatExecutionEvent, MemoryFileSystem, RuntimeBuilder, ToolCallExecutionMode};
+    use super::{
+        ChatExecutionEvent, EmbeddedPromptStore, MarkdownSkillStore, MemoryFileSystem,
+        PromptContext, RuntimeBuilder, ToolCallExecutionMode,
+    };
 
     fn empty_metadata() -> std::collections::BTreeMap<String, String> {
         std::collections::BTreeMap::new()
@@ -466,6 +492,175 @@ mod tests {
             Some("tool_1")
         );
         assert_eq!(requests[1].messages[2].content, "weather for Paris: sunny");
+
+        Ok(())
+    }
+
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn agent_session_injects_skill_tool_when_skill_store_is_configured()
+    -> Result<(), XlaiError> {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let model = Arc::new(RecordingChatModel::new(
+            requests.clone(),
+            vec![ChatResponse {
+                message: assistant_message("agent reply"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            }],
+        ));
+
+        let runtime = RuntimeBuilder::new()
+            .with_chat_model(model)
+            .with_skill_store(seed_markdown_skill_store().await?)
+            .build()?;
+
+        let agent = runtime.agent_session()?;
+        let response = agent.prompt("Hello").await?;
+        assert_eq!(response.message.content, "agent reply");
+
+        let requests = lock_unpoisoned(&requests);
+        assert_eq!(requests.len(), 1);
+        assert!(
+            requests[0]
+                .available_tools
+                .iter()
+                .any(|tool| tool.name == "skill"),
+            "expected agent sessions to expose the built-in skill tool"
+        );
+
+        Ok(())
+    }
+
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn agent_skill_tool_uses_configured_skill_store() -> Result<(), XlaiError> {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let model = Arc::new(RecordingChatModel::new(
+            requests.clone(),
+            vec![
+                ChatResponse {
+                    message: assistant_message(""),
+                    tool_calls: vec![ToolCall {
+                        id: "skill_1".to_owned(),
+                        tool_name: "skill".to_owned(),
+                        arguments: json!({
+                            "skill": "review.code",
+                            "args": "Focus on correctness."
+                        }),
+                    }],
+                    usage: None,
+                    finish_reason: FinishReason::ToolCalls,
+                    metadata: empty_metadata(),
+                },
+                ChatResponse {
+                    message: assistant_message("skill loaded"),
+                    tool_calls: Vec::new(),
+                    usage: None,
+                    finish_reason: FinishReason::Completed,
+                    metadata: empty_metadata(),
+                },
+            ],
+        ));
+
+        let runtime = RuntimeBuilder::new()
+            .with_chat_model(model)
+            .with_skill_store(seed_markdown_skill_store().await?)
+            .build()?;
+
+        let agent = runtime.agent_session()?;
+        let response = agent.prompt("Review this patch").await?;
+        assert_eq!(response.message.content, "skill loaded");
+
+        let requests = lock_unpoisoned(&requests);
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[1].messages.len(), 3);
+        assert_eq!(requests[1].messages[2].tool_name.as_deref(), Some("skill"));
+        assert!(
+            requests[1].messages[2]
+                .content
+                .contains("Prioritize bugs, regressions, and missing tests."),
+            "expected the skill tool result to include the resolved prompt fragment"
+        );
+        assert!(
+            requests[1].messages[2]
+                .content
+                .contains("Focus on correctness."),
+            "expected the skill tool result to include the supplied skill arguments"
+        );
+
+        Ok(())
+    }
+
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn chat_can_load_embedded_system_prompt_assets() -> Result<(), XlaiError> {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let model = Arc::new(RecordingChatModel::new(
+            requests.clone(),
+            vec![ChatResponse {
+                message: assistant_message("Prompt loaded."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            }],
+        ));
+
+        let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+        let chat = runtime
+            .chat_session()
+            .with_system_prompt_asset("system/tool-description-skill.md")?;
+
+        let response = chat.prompt("Say something brief.").await?;
+        assert_eq!(response.message.content, "Prompt loaded.");
+
+        let requests = lock_unpoisoned(&requests);
+        assert_eq!(requests.len(), 1);
+        let system_prompt = requests[0].system_prompt.as_deref();
+        assert_eq!(
+            system_prompt,
+            Some(EmbeddedPromptStore::load("system/tool-description-skill.md")?.as_str())
+        );
+
+        Ok(())
+    }
+
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn chat_can_render_embedded_system_prompt_templates() -> Result<(), XlaiError> {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let model = Arc::new(RecordingChatModel::new(
+            requests.clone(),
+            vec![ChatResponse {
+                message: assistant_message("Rendered prompt loaded."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            }],
+        ));
+
+        let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+        let mut context = PromptContext::new();
+        context.insert("skill_tag_name", "tool_skill");
+        let chat = runtime
+            .chat_session()
+            .with_system_prompt_template("system/tool-description-skill.md", &context)?;
+
+        let response = chat.prompt("Say something brief.").await?;
+        assert_eq!(response.message.content, "Rendered prompt loaded.");
+
+        let requests = lock_unpoisoned(&requests);
+        assert_eq!(requests.len(), 1);
+        assert!(
+            requests[0]
+                .system_prompt
+                .as_deref()
+                .is_some_and(|prompt| prompt.contains("tool_skill"))
+        );
 
         Ok(())
     }
@@ -923,6 +1118,36 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn runtime_uses_skill_store_as_file_system_when_no_backend_is_configured()
+    -> Result<(), XlaiError> {
+        let runtime = RuntimeBuilder::new()
+            .with_chat_model(Arc::new(RecordingChatModel::new(
+                Arc::new(Mutex::new(Vec::new())),
+                vec![ChatResponse {
+                    message: assistant_message("unused"),
+                    tool_calls: Vec::new(),
+                    usage: None,
+                    finish_reason: FinishReason::Completed,
+                    metadata: empty_metadata(),
+                }],
+            )))
+            .with_skill_store(seed_markdown_skill_store().await?)
+            .build()?;
+
+        assert!(runtime.has_capability(RuntimeCapability::FileSystem));
+        let readme = runtime
+            .read_file(&FsPath::from("/skills/review/README.md"))
+            .await?;
+        assert_eq!(
+            String::from_utf8(readme).unwrap_or_default(),
+            "Extra skill file"
+        );
+
+        Ok(())
+    }
+
     fn weather_tool_definition() -> ToolDefinition {
         ToolDefinition {
             name: "lookup_weather".to_owned(),
@@ -957,6 +1182,49 @@ mod tests {
             tool_call_id: None,
             metadata: empty_metadata(),
         }
+    }
+
+    fn sample_skill() -> Skill {
+        Skill {
+            id: "review.code".to_owned(),
+            name: "review.code".to_owned(),
+            description: "Reviews code with a bug-finding mindset.".to_owned(),
+            prompt_fragment: "Prioritize bugs, regressions, and missing tests.".to_owned(),
+            tags: vec!["review".to_owned(), "quality".to_owned()],
+            metadata: empty_metadata(),
+        }
+    }
+
+    fn sample_skill_markdown() -> String {
+        format!(
+            "---\nname: {}\ndescription: {}\ntags:\n  - review\n  - quality\n---\n{}\n",
+            sample_skill().name,
+            sample_skill().description,
+            sample_skill().prompt_fragment
+        )
+    }
+
+    async fn seed_markdown_skill_store() -> Result<Arc<dyn SkillStore>, XlaiError> {
+        let file_system = Arc::new(MemoryFileSystem::new());
+        let file_system_trait: Arc<dyn xlai_core::FileSystem> = file_system.clone();
+        let skill_store = Arc::new(MarkdownSkillStore::new(file_system_trait));
+
+        skill_store
+            .create_dir_all(&FsPath::from("/skills/review"))
+            .await?;
+        skill_store
+            .write(
+                &FsPath::from("/skills/review/SKILL.md"),
+                sample_skill_markdown().into_bytes(),
+            )
+            .await?;
+        skill_store
+            .write(
+                &FsPath::from("/skills/review/README.md"),
+                b"Extra skill file".to_vec(),
+            )
+            .await?;
+        Ok(skill_store)
     }
 
     struct RecordingChatModel {

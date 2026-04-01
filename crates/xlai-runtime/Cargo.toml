@@ -11,9 +11,16 @@ workspace = true
 [dependencies]
 async-stream.workspace = true
 futures-util.workspace = true
+gray_matter.workspace = true
+rust-embed.workspace = true
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+tera.workspace = true
 xlai-backend-openai = { path = "../xlai-backend-openai" }
 xlai-core = { path = "../xlai-core" }
 
 [dev-dependencies]
 tokio.workspace = true
+
+[target.wasm32-unknown-unknown.dependencies]
+getrandom = { workspace = true, features = ["js"] }
