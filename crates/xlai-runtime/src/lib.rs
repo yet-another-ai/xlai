@@ -712,8 +712,7 @@ mod tests {
 
     #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
-    async fn agent_register_tool_shorthand_routes_through_mcp_registry()
-    -> Result<(), XlaiError> {
+    async fn agent_register_tool_shorthand_routes_through_mcp_registry() -> Result<(), XlaiError> {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let model = Arc::new(RecordingChatModel::new(
             requests.clone(),

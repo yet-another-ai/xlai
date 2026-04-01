@@ -185,11 +185,63 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+Agent sessions are available through the same runtime:
+
+```rust
+use xlai_native::core::{ToolDefinition, ToolParameter, ToolParameterType, ToolResult};
+use xlai_native::{OpenAiConfig, RuntimeBuilder};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let runtime = RuntimeBuilder::new()
+        .with_chat_backend(OpenAiConfig::new(
+            std::env::var("OPENAI_BASE_URL")
+                .unwrap_or_else(|_| "https://api.openai.com/v1".to_owned()),
+            std::env::var("OPENAI_API_KEY")?,
+            std::env::var("OPENAI_MODEL")
+                .unwrap_or_else(|_| "gpt-4.1-mini".to_owned()),
+        ))
+        .build()?;
+
+    let mut agent = runtime.agent_session()?.with_system_prompt("Use tools when helpful.");
+
+    agent.register_tool(
+        ToolDefinition {
+            name: "lookup_weather".into(),
+            description: "Lookup current weather".into(),
+            parameters: vec![ToolParameter {
+                name: "city".into(),
+                description: "City name".into(),
+                kind: ToolParameterType::String,
+                required: true,
+            }],
+        },
+        |arguments| async move {
+            let city = arguments["city"].as_str().unwrap_or("unknown");
+            Ok(ToolResult {
+                tool_name: "lookup_weather".into(),
+                content: format!("weather for {city}: sunny"),
+                is_error: false,
+                metadata: Default::default(),
+            })
+        },
+    );
+
+    let response = agent.prompt("What's the weather in Paris?").await?;
+    println!("{}", response.message.content);
+
+    Ok(())
+}
+```
+
 ## Tool Calling
 
 `Chat` sessions can register tools directly with async callbacks. `Agent` sessions
 also expose an `McpRegistry` via `agent.mcp_registry()` so MCP-provided tools can
 be registered separately from built-in agent tools.
+
+The WebAssembly package mirrors this split with `chat(...)`, `createChatSession(...)`,
+`agent(...)`, and `createAgentSession(...)`.
 
 Current behavior:
 
