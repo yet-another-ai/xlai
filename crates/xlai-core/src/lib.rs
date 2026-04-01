@@ -636,13 +636,19 @@ mod tests {
 
     #[test]
     fn chat_message_deserializes_missing_metadata_as_empty_map() {
-        let message: ChatMessage = serde_json::from_value(json!({
+        let result: Result<ChatMessage, _> = serde_json::from_value(json!({
             "role": "System",
             "content": "Preserve this reminder.",
             "tool_name": null,
             "tool_call_id": null
-        }))
-        .expect("chat message without metadata should deserialize");
+        }));
+        assert!(
+            result.is_ok(),
+            "chat message without metadata should deserialize"
+        );
+        let Ok(message) = result else {
+            return;
+        };
 
         assert_eq!(message.role, MessageRole::System);
         assert!(message.metadata.is_empty());
@@ -680,7 +686,11 @@ mod tests {
     #[test]
     fn chat_content_serializes_single_text_as_plain_string() {
         let c = ChatContent::text("hello");
-        let v = serde_json::to_value(&c).expect("serialize");
+        let result = serde_json::to_value(&c);
+        assert!(result.is_ok(), "serialize");
+        let Ok(v) = result else {
+            return;
+        };
         assert_eq!(v, json!("hello"));
     }
 
@@ -698,8 +708,16 @@ mod tests {
                 detail: None,
             },
         ]);
-        let v = serde_json::to_value(&c).expect("serialize");
-        let back: ChatContent = serde_json::from_value(v).expect("deserialize");
+        let serialized = serde_json::to_value(&c);
+        assert!(serialized.is_ok(), "serialize");
+        let Ok(v) = serialized else {
+            return;
+        };
+        let deserialized: Result<ChatContent, _> = serde_json::from_value(v);
+        assert!(deserialized.is_ok(), "deserialize");
+        let Ok(back) = deserialized else {
+            return;
+        };
         assert_eq!(back, c);
     }
 
@@ -712,8 +730,16 @@ mod tests {
             },
             mime_type: Some("audio/wav".to_owned()),
         }]);
-        let v = serde_json::to_value(&c).expect("serialize");
-        let back: ChatContent = serde_json::from_value(v).expect("deserialize");
+        let serialized = serde_json::to_value(&c);
+        assert!(serialized.is_ok(), "serialize");
+        let Ok(v) = serialized else {
+            return;
+        };
+        let deserialized: Result<ChatContent, _> = serde_json::from_value(v);
+        assert!(deserialized.is_ok(), "deserialize");
+        let Ok(back) = deserialized else {
+            return;
+        };
         assert_eq!(back, c);
     }
 }

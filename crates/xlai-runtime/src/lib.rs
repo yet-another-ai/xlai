@@ -502,6 +502,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
     async fn chat_prompt_parts_preserves_multimodal_user_message_in_request()
     -> Result<(), XlaiError> {
@@ -542,6 +543,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
     async fn chat_prompt_parts_preserves_audio_user_message_in_request() -> Result<(), XlaiError> {
         let requests = Arc::new(Mutex::new(Vec::new()));
@@ -578,6 +580,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
     async fn chat_execute_preserves_structured_history_metadata() -> Result<(), XlaiError> {
         let requests = Arc::new(Mutex::new(Vec::new()));

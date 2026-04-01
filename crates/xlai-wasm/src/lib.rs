@@ -824,10 +824,16 @@ mod tests {
                 ]
             }
         });
-        let req: WasmChatRequest =
-            serde_json::from_value(raw).expect("deserialize WasmChatRequest");
+        let result: Result<WasmChatRequest, _> = serde_json::from_value(raw);
+        assert!(result.is_ok(), "deserialize WasmChatRequest");
+        let Ok(req) = result else {
+            return;
+        };
         assert!(req.content.is_some());
-        assert_eq!(req.content.as_ref().unwrap().parts.len(), 2);
+        let Some(content) = req.content.as_ref() else {
+            return;
+        };
+        assert_eq!(content.parts.len(), 2);
     }
 
     #[test]

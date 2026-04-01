@@ -788,7 +788,11 @@ mod openai_multimodal_tests {
         };
 
         let payload = OpenAiChatRequest::from_core_request(&config, request, false);
-        let v = serde_json::to_value(&payload).expect("serialize payload");
+        let serialized = serde_json::to_value(&payload);
+        assert!(serialized.is_ok(), "serialize payload");
+        let Ok(v) = serialized else {
+            return;
+        };
         let content = &v["messages"][0]["content"];
         assert!(content.is_array());
         assert_eq!(content[0]["type"], json!("text"));
@@ -819,7 +823,11 @@ mod openai_multimodal_tests {
         };
 
         let payload = OpenAiChatRequest::from_core_request(&config, request, false);
-        let v = serde_json::to_value(&payload).expect("serialize payload");
+        let serialized = serde_json::to_value(&payload);
+        assert!(serialized.is_ok(), "serialize payload");
+        let Ok(v) = serialized else {
+            return;
+        };
         assert_eq!(v["messages"][0]["content"], json!("hello"));
     }
 
@@ -853,7 +861,11 @@ mod openai_multimodal_tests {
         };
 
         let payload = OpenAiChatRequest::from_core_request(&config, request, false);
-        let v = serde_json::to_value(&payload).expect("serialize payload");
+        let serialized = serde_json::to_value(&payload);
+        assert!(serialized.is_ok(), "serialize payload");
+        let Ok(v) = serialized else {
+            return;
+        };
         assert_eq!(v["messages"][0]["content"][0]["type"], json!("file"));
     }
 }
