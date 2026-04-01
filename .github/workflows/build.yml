@@ -68,7 +68,7 @@ jobs:
           if-no-files-found: error
 
   javascript:
-    name: JavaScript Workspace
+    name: javaScript
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -81,6 +81,11 @@ jobs:
 
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
+      
+      - uses: pnpm/action-setup@v5
+        name: Install pnpm
+        with:
+          cache: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
