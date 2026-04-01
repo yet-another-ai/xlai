@@ -65,15 +65,15 @@ async fn resolve(runtime: &XlaiRuntime, arguments: Value) -> Result<ToolResult, 
     };
 
     let mut metadata = BTreeMap::new();
-    metadata.insert("skill_id".to_owned(), skill.id.clone());
-    metadata.insert("skill_name".to_owned(), skill.name.clone());
+    metadata.insert("skill_id".to_owned(), Value::String(skill.id.clone()));
+    metadata.insert("skill_name".to_owned(), Value::String(skill.name.clone()));
 
     let mut content = format!(
         "Resolved skill `{}` ({})\n\nDescription:\n{}\n\nPrompt fragment:\n{}",
         skill.id, skill.name, skill.description, skill.prompt_fragment
     );
     if !args.is_empty() {
-        metadata.insert("args".to_owned(), args.clone());
+        metadata.insert("args".to_owned(), Value::String(args.clone()));
         content.push_str("\n\nArguments:\n");
         content.push_str(&args);
     }

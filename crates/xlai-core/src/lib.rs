@@ -19,7 +19,12 @@ pub type BoxStream<'a, T> = Pin<Box<dyn Stream<Item = T> + Send + 'a>>;
 #[cfg(target_arch = "wasm32")]
 pub type BoxStream<'a, T> = Pin<Box<dyn Stream<Item = T> + 'a>>;
 
-pub type Metadata = BTreeMap<String, String>;
+/// Structured metadata attached to runtime entities.
+///
+/// Message metadata is especially useful for local-only annotations in persisted
+/// chat histories, such as marking entries as editable reminders or tracking
+/// bookkeeping needed when replaying a session later.
+pub type Metadata = BTreeMap<String, Value>;
 pub type SkillId = String;
 pub type DocumentId = String;
 pub type ChunkId = String;
@@ -106,6 +111,7 @@ pub struct ChatMessage {
     pub content: String,
     pub tool_name: Option<String>,
     pub tool_call_id: Option<String>,
+    #[serde(default)]
     pub metadata: Metadata,
 }
 
@@ -160,6 +166,7 @@ pub struct ToolResult {
     pub tool_name: String,
     pub content: String,
     pub is_error: bool,
+    #[serde(default)]
     pub metadata: Metadata,
 }
 
@@ -184,7 +191,7 @@ pub struct ChatRequest {
     pub system_prompt: Option<String>,
     pub messages: Vec<ChatMessage>,
     pub available_tools: Vec<ToolDefinition>,
-    pub skill_ids: Vec<SkillId>,
+    #[serde(default)]
     pub metadata: Metadata,
     pub temperature: Option<f32>,
     pub max_output_tokens: Option<u32>,
@@ -196,6 +203,7 @@ pub struct ChatResponse {
     pub tool_calls: Vec<ToolCall>,
     pub usage: Option<TokenUsage>,
     pub finish_reason: FinishReason,
+    #[serde(default)]
     pub metadata: Metadata,
 }
 
@@ -219,6 +227,7 @@ pub enum ChatChunk {
 pub struct EmbeddingRequest {
     pub model: Option<String>,
     pub inputs: Vec<String>,
+    #[serde(default)]
     pub metadata: Metadata,
 }
 
@@ -226,6 +235,7 @@ pub struct EmbeddingRequest {
 pub struct EmbeddingResponse {
     pub vectors: Vec<Vec<f32>>,
     pub usage: Option<TokenUsage>,
+    #[serde(default)]
     pub metadata: Metadata,
 }
 
@@ -236,6 +246,7 @@ pub struct Skill {
     pub description: String,
     pub prompt_fragment: String,
     pub tags: Vec<String>,
+    #[serde(default)]
     pub metadata: Metadata,
 }
 
@@ -244,6 +255,7 @@ pub struct KnowledgeDocument {
     pub id: DocumentId,
     pub title: String,
     pub content: String,
+    #[serde(default)]
     pub metadata: Metadata,
 }
 
@@ -252,6 +264,7 @@ pub struct KnowledgeChunk {
     pub id: ChunkId,
     pub document_id: DocumentId,
     pub content: String,
+    #[serde(default)]
     pub metadata: Metadata,
     pub embedding: Option<Vec<f32>>,
 }
@@ -260,7 +273,7 @@ pub struct KnowledgeChunk {
 pub struct KnowledgeQuery {
     pub text: String,
     pub limit: usize,
-    pub skill_ids: Vec<SkillId>,
+    #[serde(default)]
     pub metadata: Metadata,
 }
 
@@ -274,6 +287,7 @@ pub struct KnowledgeHit {
 pub struct EmbeddingRecord {
     pub id: ChunkId,
     pub vector: Vec<f32>,
+    #[serde(default)]
     pub metadata: Metadata,
 }
 
@@ -282,6 +296,7 @@ pub struct VectorSearchQuery {
     pub namespace: String,
     pub vector: Vec<f32>,
     pub limit: usize,
+    #[serde(default)]
     pub metadata: Metadata,
 }
 
@@ -289,6 +304,7 @@ pub struct VectorSearchQuery {
 pub struct VectorSearchHit {
     pub id: ChunkId,
     pub score: f32,
+    #[serde(default)]
     pub metadata: Metadata,
 }
 
@@ -441,4 +457,54 @@ pub trait FileSystem: ReadableFileSystem + WritableFileSystem + DirectoryFileSys
 impl<T> FileSystem for T where
     T: ReadableFileSystem + WritableFileSystem + DirectoryFileSystem + ?Sized
 {
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{ChatMessage, MessageRole};
+
+    #[test]
+    fn chat_message_deserializes_missing_metadata_as_empty_map() {
+        let message: ChatMessage = serde_json::from_value(json!({
+            "role": "System",
+            "content": "Preserve this reminder.",
+            "tool_name": null,
+            "tool_call_id": null
+        }))
+        .expect("chat message without metadata should deserialize");
+
+        assert_eq!(message.role, MessageRole::System);
+        assert!(message.metadata.is_empty());
+    }
+
+    #[test]
+    fn chat_message_supports_structured_metadata_values() {
+        let message = ChatMessage {
+            role: MessageRole::System,
+            content: "Preserve this reminder.".to_owned(),
+            tool_name: None,
+            tool_call_id: None,
+            metadata: [(
+                "reminder".to_owned(),
+                json!({
+                    "kind": "system_reminder",
+                    "editable": true,
+                    "tags": ["session", "mutable"]
+                }),
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        assert_eq!(
+            message.metadata.get("reminder"),
+            Some(&json!({
+                "kind": "system_reminder",
+                "editable": true,
+                "tags": ["session", "mutable"]
+            }))
+        );
+    }
 }

@@ -404,13 +404,13 @@ mod tests {
     use std::sync::{Arc, Mutex, MutexGuard};
 
     use futures_util::{StreamExt, stream};
-    use serde_json::json;
+    use serde_json::{Value, json};
     use tokio::time::{Duration, sleep};
     use xlai_core::{
         BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatModel, ChatRequest, ChatResponse,
-        FinishReason, FsEntryKind, FsPath, MessageRole, RuntimeCapability, Skill, SkillStore,
-        ToolCall, ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType,
-        WritableFileSystem, XlaiError,
+        FinishReason, FsEntryKind, FsPath, MessageRole, Metadata, RuntimeCapability, Skill,
+        SkillStore, ToolCall, ToolCallExecutionMode, ToolDefinition, ToolParameter,
+        ToolParameterType, WritableFileSystem, XlaiError,
     };
 
     use super::{
@@ -418,8 +418,8 @@ mod tests {
         PromptContext, RuntimeBuilder,
     };
 
-    fn empty_metadata() -> std::collections::BTreeMap<String, String> {
-        std::collections::BTreeMap::new()
+    fn empty_metadata() -> Metadata {
+        Metadata::new()
     }
 
     fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -490,6 +490,77 @@ mod tests {
             Some("tool_1")
         );
         assert_eq!(requests[1].messages[2].content, "weather for Paris: sunny");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn chat_execute_preserves_structured_history_metadata() -> Result<(), XlaiError> {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let model = Arc::new(RecordingChatModel::new(
+            requests.clone(),
+            vec![ChatResponse {
+                message: assistant_message("Reminder acknowledged."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            }],
+        ));
+
+        let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+        let chat = runtime.chat_session();
+
+        let mut metadata = empty_metadata();
+        metadata.insert(
+            "reminder".to_owned(),
+            json!({
+                "kind": "system_reminder",
+                "editable": true,
+                "scope": {
+                    "session": "future"
+                }
+            }),
+        );
+
+        let response = chat
+            .execute(vec![ChatMessage {
+                role: MessageRole::System,
+                content: "Remind the assistant to stay concise.".to_owned(),
+                tool_name: None,
+                tool_call_id: None,
+                metadata: metadata.clone(),
+            }])
+            .await?;
+
+        assert_eq!(response.message.content, "Reminder acknowledged.");
+
+        let requests = lock_unpoisoned(&requests);
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            requests[0].messages[0].metadata.get("reminder"),
+            Some(&json!({
+                "kind": "system_reminder",
+                "editable": true,
+                "scope": {
+                    "session": "future"
+                }
+            }))
+        );
+
+        if requests[0].messages[0]
+            .metadata
+            .get("reminder")
+            .and_then(Value::as_object)
+            .and_then(|reminder| reminder.get("kind"))
+            .and_then(Value::as_str)
+            != Some("system_reminder")
+        {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Validation,
+                "expected structured reminder metadata to be preserved in chat history",
+            ));
+        }
 
         Ok(())
     }

@@ -269,7 +269,6 @@ impl Chat {
                         .values()
                         .map(|tool| tool.definition.clone())
                         .collect(),
-                    skill_ids: Vec::new(),
                     metadata: BTreeMap::new(),
                     temperature,
                     max_output_tokens,
@@ -328,7 +327,6 @@ impl Chat {
             system_prompt: self.system_prompt.clone(),
             messages,
             available_tools: self.tool_definitions(),
-            skill_ids: Vec::new(),
             metadata: BTreeMap::new(),
             temperature: self.temperature,
             max_output_tokens: self.max_output_tokens,

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use gray_matter::Matter;
 use gray_matter::engine::YAML;
 use serde::Deserialize;
+use serde_json::Value;
 use xlai_core::{
     BoxFuture, DirectoryFileSystem, ErrorKind, FsEntryKind, FsPath, ReadableFileSystem, Skill,
     SkillFileSystem, SkillStore, XlaiError,
@@ -143,8 +144,14 @@ async fn load_skill(file_system: &dyn SkillFileSystem, path: &FsPath) -> Result<
 
     let skill_dir = parent_directory(path);
     let mut metadata = BTreeMap::new();
-    metadata.insert("skill_path".to_owned(), path.as_str().to_owned());
-    metadata.insert("skill_dir".to_owned(), skill_dir.as_str().to_owned());
+    metadata.insert(
+        "skill_path".to_owned(),
+        Value::String(path.as_str().to_owned()),
+    );
+    metadata.insert(
+        "skill_dir".to_owned(),
+        Value::String(skill_dir.as_str().to_owned()),
+    );
 
     Ok(Skill {
         id: front_matter.name.clone(),
@@ -180,6 +187,7 @@ struct SkillFrontMatter {
 mod tests {
     use std::sync::Arc;
 
+    use serde_json::Value;
     use xlai_core::{
         FsPath, ReadableFileSystem, SkillFileSystem, SkillStore, WritableFileSystem, XlaiError,
     };
@@ -255,7 +263,12 @@ Prioritize bugs, regressions, and missing tests.
                 ),
             ));
         }
-        if skills[0].metadata.get("skill_dir").map(String::as_str) != Some("/skills/review") {
+        if skills[0]
+            .metadata
+            .get("skill_dir")
+            .and_then(Value::as_str)
+            != Some("/skills/review")
+        {
             return Err(XlaiError::new(
                 xlai_core::ErrorKind::Skill,
                 "expected resolved skill metadata to include the skill directory",
