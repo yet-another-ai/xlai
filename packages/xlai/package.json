@@ -21,7 +21,7 @@
     "build": "pnpm run build:wasm && vite build",
     "lint": "eslint . --max-warnings=0",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "pnpm run build:wasm && tsc -p tsconfig.json --noEmit",
     "test": "pnpm run build:wasm && vitest run",
     "test:watch": "pnpm run build:wasm && vitest",
     "test:e2e": "playwright test"
