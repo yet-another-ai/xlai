@@ -16,7 +16,6 @@ rust-embed.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tera.workspace = true
-xlai-backend-openai = { path = "../xlai-backend-openai" }
 xlai-core = { path = "../xlai-core" }
 
 [dev-dependencies]

@@ -6,9 +6,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use xlai_core::{
-    BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatModel, ChatRequest, ChatResponse, ErrorKind,
-    FinishReason, MessageRole, TokenUsage, ToolCall, ToolCallChunk, ToolDefinition,
-    ToolParameterType, XlaiError,
+    BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatMessage, ChatModel, ChatRequest,
+    ChatResponse, ErrorKind, FinishReason, MessageRole, TokenUsage, ToolCall, ToolCallChunk,
+    ToolDefinition, ToolParameterType, XlaiError,
 };
 
 #[derive(Clone, Debug)]
@@ -50,6 +50,14 @@ impl OpenAiChatModel {
             client: Client::new(),
             config,
         }
+    }
+}
+
+impl ChatBackend for OpenAiConfig {
+    type Model = OpenAiChatModel;
+
+    fn into_chat_model(self) -> Self::Model {
+        OpenAiChatModel::new(self)
     }
 }
 

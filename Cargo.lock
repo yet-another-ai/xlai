@@ -2277,6 +2277,7 @@ dependencies = [
 name = "xlai-native"
 version = "0.1.0"
 dependencies = [
+ "xlai-backend-openai",
  "xlai-core",
  "xlai-runtime",
 ]
@@ -2294,7 +2295,6 @@ dependencies = [
  "serde_json",
  "tera",
  "tokio",
- "xlai-backend-openai",
  "xlai-core",
 ]
 
@@ -2303,6 +2303,7 @@ name = "xlai-wasm"
 version = "0.1.0"
 dependencies = [
  "wasm-bindgen",
+ "xlai-backend-openai",
  "xlai-core",
  "xlai-runtime",
 ]

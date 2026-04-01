@@ -120,7 +120,7 @@ use xlai_native::{OpenAiConfig, RuntimeBuilder, ToolCallExecutionMode};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let runtime = RuntimeBuilder::new()
-        .with_openai_chat(OpenAiConfig::new(
+        .with_chat_backend(OpenAiConfig::new(
             std::env::var("OPENAI_BASE_URL")
                 .unwrap_or_else(|_| "https://api.openai.com/v1".to_owned()),
             std::env::var("OPENAI_API_KEY")?,
@@ -255,6 +255,15 @@ Planned or expected next areas include:
 - skill management APIs
 - local/device inference backends
 - more browser-focused examples
+
+## Support of LLM API Providers
+
+- [x] OpenAI-compatible Backends
+  - [x] [AIHubMix](https://aihubmix.com/?aff=OOiX)
+  - [x] [OpenRouter](https://openrouter.ai/)
+  - [x] [OpenAI](https://platform.openai.com/docs/guides/gpt/chat-completions-api)
+  - [x] [Azure OpenAI API](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference)
+- [ ] llama.cpp Backends
 
 ## License
 

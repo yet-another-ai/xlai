@@ -23,9 +23,8 @@ pub use fs::{MemoryFileSystem, boxed_file_system};
 pub use prompt::EmbeddedPromptStore;
 pub use skill_store::MarkdownSkillStore;
 pub use tera::Context as PromptContext;
-pub use xlai_backend_openai::{OpenAiChatModel, OpenAiConfig};
 pub use xlai_core::{
-    DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath, ReadableFileSystem,
+    ChatBackend, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath, ReadableFileSystem,
     WritableFileSystem,
 };
 
@@ -52,6 +51,14 @@ impl RuntimeBuilder {
         self.chat_model = Some(chat_model);
         self.capabilities.push(RuntimeCapability::Chat);
         self
+    }
+
+    #[must_use]
+    pub fn with_chat_backend<B>(self, backend: B) -> Self
+    where
+        B: xlai_core::ChatBackend,
+    {
+        self.with_chat_model(Arc::new(backend.into_chat_model()))
     }
 
     #[must_use]
@@ -94,11 +101,6 @@ impl RuntimeBuilder {
         self.file_system = Some(file_system);
         self.capabilities.push(RuntimeCapability::FileSystem);
         self
-    }
-
-    #[must_use]
-    pub fn with_openai_chat(self, config: OpenAiConfig) -> Self {
-        self.with_chat_model(Arc::new(OpenAiChatModel::new(config)))
     }
 
     /// Builds an `XlaiRuntime` from the configured capabilities.

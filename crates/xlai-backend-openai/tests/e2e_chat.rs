@@ -1,6 +1,7 @@
+use xlai_backend_openai::OpenAiConfig;
 use xlai_core::MessageRole;
 use xlai_core::{ErrorKind, XlaiError};
-use xlai_runtime::{OpenAiConfig, RuntimeBuilder};
+use xlai_runtime::RuntimeBuilder;
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
@@ -14,7 +15,7 @@ async fn openai_chat_smoke_test() -> Result<(), XlaiError> {
     let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4.1-mini".to_owned());
 
     let runtime = RuntimeBuilder::new()
-        .with_openai_chat(OpenAiConfig::new(base_url, api_key, model))
+        .with_chat_backend(OpenAiConfig::new(base_url, api_key, model))
         .build()?;
 
     let chat = runtime

@@ -340,6 +340,23 @@ pub trait ChatModel: RuntimeBound {
     }
 }
 
+pub trait ChatBackend {
+    type Model: ChatModel + 'static;
+
+    fn into_chat_model(self) -> Self::Model;
+}
+
+impl<T> ChatBackend for T
+where
+    T: ChatModel + 'static,
+{
+    type Model = T;
+
+    fn into_chat_model(self) -> Self::Model {
+        self
+    }
+}
+
 pub trait EmbeddingModel: RuntimeBound {
     fn provider_name(&self) -> &'static str;
 

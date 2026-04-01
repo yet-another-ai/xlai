@@ -13,5 +13,6 @@ workspace = true
 
 [dependencies]
 wasm-bindgen.workspace = true
+xlai-backend-openai = { path = "../xlai-backend-openai" }
 xlai-core = { path = "../xlai-core" }
 xlai-runtime = { path = "../xlai-runtime" }
