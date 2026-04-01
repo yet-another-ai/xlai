@@ -61,6 +61,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build native workspace
+        if: matrix.target != 'wasm32-unknown-unknown'
         run: cargo build --locked --release --workspace --exclude xlai-wasm --target ${{ matrix.target }}
       
       - name: Build wasm crate
