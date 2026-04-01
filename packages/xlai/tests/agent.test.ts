@@ -55,12 +55,93 @@ describe('xlai agent api', () => {
     });
   });
 
+  it('delegates multimodal agent requests to the wasm API', async () => {
+    const agentSpy = vi
+      .spyOn(
+        wasmModule as typeof wasmModule & {
+          agent: (options: unknown) => Promise<unknown>;
+        },
+        'agent',
+      )
+      .mockResolvedValue({
+        message: {
+          role: 'assistant',
+          content: {
+            parts: [{ type: 'text', text: 'transcription ready' }],
+          },
+        },
+        finishReason: 'completed',
+      });
+
+    vi.stubEnv('OPENAI_API_KEY', 'agent-key');
+
+    await expect(
+      agent({
+        content: {
+          parts: [
+            { type: 'text', text: 'Transcribe this.' },
+            {
+              type: 'audio',
+              source: {
+                kind: 'inline_data',
+                mime_type: 'audio/mpeg',
+                data_base64: 'SUQzBA==',
+              },
+              mime_type: 'audio/mpeg',
+            },
+          ],
+        },
+      }),
+    ).resolves.toEqual({
+      message: {
+        role: 'assistant',
+        content: {
+          parts: [{ type: 'text', text: 'transcription ready' }],
+        },
+      },
+      finishReason: 'completed',
+    });
+
+    expect(agentSpy).toHaveBeenCalledWith({
+      prompt: '',
+      content: {
+        parts: [
+          { type: 'text', text: 'Transcribe this.' },
+          {
+            type: 'audio',
+            source: {
+              kind: 'inline_data',
+              mime_type: 'audio/mpeg',
+              data_base64: 'SUQzBA==',
+            },
+            mime_type: 'audio/mpeg',
+          },
+        ],
+      },
+      apiKey: 'agent-key',
+      baseUrl: undefined,
+      model: undefined,
+      systemPrompt: undefined,
+      temperature: undefined,
+      maxOutputTokens: undefined,
+    });
+  });
+
   it('creates agent sessions and normalizes registered tools', async () => {
     const registerTool = vi.fn();
     const prompt = vi.fn().mockResolvedValue({
       message: {
         role: 'assistant',
         content: 'agent session reply',
+      },
+      finishReason: 'completed',
+    });
+    const promptWithContent = vi.fn().mockResolvedValue({
+      message: {
+        role: 'assistant',
+        content: {
+          parts: [{ type: 'text', text: 'agent multimodal reply' }],
+        },
       },
       finishReason: 'completed',
     });
@@ -71,6 +152,7 @@ describe('xlai agent api', () => {
           createAgentSession: (options: unknown) => {
             registerTool: typeof registerTool;
             prompt: typeof prompt;
+            promptWithContent: typeof promptWithContent;
           };
         },
         'createAgentSession',
@@ -78,6 +160,7 @@ describe('xlai agent api', () => {
       .mockReturnValue({
         registerTool,
         prompt,
+        promptWithContent,
       });
 
     vi.stubEnv('OPENAI_API_KEY', 'test-key');
@@ -149,5 +232,32 @@ describe('xlai agent api', () => {
       finishReason: 'completed',
     });
     expect(prompt).toHaveBeenCalledWith('What is the weather in Paris?');
+
+    await expect(
+      session.promptParts([
+        { type: 'text', text: 'Listen to this clip.' },
+        {
+          type: 'audio',
+          source: { kind: 'url', url: 'https://example.com/clip.mp3' },
+        },
+      ]),
+    ).resolves.toEqual({
+      message: {
+        role: 'assistant',
+        content: {
+          parts: [{ type: 'text', text: 'agent multimodal reply' }],
+        },
+      },
+      finishReason: 'completed',
+    });
+    expect(promptWithContent).toHaveBeenCalledWith({
+      parts: [
+        { type: 'text', text: 'Listen to this clip.' },
+        {
+          type: 'audio',
+          source: { kind: 'url', url: 'https://example.com/clip.mp3' },
+        },
+      ],
+    });
   });
 });

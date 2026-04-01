@@ -1,4 +1,6 @@
 declare module '../pkg/xlai_wasm.js' {
+  import type { ChatContent } from './types';
+
   type WasmModuleInput =
     | string
     | URL
@@ -16,6 +18,7 @@ declare module '../pkg/xlai_wasm.js' {
       callback: (argumentsValue: unknown) => unknown,
     ) => void;
     prompt: (content: string) => Promise<unknown>;
+    promptWithContent?: (content: ChatContent) => Promise<unknown>;
   };
 
   export default init;

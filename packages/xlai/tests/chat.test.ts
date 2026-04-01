@@ -65,12 +65,93 @@ describe('xlai chat api', () => {
     });
   });
 
+  it('delegates multimodal chat requests to the wasm API', async () => {
+    const chatSpy = vi
+      .spyOn(
+        wasmModule as typeof wasmModule & {
+          chat: (options: unknown) => Promise<unknown>;
+        },
+        'chat',
+      )
+      .mockResolvedValue({
+        message: {
+          role: 'assistant',
+          content: {
+            parts: [{ type: 'text', text: 'looks like a cat' }],
+          },
+        },
+        finishReason: 'completed',
+      });
+
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+
+    await expect(
+      chat({
+        content: {
+          parts: [
+            { type: 'text', text: 'Describe this audio clip.' },
+            {
+              type: 'audio',
+              source: {
+                kind: 'inline_data',
+                mime_type: 'audio/wav',
+                data_base64: 'UklGRg==',
+              },
+              mime_type: 'audio/wav',
+            },
+          ],
+        },
+      }),
+    ).resolves.toEqual({
+      message: {
+        role: 'assistant',
+        content: {
+          parts: [{ type: 'text', text: 'looks like a cat' }],
+        },
+      },
+      finishReason: 'completed',
+    });
+
+    expect(chatSpy).toHaveBeenCalledWith({
+      prompt: '',
+      content: {
+        parts: [
+          { type: 'text', text: 'Describe this audio clip.' },
+          {
+            type: 'audio',
+            source: {
+              kind: 'inline_data',
+              mime_type: 'audio/wav',
+              data_base64: 'UklGRg==',
+            },
+            mime_type: 'audio/wav',
+          },
+        ],
+      },
+      apiKey: 'test-key',
+      baseUrl: undefined,
+      model: undefined,
+      systemPrompt: undefined,
+      temperature: undefined,
+      maxOutputTokens: undefined,
+    });
+  });
+
   it('creates chat sessions and normalizes registered tools', async () => {
     const registerTool = vi.fn();
     const prompt = vi.fn().mockResolvedValue({
       message: {
         role: 'assistant',
         content: 'tool session reply',
+      },
+      finishReason: 'completed',
+    });
+    const promptWithContent = vi.fn().mockResolvedValue({
+      message: {
+        role: 'assistant',
+        content: {
+          parts: [{ type: 'text', text: 'multimodal reply' }],
+        },
       },
       finishReason: 'completed',
     });
@@ -81,6 +162,7 @@ describe('xlai chat api', () => {
           createChatSession: (options: unknown) => {
             registerTool: typeof registerTool;
             prompt: typeof prompt;
+            promptWithContent: typeof promptWithContent;
           };
         },
         'createChatSession',
@@ -88,6 +170,7 @@ describe('xlai chat api', () => {
       .mockReturnValue({
         registerTool,
         prompt,
+        promptWithContent,
       });
 
     vi.stubEnv('OPENAI_API_KEY', 'test-key');
@@ -163,6 +246,35 @@ describe('xlai chat api', () => {
       finishReason: 'completed',
     });
     expect(prompt).toHaveBeenCalledWith('What is the weather in Paris?');
+
+    await expect(
+      session.promptContent({
+        parts: [
+          { type: 'text', text: 'Describe this image.' },
+          {
+            type: 'image',
+            source: { kind: 'url', url: 'https://example.com/cat.png' },
+          },
+        ],
+      }),
+    ).resolves.toEqual({
+      message: {
+        role: 'assistant',
+        content: {
+          parts: [{ type: 'text', text: 'multimodal reply' }],
+        },
+      },
+      finishReason: 'completed',
+    });
+    expect(promptWithContent).toHaveBeenCalledWith({
+      parts: [
+        { type: 'text', text: 'Describe this image.' },
+        {
+          type: 'image',
+          source: { kind: 'url', url: 'https://example.com/cat.png' },
+        },
+      ],
+    });
   });
 
   it('passes sequential execution_mode to wasm tool definitions', async () => {

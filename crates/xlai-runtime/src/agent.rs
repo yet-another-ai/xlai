@@ -5,7 +5,10 @@ mod mcp;
 
 use serde_json::Value;
 use tera::Context;
-use xlai_core::{BoxStream, ChatMessage, ChatResponse, ToolDefinition, ToolResult, XlaiError};
+use xlai_core::{
+    BoxStream, ChatContent, ChatMessage, ChatResponse, ContentPart, ToolDefinition, ToolResult,
+    XlaiError,
+};
 
 use crate::{Chat, ChatExecutionEvent, XlaiRuntime};
 
@@ -139,6 +142,16 @@ impl Agent {
         self.chat.prompt(content).await
     }
 
+    /// Same as [`Chat::prompt_content`].
+    pub async fn prompt_content(&self, content: ChatContent) -> Result<ChatResponse, XlaiError> {
+        self.chat.prompt_content(content).await
+    }
+
+    /// Same as [`Chat::prompt_parts`].
+    pub async fn prompt_parts(&self, parts: Vec<ContentPart>) -> Result<ChatResponse, XlaiError> {
+        self.chat.prompt_parts(parts).await
+    }
+
     /// Executes a chat turn with the provided message history.
     ///
     /// # Errors
@@ -155,6 +168,22 @@ impl Agent {
         content: impl Into<String>,
     ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
         self.chat.stream_prompt(content)
+    }
+
+    #[must_use]
+    pub fn stream_prompt_content(
+        &self,
+        content: ChatContent,
+    ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
+        self.chat.stream_prompt_content(content)
+    }
+
+    #[must_use]
+    pub fn stream_prompt_parts(
+        &self,
+        parts: Vec<ContentPart>,
+    ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
+        self.chat.stream_prompt_parts(parts)
     }
 
     #[must_use]

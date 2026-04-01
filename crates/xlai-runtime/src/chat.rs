@@ -8,9 +8,9 @@ use futures_util::future::try_join_all;
 use serde_json::Value;
 use tera::Context;
 use xlai_core::{
-    BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatRequest, ChatResponse, ErrorKind, MaybeSend,
-    MessageRole, RuntimeBound, ToolCall, ToolCallExecutionMode, ToolDefinition, ToolResult,
-    XlaiError,
+    BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatRequest, ChatResponse,
+    ContentPart, ErrorKind, MaybeSend, MessageRole, RuntimeBound, ToolCall, ToolCallExecutionMode,
+    ToolDefinition, ToolResult, XlaiError,
 };
 
 use crate::{EmbeddedPromptStore, XlaiRuntime};
@@ -192,14 +192,32 @@ impl Chat {
     /// Returns an error if the configured model request fails, if a tool callback
     /// fails, or if the chat exceeds the maximum number of tool round trips.
     pub async fn prompt(&self, content: impl Into<String>) -> Result<ChatResponse, XlaiError> {
+        self.prompt_content(ChatContent::text(content.into())).await
+    }
+
+    /// Sends a single user turn with structured multimodal [`ChatContent`].
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::prompt`].
+    pub async fn prompt_content(&self, content: ChatContent) -> Result<ChatResponse, XlaiError> {
         self.execute(vec![ChatMessage {
             role: MessageRole::User,
-            content: content.into(),
+            content,
             tool_name: None,
             tool_call_id: None,
             metadata: BTreeMap::new(),
         }])
         .await
+    }
+
+    /// Sends a single user turn built from ordered [`ContentPart`]s (text, image, file, …).
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::prompt`].
+    pub async fn prompt_parts(&self, parts: Vec<ContentPart>) -> Result<ChatResponse, XlaiError> {
+        self.prompt_content(ChatContent::from_parts(parts)).await
     }
 
     /// Executes a chat turn with the provided message history.
@@ -237,13 +255,31 @@ impl Chat {
         &self,
         content: impl Into<String>,
     ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
+        self.stream_prompt_content(ChatContent::text(content.into()))
+    }
+
+    /// Like [`Self::stream_prompt`], but with structured [`ChatContent`].
+    #[must_use]
+    pub fn stream_prompt_content(
+        &self,
+        content: ChatContent,
+    ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
         self.stream(vec![ChatMessage {
             role: MessageRole::User,
-            content: content.into(),
+            content,
             tool_name: None,
             tool_call_id: None,
             metadata: BTreeMap::new(),
         }])
+    }
+
+    /// Like [`Self::stream_prompt`], but with multimodal [`ContentPart`]s.
+    #[must_use]
+    pub fn stream_prompt_parts(
+        &self,
+        parts: Vec<ContentPart>,
+    ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
+        self.stream_prompt_content(ChatContent::from_parts(parts))
     }
 
     #[must_use]
@@ -269,7 +305,6 @@ impl Chat {
                         .values()
                         .map(|tool| tool.definition.clone())
                         .collect(),
-                    skill_ids: Vec::new(),
                     metadata: BTreeMap::new(),
                     temperature,
                     max_output_tokens,
@@ -328,7 +363,6 @@ impl Chat {
             system_prompt: self.system_prompt.clone(),
             messages,
             available_tools: self.tool_definitions(),
-            skill_ids: Vec::new(),
             metadata: BTreeMap::new(),
             temperature: self.temperature,
             max_output_tokens: self.max_output_tokens,
@@ -346,7 +380,7 @@ impl Chat {
 fn tool_result_message(call: &ToolCall, result: &ToolResult) -> ChatMessage {
     ChatMessage {
         role: MessageRole::Tool,
-        content: result.content.clone(),
+        content: ChatContent::text(result.content.clone()),
         tool_name: Some(call.tool_name.clone()),
         tool_call_id: Some(call.id.clone()),
         metadata: result.metadata.clone(),

@@ -5,9 +5,11 @@ import type {
   WasmMemoryFileSystemInstance,
 } from './filesystem/types';
 import type {
+  ChatContent,
   ChatOptions,
   ChatResponse,
   ChatSessionOptions,
+  ContentPart,
   ToolDefinition,
   ToolParameterType,
   ToolResult,
@@ -16,6 +18,7 @@ import { envValue, getWasmModule, initXlai } from './wasm';
 
 export type ResolvedRequestOptions = {
   prompt: string;
+  content?: ChatContent;
   apiKey: string;
   systemPrompt?: string;
   baseUrl?: string;
@@ -44,6 +47,7 @@ export type WasmToolSessionInstance = {
     callback: (argumentsValue: unknown) => unknown,
   ) => void;
   prompt: (content: string) => Promise<ChatResponse>;
+  promptWithContent?: (content: ChatContent) => Promise<ChatResponse>;
 };
 
 export type WasmCreateSessionFunction = (
@@ -78,7 +82,8 @@ export function resolveRequestOptions(
   options: ChatOptions,
 ): ResolvedRequestOptions {
   return {
-    prompt: options.prompt,
+    prompt: options.prompt ?? '',
+    content: options.content,
     apiKey: requireApiKey(options.apiKey),
     systemPrompt: options.systemPrompt,
     baseUrl: options.baseUrl ?? envValue('OPENAI_BASE_URL'),
@@ -152,7 +157,7 @@ function toWasmToolResult(
   tool_name: string;
   content: string;
   is_error: boolean;
-  metadata: Record<string, string>;
+  metadata: Record<string, unknown>;
 } {
   return {
     tool_name: result.toolName ?? toolName,
@@ -178,6 +183,24 @@ export abstract class ToolSession {
 
   async prompt(content: string): Promise<ChatResponse> {
     return this.inner.prompt(content);
+  }
+
+  async promptContent(content: ChatContent): Promise<ChatResponse> {
+    if (this.inner.promptWithContent !== undefined) {
+      return this.inner.promptWithContent(content);
+    }
+
+    if (typeof content === 'string') {
+      return this.inner.prompt(content);
+    }
+
+    throw new Error(
+      'This xlai WASM build does not expose promptWithContent for multimodal input',
+    );
+  }
+
+  async promptParts(parts: ContentPart[]): Promise<ChatResponse> {
+    return this.promptContent({ parts });
   }
 }
 
