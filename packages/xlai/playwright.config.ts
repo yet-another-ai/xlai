@@ -1,8 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const isCI = Boolean(
-  (globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } })
-    .process?.env?.CI,
+  (
+    globalThis as typeof globalThis & {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process?.env?.CI,
 );
 
 export default defineConfig({
@@ -29,7 +32,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm run build:wasm && pnpm exec vite --host 127.0.0.1 --port 4173 --strictPort',
+    command:
+      'pnpm run build:wasm && pnpm exec vite --host 127.0.0.1 --port 4173 --strictPort',
     port: 4173,
     reuseExistingServer: !isCI,
     timeout: 120_000,

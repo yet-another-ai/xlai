@@ -50,7 +50,7 @@ xlai/
 - `crates/xlai-wasm`
   Browser-facing `wasm-bindgen` facade crate for web integration.
 - `packages/xlai`
-  Vite-based TypeScript package published as `@xlai/xlai`, built on top of `xlai-wasm`, with Vitest coverage.
+  Vite-based TypeScript package published as `@yai-xlai/xlai`, built on top of `xlai-wasm`, with Vitest coverage.
 - `crates/xlai-backend-openai`
   OpenAI-compatible backend implementation using `reqwest`.
 
@@ -91,16 +91,16 @@ cargo check -p xlai-wasm --target wasm32-unknown-unknown
 pnpm install
 ```
 
-### Build `@xlai/xlai`
+### Build `@yai-xlai/xlai`
 
 ```bash
-pnpm --filter @xlai/xlai build
+pnpm --filter @yai-xlai/xlai build
 ```
 
-### Test `@xlai/xlai`
+### Test `@yai-xlai/xlai`
 
 ```bash
-pnpm --filter @xlai/xlai test
+pnpm --filter @yai-xlai/xlai test
 ```
 
 ### Run clippy
@@ -245,7 +245,7 @@ The current OpenAI smoke test will also load `.env` automatically for local runs
 - macOS arm64
 - macOS x86_64 via cross-target build
 - `wasm32-unknown-unknown`
-- the `@xlai/xlai` package bundle through the `pnpm` workspace
+- the `@yai-xlai/xlai` package bundle through the `pnpm` workspace
 
 ### Test workflow
 
@@ -254,7 +254,7 @@ The current OpenAI smoke test will also load `.env` automatically for local runs
 - `cargo fmt --all -- --check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace`
-- `pnpm --filter @xlai/xlai test`
+- `pnpm --filter @yai-xlai/xlai test`
 
 ### E2E workflow
 

@@ -5,15 +5,15 @@ permissions:
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 env:
-  SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_GHA_ENABLED: 'true'
   RUSTC_WRAPPER: sccache
-  CARGO_INCREMENTAL: "0"
+  CARGO_INCREMENTAL: '0'
 
 jobs:
   native:
@@ -87,7 +87,7 @@ jobs:
 
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
-      
+
       - uses: pnpm/action-setup@v5
         name: Install pnpm
         with:
@@ -102,10 +102,10 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build @xlai/xlai package
-        run: pnpm --filter @xlai/xlai build
+      - name: Build @yai-xlai/xlai package
+        run: pnpm --filter @yai-xlai/xlai build
 
-      - name: Upload @xlai/xlai artifact
+      - name: Upload @yai-xlai/xlai artifact
         uses: actions/upload-artifact@v7
         with:
           name: xlai-js-package
