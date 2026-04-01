@@ -1,4 +1,5 @@
 mod chat;
+mod fs;
 
 use std::sync::Arc;
 
@@ -12,7 +13,14 @@ use xlai_core::{
 };
 
 pub use chat::{Chat, ChatExecutionEvent, ToolCallExecutionMode};
+#[cfg(not(target_arch = "wasm32"))]
+pub use fs::LocalFileSystem;
+pub use fs::{MemoryFileSystem, boxed_file_system};
 pub use xlai_backend_openai::{OpenAiChatModel, OpenAiConfig};
+pub use xlai_core::{
+    DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath, ReadableFileSystem,
+    WritableFileSystem,
+};
 
 #[derive(Clone, Default)]
 pub struct RuntimeBuilder {
@@ -22,6 +30,7 @@ pub struct RuntimeBuilder {
     skill_store: Option<Arc<dyn SkillStore>>,
     knowledge_store: Option<Arc<dyn KnowledgeStore>>,
     vector_store: Option<Arc<dyn VectorStore>>,
+    file_system: Option<Arc<dyn FileSystem>>,
     capabilities: Vec<RuntimeCapability>,
 }
 
@@ -74,6 +83,13 @@ impl RuntimeBuilder {
     }
 
     #[must_use]
+    pub fn with_file_system(mut self, file_system: Arc<dyn FileSystem>) -> Self {
+        self.file_system = Some(file_system);
+        self.capabilities.push(RuntimeCapability::FileSystem);
+        self
+    }
+
+    #[must_use]
     pub fn with_openai_chat(self, config: OpenAiConfig) -> Self {
         self.with_chat_model(Arc::new(OpenAiChatModel::new(config)))
     }
@@ -91,6 +107,7 @@ impl RuntimeBuilder {
             skill_store: self.skill_store,
             knowledge_store: self.knowledge_store,
             vector_store: self.vector_store,
+            file_system: self.file_system,
             capabilities: dedup_capabilities(self.capabilities),
         };
 
@@ -113,6 +130,7 @@ pub struct XlaiRuntime {
     skill_store: Option<Arc<dyn SkillStore>>,
     knowledge_store: Option<Arc<dyn KnowledgeStore>>,
     vector_store: Option<Arc<dyn VectorStore>>,
+    file_system: Option<Arc<dyn FileSystem>>,
     capabilities: Vec<RuntimeCapability>,
 }
 
@@ -249,6 +267,95 @@ impl XlaiRuntime {
 
         vector_store.search(query).await
     }
+
+    /// Reads raw bytes from the configured filesystem.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no filesystem is configured or if the file read
+    /// fails.
+    pub async fn read_file(&self, path: &FsPath) -> Result<Vec<u8>, XlaiError> {
+        let file_system = self
+            .file_system
+            .as_ref()
+            .ok_or_else(|| missing_dependency("file system"))?;
+
+        file_system.read(path).await
+    }
+
+    /// Checks whether the configured filesystem contains the provided path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no filesystem is configured or if the existence
+    /// check fails.
+    pub async fn path_exists(&self, path: &FsPath) -> Result<bool, XlaiError> {
+        let file_system = self
+            .file_system
+            .as_ref()
+            .ok_or_else(|| missing_dependency("file system"))?;
+
+        file_system.exists(path).await
+    }
+
+    /// Writes raw bytes to the configured filesystem.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no filesystem is configured or if the file write
+    /// fails.
+    pub async fn write_file(&self, path: &FsPath, data: Vec<u8>) -> Result<(), XlaiError> {
+        let file_system = self
+            .file_system
+            .as_ref()
+            .ok_or_else(|| missing_dependency("file system"))?;
+
+        file_system.write(path, data).await
+    }
+
+    /// Creates a directory and its missing parents in the configured filesystem.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no filesystem is configured or if the directory
+    /// creation fails.
+    pub async fn create_dir_all(&self, path: &FsPath) -> Result<(), XlaiError> {
+        let file_system = self
+            .file_system
+            .as_ref()
+            .ok_or_else(|| missing_dependency("file system"))?;
+
+        file_system.create_dir_all(path).await
+    }
+
+    /// Lists direct children under a directory in the configured filesystem.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no filesystem is configured or if the directory list
+    /// operation fails.
+    pub async fn list_directory(&self, path: &FsPath) -> Result<Vec<FsEntry>, XlaiError> {
+        let file_system = self
+            .file_system
+            .as_ref()
+            .ok_or_else(|| missing_dependency("file system"))?;
+
+        file_system.list(path).await
+    }
+
+    /// Deletes a file or directory tree from the configured filesystem.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no filesystem is configured or if deletion fails.
+    pub async fn delete_path(&self, path: &FsPath) -> Result<(), XlaiError> {
+        let file_system = self
+            .file_system
+            .as_ref()
+            .ok_or_else(|| missing_dependency("file system"))?;
+
+        file_system.delete(path).await
+    }
 }
 
 fn dedup_capabilities(capabilities: Vec<RuntimeCapability>) -> Vec<RuntimeCapability> {
@@ -281,11 +388,11 @@ mod tests {
     use tokio::time::{Duration, sleep};
     use xlai_core::{
         BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatModel, ChatRequest, ChatResponse,
-        FinishReason, MessageRole, ToolCall, ToolDefinition, ToolParameter, ToolParameterType,
-        XlaiError,
+        FinishReason, FsEntryKind, FsPath, MessageRole, RuntimeCapability, ToolCall,
+        ToolDefinition, ToolParameter, ToolParameterType, XlaiError,
     };
 
-    use super::{ChatExecutionEvent, RuntimeBuilder, ToolCallExecutionMode};
+    use super::{ChatExecutionEvent, MemoryFileSystem, RuntimeBuilder, ToolCallExecutionMode};
 
     fn empty_metadata() -> std::collections::BTreeMap<String, String> {
         std::collections::BTreeMap::new()
@@ -739,6 +846,78 @@ mod tests {
         assert_eq!(
             *execution_order,
             vec!["weather:Paris".to_owned(), "time:Paris".to_owned()]
+        );
+
+        Ok(())
+    }
+
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn runtime_file_system_helpers_use_configured_backend() -> Result<(), XlaiError> {
+        let runtime = RuntimeBuilder::new()
+            .with_file_system(Arc::new(MemoryFileSystem::new()))
+            .build()?;
+
+        assert!(runtime.has_capability(RuntimeCapability::FileSystem));
+
+        runtime.create_dir_all(&FsPath::from("/docs")).await?;
+        runtime
+            .write_file(&FsPath::from("/docs/readme.md"), b"runtime".to_vec())
+            .await?;
+
+        let bytes = runtime.read_file(&FsPath::from("/docs/readme.md")).await?;
+        assert_eq!(bytes, b"runtime".to_vec());
+
+        let exists = runtime
+            .path_exists(&FsPath::from("/docs/readme.md"))
+            .await?;
+        assert!(exists);
+
+        let entries = runtime.list_directory(&FsPath::from("/docs")).await?;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, FsPath::from("/docs/readme.md"));
+        assert_eq!(entries[0].kind, FsEntryKind::File);
+
+        runtime
+            .delete_path(&FsPath::from("/docs/readme.md"))
+            .await?;
+        let exists = runtime
+            .path_exists(&FsPath::from("/docs/readme.md"))
+            .await?;
+        assert!(!exists);
+
+        Ok(())
+    }
+
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn runtime_file_system_helpers_error_without_backend() -> Result<(), XlaiError> {
+        let runtime = RuntimeBuilder::new()
+            .with_chat_model(Arc::new(RecordingChatModel::new(
+                Arc::new(Mutex::new(Vec::new())),
+                vec![ChatResponse {
+                    message: assistant_message("unused"),
+                    tool_calls: Vec::new(),
+                    usage: None,
+                    finish_reason: FinishReason::Completed,
+                    metadata: empty_metadata(),
+                }],
+            )))
+            .build()?;
+
+        let error = match runtime.read_file(&FsPath::from("/docs/readme.md")).await {
+            Ok(_) => {
+                return Err(XlaiError::new(
+                    xlai_core::ErrorKind::Validation,
+                    "expected missing filesystem dependency error",
+                ));
+            }
+            Err(error) => error,
+        };
+        assert_eq!(error.kind, xlai_core::ErrorKind::Unsupported);
+        assert!(
+            error.message.contains("file system"),
+            "expected error message to mention file system"
         );
 
         Ok(())
