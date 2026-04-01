@@ -128,6 +128,7 @@ Current variables:
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL`
 - `OPENAI_MODEL`
+- `OPENAI_TRANSCRIPTION_MODEL`
 
 Local `.env` files are ignored by Git.
 
@@ -292,7 +293,10 @@ Run locally with:
 cargo test --workspace -- --ignored
 ```
 
-The current OpenAI smoke test will also load `.env` automatically for local runs.
+The current OpenAI smoke tests will also load `.env` automatically for local runs.
+
+For ASR/transcription end-to-end coverage, set `OPENAI_TRANSCRIPTION_MODEL` to a
+transcription-capable model such as `gpt-4o-mini-transcribe`.
 
 ## CI
 
@@ -321,6 +325,13 @@ The current OpenAI smoke test will also load `.env` automatically for local runs
 `.github/workflows/e2e.yml` runs ignored tests with provider credentials.
 
 It is intended to use a protected GitHub Environment such as `e2e`, with maintainer approval and environment secrets.
+
+The OpenAI e2e environment currently expects:
+
+- `OPENAI_API_KEY` as a GitHub secret
+- `OPENAI_BASE_URL` as a GitHub environment variable
+- `OPENAI_MODEL` as a GitHub environment variable
+- `OPENAI_TRANSCRIPTION_MODEL` as a GitHub environment variable
 
 ## Current Design Notes
 

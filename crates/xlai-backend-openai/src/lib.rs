@@ -1,14 +1,20 @@
 use std::collections::BTreeMap;
 
 use async_stream::try_stream;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
-use reqwest::Client;
+use reqwest::StatusCode;
+use reqwest::{
+    Client,
+    multipart::{Form, Part},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use xlai_core::{
     BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
     ChatResponse, ContentPart, ErrorKind, FinishReason, ImageDetail, MediaSource, MessageRole,
     StreamTextDelta, TokenUsage, ToolCall, ToolCallChunk, ToolDefinition, ToolParameterType,
+    TranscriptionBackend, TranscriptionModel, TranscriptionRequest, TranscriptionResponse,
     XlaiError,
 };
 
@@ -17,6 +23,7 @@ pub struct OpenAiConfig {
     pub base_url: String,
     pub api_key: String,
     pub model: String,
+    pub transcription_model: Option<String>,
 }
 
 impl OpenAiConfig {
@@ -30,16 +37,36 @@ impl OpenAiConfig {
             base_url: base_url.into(),
             api_key: api_key.into(),
             model: model.into(),
+            transcription_model: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_transcription_model(mut self, model: impl Into<String>) -> Self {
+        self.transcription_model = Some(model.into());
+        self
     }
 
     fn chat_completions_url(&self) -> String {
         format!("{}/chat/completions", self.base_url.trim_end_matches('/'))
     }
+
+    fn audio_transcriptions_url(&self) -> String {
+        format!(
+            "{}/audio/transcriptions",
+            self.base_url.trim_end_matches('/')
+        )
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct OpenAiChatModel {
+    client: Client,
+    config: OpenAiConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct OpenAiTranscriptionModel {
     client: Client,
     config: OpenAiConfig,
 }
@@ -54,11 +81,29 @@ impl OpenAiChatModel {
     }
 }
 
+impl OpenAiTranscriptionModel {
+    #[must_use]
+    pub fn new(config: OpenAiConfig) -> Self {
+        Self {
+            client: Client::new(),
+            config,
+        }
+    }
+}
+
 impl ChatBackend for OpenAiConfig {
     type Model = OpenAiChatModel;
 
     fn into_chat_model(self) -> Self::Model {
         OpenAiChatModel::new(self)
+    }
+}
+
+impl TranscriptionBackend for OpenAiConfig {
+    type Model = OpenAiTranscriptionModel;
+
+    fn into_transcription_model(self) -> Self::Model {
+        OpenAiTranscriptionModel::new(self)
     }
 }
 
@@ -81,9 +126,7 @@ impl ChatModel for OpenAiChatModel {
                 .await
                 .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
 
-            let response = response
-                .error_for_status()
-                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+            let response = require_success_response(response).await?;
 
             let response: OpenAiChatResponse = response
                 .json()
@@ -108,9 +151,7 @@ impl ChatModel for OpenAiChatModel {
                 .await
                 .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
 
-            let response = response
-                .error_for_status()
-                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+            let response = require_success_response(response).await?;
 
             let mut bytes_stream = response.bytes_stream();
             let mut parser = SseParser::default();
@@ -176,6 +217,109 @@ impl ChatModel for OpenAiChatModel {
     }
 }
 
+impl TranscriptionModel for OpenAiTranscriptionModel {
+    fn provider_name(&self) -> &'static str {
+        "openai-compatible"
+    }
+
+    fn transcribe(
+        &self,
+        request: TranscriptionRequest,
+    ) -> BoxFuture<'_, Result<TranscriptionResponse, XlaiError>> {
+        Box::pin(async move {
+            let endpoint = self.config.audio_transcriptions_url();
+            let payload = OpenAiTranscriptionRequest::from_core_request(&self.config, request)?;
+
+            let response = self
+                .client
+                .post(endpoint)
+                .bearer_auth(&self.config.api_key)
+                .multipart(payload.into_multipart_form()?)
+                .send()
+                .await
+                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+
+            let response = require_success_response(response).await?;
+
+            let response: OpenAiTranscriptionResponse = response
+                .json()
+                .await
+                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+
+            Ok(response.into_core_response())
+        })
+    }
+}
+
+async fn require_success_response(
+    response: reqwest::Response,
+) -> Result<reqwest::Response, XlaiError> {
+    if response.status().is_success() {
+        return Ok(response);
+    }
+
+    let status = response.status();
+    let request_id = response
+        .headers()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let body = response
+        .text()
+        .await
+        .unwrap_or_else(|error| format!("<failed to read provider error body: {error}>"));
+
+    Err(XlaiError::new(
+        ErrorKind::Provider,
+        format_provider_error_message(status, request_id.as_deref(), &body),
+    ))
+}
+
+fn format_provider_error_message(
+    status: StatusCode,
+    request_id: Option<&str>,
+    body: &str,
+) -> String {
+    let body = body.trim();
+
+    let mut message = format!("openai-compatible request failed with {status}");
+    if let Some(request_id) = request_id {
+        message.push_str(&format!(" (request_id={request_id})"));
+    }
+
+    if body.is_empty() {
+        return message;
+    }
+
+    if let Ok(envelope) = serde_json::from_str::<OpenAiErrorEnvelope>(body) {
+        message.push_str(": ");
+        message.push_str(&envelope.error.message);
+
+        let mut details = Vec::new();
+        if let Some(kind) = envelope.error.kind.as_deref() {
+            details.push(format!("type={kind}"));
+        }
+        if let Some(code) = envelope.error.code.as_deref() {
+            details.push(format!("code={code}"));
+        }
+        if let Some(param) = envelope.error.param.as_deref() {
+            details.push(format!("param={param}"));
+        }
+
+        if !details.is_empty() {
+            message.push_str(" [");
+            message.push_str(&details.join(", "));
+            message.push(']');
+        }
+
+        return message;
+    }
+
+    message.push_str(": ");
+    message.push_str(body);
+    message
+}
+
 #[derive(Serialize)]
 struct OpenAiChatRequest {
     model: String,
@@ -215,6 +359,95 @@ impl OpenAiChatRequest {
             tools,
             stream: stream.then_some(true),
         }
+    }
+}
+
+struct OpenAiTranscriptionRequest {
+    model: String,
+    audio_bytes: Vec<u8>,
+    mime_type: String,
+    filename: String,
+    language: Option<String>,
+    prompt: Option<String>,
+    temperature: Option<f32>,
+}
+
+impl OpenAiTranscriptionRequest {
+    fn from_core_request(
+        config: &OpenAiConfig,
+        request: TranscriptionRequest,
+    ) -> Result<Self, XlaiError> {
+        let TranscriptionRequest {
+            model,
+            audio,
+            mime_type,
+            filename,
+            language,
+            prompt,
+            temperature,
+            metadata: _,
+        } = request;
+
+        let (source_mime_type, data_base64) = match audio {
+            MediaSource::InlineData {
+                mime_type,
+                data_base64,
+            } => (mime_type, data_base64),
+            MediaSource::Url { .. } => {
+                return Err(XlaiError::new(
+                    ErrorKind::Unsupported,
+                    "openai-compatible transcription requires inline audio bytes",
+                ));
+            }
+        };
+
+        let audio_bytes = STANDARD.decode(data_base64).map_err(|error| {
+            XlaiError::new(
+                ErrorKind::Validation,
+                format!("transcription audio must be valid base64: {error}"),
+            )
+        })?;
+
+        Ok(Self {
+            model: model
+                .or_else(|| config.transcription_model.clone())
+                .unwrap_or_else(|| config.model.clone()),
+            audio_bytes,
+            mime_type: mime_type.unwrap_or(source_mime_type),
+            filename: filename.unwrap_or_else(|| "audio".to_owned()),
+            language,
+            prompt,
+            temperature,
+        })
+    }
+
+    fn into_multipart_form(self) -> Result<Form, XlaiError> {
+        let file_part = Part::bytes(self.audio_bytes)
+            .file_name(self.filename)
+            .mime_str(&self.mime_type)
+            .map_err(|error| {
+                XlaiError::new(
+                    ErrorKind::Validation,
+                    format!("invalid transcription MIME type: {error}"),
+                )
+            })?;
+
+        let mut form = Form::new()
+            .part("file", file_part)
+            .text("model", self.model)
+            .text("response_format", "json");
+
+        if let Some(language) = self.language {
+            form = form.text("language", language);
+        }
+        if let Some(prompt) = self.prompt {
+            form = form.text("prompt", prompt);
+        }
+        if let Some(temperature) = self.temperature {
+            form = form.text("temperature", temperature.to_string());
+        }
+
+        Ok(form)
     }
 }
 
@@ -453,6 +686,38 @@ impl OpenAiChatResponse {
             metadata: BTreeMap::new(),
         })
     }
+}
+
+#[derive(Deserialize)]
+struct OpenAiTranscriptionResponse {
+    text: String,
+    #[serde(flatten)]
+    metadata: BTreeMap<String, Value>,
+}
+
+impl OpenAiTranscriptionResponse {
+    fn into_core_response(self) -> TranscriptionResponse {
+        TranscriptionResponse {
+            text: self.text,
+            metadata: self.metadata,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct OpenAiErrorEnvelope {
+    error: OpenAiErrorDetail,
+}
+
+#[derive(Deserialize)]
+struct OpenAiErrorDetail {
+    message: String,
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    #[serde(default)]
+    param: Option<String>,
+    #[serde(default)]
+    code: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -749,17 +1014,25 @@ mod openai_multimodal_tests {
     use std::collections::BTreeMap;
 
     use serde_json::json;
-    use xlai_core::{ChatContent, ChatMessage, ChatRequest, ContentPart, MediaSource, MessageRole};
+    use xlai_core::{
+        ChatContent, ChatMessage, ChatRequest, ContentPart, MediaSource, MessageRole,
+        TranscriptionRequest,
+    };
 
-    use super::OpenAiChatRequest;
+    use super::{OpenAiChatRequest, OpenAiTranscriptionRequest, OpenAiTranscriptionResponse};
 
-    #[test]
-    fn serializes_multimodal_user_message_as_content_array() {
-        let config = super::OpenAiConfig {
+    fn test_config() -> super::OpenAiConfig {
+        super::OpenAiConfig {
             base_url: "https://api.openai.com/v1".to_owned(),
             api_key: "k".to_owned(),
             model: "gpt-test".to_owned(),
-        };
+            transcription_model: None,
+        }
+    }
+
+    #[test]
+    fn serializes_multimodal_user_message_as_content_array() {
+        let config = test_config();
         let request = ChatRequest {
             model: None,
             system_prompt: None,
@@ -801,11 +1074,7 @@ mod openai_multimodal_tests {
 
     #[test]
     fn serializes_plain_text_user_message_as_string_content() {
-        let config = super::OpenAiConfig {
-            base_url: "https://api.openai.com/v1".to_owned(),
-            api_key: "k".to_owned(),
-            model: "gpt-test".to_owned(),
-        };
+        let config = test_config();
         let request = ChatRequest {
             model: None,
             system_prompt: None,
@@ -833,11 +1102,7 @@ mod openai_multimodal_tests {
 
     #[test]
     fn serializes_inline_audio_as_file_content_part() {
-        let config = super::OpenAiConfig {
-            base_url: "https://api.openai.com/v1".to_owned(),
-            api_key: "k".to_owned(),
-            model: "gpt-test".to_owned(),
-        };
+        let config = test_config();
         let request = ChatRequest {
             model: None,
             system_prompt: None,
@@ -867,5 +1132,121 @@ mod openai_multimodal_tests {
             return;
         };
         assert_eq!(v["messages"][0]["content"][0]["type"], json!("file"));
+    }
+
+    #[test]
+    fn transcription_request_uses_configured_transcription_model_and_decodes_audio() {
+        let config = test_config().with_transcription_model("gpt-4o-mini-transcribe");
+        let request = TranscriptionRequest {
+            model: None,
+            audio: MediaSource::InlineData {
+                mime_type: "audio/wav".to_owned(),
+                data_base64: "UklGRg==".to_owned(),
+            },
+            mime_type: None,
+            filename: Some("sample.wav".to_owned()),
+            language: Some("en".to_owned()),
+            prompt: Some("Speaker is concise.".to_owned()),
+            temperature: Some(0.2),
+            metadata: BTreeMap::new(),
+        };
+
+        let payload = OpenAiTranscriptionRequest::from_core_request(&config, request);
+        assert!(payload.is_ok(), "build transcription request");
+        let Ok(payload) = payload else {
+            return;
+        };
+
+        assert_eq!(payload.model, "gpt-4o-mini-transcribe");
+        assert_eq!(payload.filename, "sample.wav");
+        assert_eq!(payload.mime_type, "audio/wav");
+        assert_eq!(payload.audio_bytes, b"RIFF".to_vec());
+    }
+
+    #[test]
+    fn transcription_request_rejects_url_audio_sources() {
+        let config = test_config();
+        let request = TranscriptionRequest {
+            model: None,
+            audio: MediaSource::Url {
+                url: "https://example.com/audio.wav".to_owned(),
+            },
+            mime_type: Some("audio/wav".to_owned()),
+            filename: None,
+            language: None,
+            prompt: None,
+            temperature: None,
+            metadata: BTreeMap::new(),
+        };
+
+        let error = match OpenAiTranscriptionRequest::from_core_request(&config, request) {
+            Ok(_) => {
+                assert!(false, "url-based audio should be rejected");
+                return;
+            }
+            Err(error) => error,
+        };
+        assert_eq!(error.kind, xlai_core::ErrorKind::Unsupported);
+        assert!(error.message.contains("inline audio"));
+    }
+
+    #[test]
+    fn transcription_response_preserves_provider_metadata() {
+        let response: Result<OpenAiTranscriptionResponse, _> = serde_json::from_value(json!({
+            "text": "hello world",
+            "language": "en",
+            "usage": {
+                "total_tokens": 42
+            }
+        }));
+        assert!(response.is_ok(), "deserialize transcription response");
+        let Ok(response) = response else {
+            return;
+        };
+
+        let response = response.into_core_response();
+        assert_eq!(response.text, "hello world");
+        assert_eq!(response.metadata.get("language"), Some(&json!("en")));
+        assert_eq!(
+            response.metadata.get("usage"),
+            Some(&json!({
+                "total_tokens": 42
+            }))
+        );
+    }
+
+    #[test]
+    fn provider_error_message_surfaces_openai_quota_details() {
+        let message = super::format_provider_error_message(
+            reqwest::StatusCode::TOO_MANY_REQUESTS,
+            Some("req_123"),
+            r#"{
+                "error": {
+                    "message": "You exceeded your current quota.",
+                    "type": "insufficient_quota",
+                    "param": "model",
+                    "code": "insufficient_quota"
+                }
+            }"#,
+        );
+
+        assert!(message.contains("429 Too Many Requests"));
+        assert!(message.contains("request_id=req_123"));
+        assert!(message.contains("You exceeded your current quota."));
+        assert!(message.contains("type=insufficient_quota"));
+        assert!(message.contains("code=insufficient_quota"));
+        assert!(message.contains("param=model"));
+    }
+
+    #[test]
+    fn provider_error_message_falls_back_to_raw_body_for_non_json_errors() {
+        let message = super::format_provider_error_message(
+            reqwest::StatusCode::BAD_GATEWAY,
+            None,
+            "upstream gateway timeout",
+        );
+
+        assert!(message.contains("502 Bad Gateway"));
+        assert!(message.contains("upstream gateway timeout"));
     }
 }

@@ -11,8 +11,8 @@ use futures_util::StreamExt;
 use xlai_core::{
     BoxStream, ChatChunk, ChatModel, ChatRequest, ChatResponse, EmbeddingModel, EmbeddingRequest,
     EmbeddingResponse, ErrorKind, KnowledgeHit, KnowledgeQuery, KnowledgeStore, RuntimeCapability,
-    Skill, SkillId, SkillStore, ToolCall, ToolExecutor, ToolResult, VectorSearchHit,
-    VectorSearchQuery, VectorStore, XlaiError,
+    Skill, SkillId, SkillStore, ToolCall, ToolExecutor, ToolResult, TranscriptionModel,
+    VectorSearchHit, VectorSearchQuery, VectorStore, XlaiError,
 };
 
 pub use agent::{Agent, McpRegistry};
@@ -26,13 +26,14 @@ pub use tera::Context as PromptContext;
 pub use xlai_core::{
     ChatBackend, ChatContent, ContentPart, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind,
     FsPath, ImageDetail, MediaSource, ReadableFileSystem, StreamTextDelta, ToolCallExecutionMode,
-    WritableFileSystem,
+    TranscriptionBackend, TranscriptionRequest, TranscriptionResponse, WritableFileSystem,
 };
 
 #[derive(Clone, Default)]
 pub struct RuntimeBuilder {
     chat_model: Option<Arc<dyn ChatModel>>,
     embedding_model: Option<Arc<dyn EmbeddingModel>>,
+    transcription_model: Option<Arc<dyn TranscriptionModel>>,
     tool_executor: Option<Arc<dyn ToolExecutor>>,
     skill_store: Option<Arc<dyn SkillStore>>,
     knowledge_store: Option<Arc<dyn KnowledgeStore>>,
@@ -67,6 +68,24 @@ impl RuntimeBuilder {
         self.embedding_model = Some(embedding_model);
         self.capabilities.push(RuntimeCapability::Embeddings);
         self
+    }
+
+    #[must_use]
+    pub fn with_transcription_model(
+        mut self,
+        transcription_model: Arc<dyn TranscriptionModel>,
+    ) -> Self {
+        self.transcription_model = Some(transcription_model);
+        self.capabilities.push(RuntimeCapability::Transcription);
+        self
+    }
+
+    #[must_use]
+    pub fn with_transcription_backend<B>(self, backend: B) -> Self
+    where
+        B: xlai_core::TranscriptionBackend,
+    {
+        self.with_transcription_model(Arc::new(backend.into_transcription_model()))
     }
 
     #[must_use]
@@ -113,6 +132,7 @@ impl RuntimeBuilder {
         let runtime = XlaiRuntime {
             chat_model: self.chat_model,
             embedding_model: self.embedding_model,
+            transcription_model: self.transcription_model,
             tool_executor: self.tool_executor,
             skill_store: self.skill_store,
             knowledge_store: self.knowledge_store,
@@ -136,6 +156,7 @@ impl RuntimeBuilder {
 pub struct XlaiRuntime {
     chat_model: Option<Arc<dyn ChatModel>>,
     embedding_model: Option<Arc<dyn EmbeddingModel>>,
+    transcription_model: Option<Arc<dyn TranscriptionModel>>,
     tool_executor: Option<Arc<dyn ToolExecutor>>,
     skill_store: Option<Arc<dyn SkillStore>>,
     knowledge_store: Option<Arc<dyn KnowledgeStore>>,
@@ -221,6 +242,24 @@ impl XlaiRuntime {
             .ok_or_else(|| missing_dependency("embedding model"))?;
 
         embedding_model.embed(request).await
+    }
+
+    /// Executes an audio transcription request with the configured transcription model.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no transcription model is configured or if the
+    /// underlying provider request fails.
+    pub async fn transcribe(
+        &self,
+        request: TranscriptionRequest,
+    ) -> Result<TranscriptionResponse, XlaiError> {
+        let transcription_model = self
+            .transcription_model
+            .as_ref()
+            .ok_or_else(|| missing_dependency("transcription model"))?;
+
+        transcription_model.transcribe(request).await
     }
 
     /// Executes a tool call through the configured runtime tool executor.
@@ -412,7 +451,8 @@ mod tests {
         ChatResponse, ContentPart, FinishReason, FsEntryKind, FsPath, MediaSource, MessageRole,
         Metadata, RuntimeCapability, Skill, SkillStore, StreamTextDelta, ToolCall,
         ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType,
-        WritableFileSystem, XlaiError,
+        TranscriptionModel, TranscriptionRequest, TranscriptionResponse, WritableFileSystem,
+        XlaiError,
     };
 
     use super::{
@@ -1803,6 +1843,95 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn runtime_transcribe_uses_configured_backend() -> Result<(), XlaiError> {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let runtime = RuntimeBuilder::new()
+            .with_transcription_model(Arc::new(RecordingTranscriptionModel::new(
+                requests.clone(),
+                vec![TranscriptionResponse {
+                    text: "hello world".to_owned(),
+                    metadata: empty_metadata(),
+                }],
+            )))
+            .build()?;
+
+        assert!(runtime.has_capability(RuntimeCapability::Transcription));
+
+        let response = runtime
+            .transcribe(TranscriptionRequest {
+                model: Some("gpt-4o-mini-transcribe".to_owned()),
+                audio: MediaSource::InlineData {
+                    mime_type: "audio/wav".to_owned(),
+                    data_base64: "UklGRg==".to_owned(),
+                },
+                mime_type: Some("audio/wav".to_owned()),
+                filename: Some("sample.wav".to_owned()),
+                language: Some("en".to_owned()),
+                prompt: Some("Keep punctuation.".to_owned()),
+                temperature: Some(0.0),
+                metadata: empty_metadata(),
+            })
+            .await?;
+
+        assert_eq!(response.text, "hello world");
+        let requests = lock_unpoisoned(&requests);
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].filename.as_deref(), Some("sample.wav"));
+
+        Ok(())
+    }
+
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn runtime_transcribe_errors_without_backend() -> Result<(), XlaiError> {
+        let runtime = RuntimeBuilder::new()
+            .with_chat_model(Arc::new(RecordingChatModel::new(
+                Arc::new(Mutex::new(Vec::new())),
+                vec![ChatResponse {
+                    message: assistant_message("unused"),
+                    tool_calls: Vec::new(),
+                    usage: None,
+                    finish_reason: FinishReason::Completed,
+                    metadata: empty_metadata(),
+                }],
+            )))
+            .build()?;
+
+        let error = match runtime
+            .transcribe(TranscriptionRequest {
+                model: None,
+                audio: MediaSource::InlineData {
+                    mime_type: "audio/wav".to_owned(),
+                    data_base64: "UklGRg==".to_owned(),
+                },
+                mime_type: Some("audio/wav".to_owned()),
+                filename: None,
+                language: None,
+                prompt: None,
+                temperature: None,
+                metadata: empty_metadata(),
+            })
+            .await
+        {
+            Ok(_) => {
+                return Err(XlaiError::new(
+                    xlai_core::ErrorKind::Validation,
+                    "expected missing transcription dependency error",
+                ));
+            }
+            Err(error) => error,
+        };
+        assert_eq!(error.kind, xlai_core::ErrorKind::Unsupported);
+        assert!(
+            error.message.contains("transcription model"),
+            "expected error message to mention transcription model"
+        );
+
+        Ok(())
+    }
+
     fn weather_tool_definition() -> ToolDefinition {
         ToolDefinition {
             name: "lookup_weather".to_owned(),
@@ -1986,6 +2115,44 @@ mod tests {
                 .unwrap_or_default();
 
             Box::pin(stream::iter(chunks.into_iter().map(Ok)))
+        }
+    }
+
+    struct RecordingTranscriptionModel {
+        requests: Arc<Mutex<Vec<TranscriptionRequest>>>,
+        responses: Mutex<VecDeque<TranscriptionResponse>>,
+    }
+
+    impl RecordingTranscriptionModel {
+        fn new(
+            requests: Arc<Mutex<Vec<TranscriptionRequest>>>,
+            responses: Vec<TranscriptionResponse>,
+        ) -> Self {
+            Self {
+                requests,
+                responses: Mutex::new(VecDeque::from(responses)),
+            }
+        }
+    }
+
+    impl TranscriptionModel for RecordingTranscriptionModel {
+        fn provider_name(&self) -> &'static str {
+            "recording-transcription-test"
+        }
+
+        fn transcribe(
+            &self,
+            request: TranscriptionRequest,
+        ) -> BoxFuture<'_, Result<TranscriptionResponse, XlaiError>> {
+            Box::pin(async move {
+                lock_unpoisoned(&self.requests).push(request);
+                lock_unpoisoned(&self.responses).pop_front().ok_or_else(|| {
+                    XlaiError::new(
+                        xlai_core::ErrorKind::Provider,
+                        "missing transcription response",
+                    )
+                })
+            })
         }
     }
 }
