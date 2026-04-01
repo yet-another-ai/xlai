@@ -19,7 +19,11 @@ export interface ChatUsage {
   totalTokens: number;
 }
 
-export type ChatFinishReason = 'completed' | 'tool_calls' | 'length' | 'stopped';
+export type ChatFinishReason =
+  | 'completed'
+  | 'tool_calls'
+  | 'length'
+  | 'stopped';
 
 export interface ChatResponse {
   message: {
@@ -52,12 +56,10 @@ function isSsrRuntime(): boolean {
 
 function envValue(name: string): string | undefined {
   return (
-    (
-      globalThis as typeof globalThis & {
-        process?: { env?: Record<string, string | undefined> };
-      }
-    ).process?.env?.[name]
-  );
+    globalThis as typeof globalThis & {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process?.env?.[name];
 }
 
 function wasmChatFunction(): WasmChatFunction {
