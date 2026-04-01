@@ -79,8 +79,12 @@ async function resolveOpfsParentDirectory(
 
 function iterateDirectoryHandles(
   directory: FileSystemDirectoryHandle,
-): AsyncIterable<FileSystemHandle> {
-  return directory as unknown as AsyncIterable<FileSystemHandle>;
+): AsyncIterable<[string, FileSystemHandle]> {
+  return (
+    directory as FileSystemDirectoryHandle & {
+      entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
+    }
+  ).entries();
 }
 
 export class OpfsFileSystem implements FileSystemApi {
@@ -177,8 +181,7 @@ export class OpfsFileSystem implements FileSystemApi {
     });
 
     const entries: FileSystemEntry[] = [];
-    for await (const handle of iterateDirectoryHandles(directory)) {
-      const name = handle.name;
+    for await (const [name, handle] of iterateDirectoryHandles(directory)) {
       const entryPath =
         normalizedPath === '/' ? `/${name}` : `${normalizedPath}/${name}`;
       entries.push({
@@ -193,8 +196,8 @@ export class OpfsFileSystem implements FileSystemApi {
   async deletePath(path: string): Promise<void> {
     const normalizedPath = normalizeFileSystemPath(path);
     if (normalizedPath === '/') {
-      for await (const handle of iterateDirectoryHandles(this.root)) {
-        await this.root.removeEntry(handle.name, { recursive: true });
+      for await (const [name] of iterateDirectoryHandles(this.root)) {
+        await this.root.removeEntry(name, { recursive: true });
       }
       return;
     }
