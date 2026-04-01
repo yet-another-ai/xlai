@@ -5,6 +5,7 @@ use serde_json::Value;
 use tera::Context;
 use xlai_core::{ToolDefinition, ToolParameter, ToolParameterType, ToolResult, XlaiError};
 
+use crate::chat::ToolOrigin;
 use crate::{Chat, EmbeddedPromptStore, XlaiRuntime};
 
 const TOOL_NAME: &str = "skill";
@@ -13,7 +14,7 @@ const TOOL_DESCRIPTION_TEMPLATE: &str = "system/tool-description-skill.md";
 pub(super) fn register(chat: &mut Chat, runtime: Arc<XlaiRuntime>) -> Result<(), XlaiError> {
     let definition = definition()?;
 
-    chat.register_tool(definition, move |arguments| {
+    chat.register_tool_with_origin(definition, ToolOrigin::Builtin, move |arguments| {
         let runtime = runtime.clone();
         async move { resolve(runtime.as_ref(), arguments).await }
     });

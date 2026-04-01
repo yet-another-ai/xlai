@@ -187,7 +187,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Tool Calling
 
-`Chat` sessions can register tools directly with async callbacks.
+`Chat` sessions can register tools directly with async callbacks. `Agent` sessions
+also expose an `McpRegistry` via `agent.mcp_registry()` so MCP-provided tools can
+be registered separately from built-in agent tools.
 
 Current behavior:
 

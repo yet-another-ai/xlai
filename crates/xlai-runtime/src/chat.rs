@@ -20,10 +20,18 @@ type ToolCallback =
 #[cfg(target_arch = "wasm32")]
 type ToolCallback = dyn Fn(Value) -> BoxFuture<'static, Result<ToolResult, XlaiError>>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ToolOrigin {
+    Builtin,
+    Local,
+    Mcp,
+}
+
 #[derive(Clone)]
 struct RegisteredTool {
     definition: ToolDefinition,
     callback: Arc<ToolCallback>,
+    origin: ToolOrigin,
 }
 
 #[derive(Clone, Debug)]
@@ -146,6 +154,19 @@ impl Chat {
         F: Fn(Value) -> Fut + RuntimeBound + 'static,
         Fut: Future<Output = Result<ToolResult, XlaiError>> + MaybeSend + 'static,
     {
+        self.register_tool_with_origin(definition, ToolOrigin::Local, callback)
+    }
+
+    pub(crate) fn register_tool_with_origin<F, Fut>(
+        &mut self,
+        definition: ToolDefinition,
+        origin: ToolOrigin,
+        callback: F,
+    ) -> &mut Self
+    where
+        F: Fn(Value) -> Fut + RuntimeBound + 'static,
+        Fut: Future<Output = Result<ToolResult, XlaiError>> + MaybeSend + 'static,
+    {
         let tool_name = definition.name.clone();
         let callback = Arc::new(
             move |arguments| -> BoxFuture<'static, Result<ToolResult, XlaiError>> {
@@ -158,6 +179,7 @@ impl Chat {
             RegisteredTool {
                 definition,
                 callback,
+                origin,
             },
         );
         self
@@ -167,6 +189,15 @@ impl Chat {
     pub fn tool_definitions(&self) -> Vec<ToolDefinition> {
         self.tools
             .values()
+            .map(|tool| tool.definition.clone())
+            .collect()
+    }
+
+    #[must_use]
+    pub(crate) fn tool_definitions_with_origin(&self, origin: ToolOrigin) -> Vec<ToolDefinition> {
+        self.tools
+            .values()
+            .filter(|tool| tool.origin == origin)
             .map(|tool| tool.definition.clone())
             .collect()
     }
