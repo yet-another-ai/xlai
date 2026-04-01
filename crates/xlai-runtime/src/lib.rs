@@ -24,8 +24,9 @@ pub use prompt::EmbeddedPromptStore;
 pub use skill_store::MarkdownSkillStore;
 pub use tera::Context as PromptContext;
 pub use xlai_core::{
-    ChatBackend, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath, ReadableFileSystem,
-    ToolCallExecutionMode, WritableFileSystem,
+    ChatBackend, ChatContent, ContentPart, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind,
+    FsPath, ImageDetail, MediaSource, ReadableFileSystem, StreamTextDelta, ToolCallExecutionMode,
+    WritableFileSystem,
 };
 
 #[derive(Clone, Default)]
@@ -407,10 +408,11 @@ mod tests {
     use serde_json::{Value, json};
     use tokio::time::{Duration, sleep};
     use xlai_core::{
-        BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatModel, ChatRequest, ChatResponse,
-        FinishReason, FsEntryKind, FsPath, MessageRole, Metadata, RuntimeCapability, Skill,
-        SkillStore, ToolCall, ToolCallExecutionMode, ToolDefinition, ToolParameter,
-        ToolParameterType, WritableFileSystem, XlaiError,
+        BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
+        ChatResponse, ContentPart, FinishReason, FsEntryKind, FsPath, MediaSource, MessageRole,
+        Metadata, RuntimeCapability, Skill, SkillStore, StreamTextDelta, ToolCall,
+        ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType,
+        WritableFileSystem, XlaiError,
     };
 
     use super::{
@@ -474,7 +476,10 @@ mod tests {
 
         let response = chat.prompt("What's the weather in Paris?").await?;
 
-        assert_eq!(response.message.content, "Paris is sunny.");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("Paris is sunny.")
+        );
 
         let requests = lock_unpoisoned(&requests);
         assert_eq!(requests.len(), 2);
@@ -489,7 +494,86 @@ mod tests {
             requests[1].messages[2].tool_call_id.as_deref(),
             Some("tool_1")
         );
-        assert_eq!(requests[1].messages[2].content, "weather for Paris: sunny");
+        assert_eq!(
+            requests[1].messages[2].content.as_single_text(),
+            Some("weather for Paris: sunny")
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn chat_prompt_parts_preserves_multimodal_user_message_in_request()
+    -> Result<(), XlaiError> {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let model = Arc::new(RecordingChatModel::new(
+            requests.clone(),
+            vec![ChatResponse {
+                message: assistant_message("noted."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            }],
+        ));
+
+        let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+        let chat = runtime.chat_session();
+        chat.prompt_parts(vec![
+            ContentPart::Text {
+                text: "What is in this image?".to_owned(),
+            },
+            ContentPart::Image {
+                source: MediaSource::Url {
+                    url: "https://example.com/picture.png".to_owned(),
+                },
+                mime_type: None,
+                detail: None,
+            },
+        ])
+        .await?;
+
+        let requests = lock_unpoisoned(&requests);
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].messages.len(), 1);
+        assert_eq!(requests[0].messages[0].role, MessageRole::User);
+        assert_eq!(requests[0].messages[0].content.parts.len(), 2);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn chat_prompt_parts_preserves_audio_user_message_in_request() -> Result<(), XlaiError> {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let model = Arc::new(RecordingChatModel::new(
+            requests.clone(),
+            vec![ChatResponse {
+                message: assistant_message("got audio."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            }],
+        ));
+
+        let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+        let chat = runtime.chat_session();
+        chat.prompt_parts(vec![ContentPart::Audio {
+            source: MediaSource::InlineData {
+                mime_type: "audio/wav".to_owned(),
+                data_base64: "UklGRg==".to_owned(),
+            },
+            mime_type: Some("audio/wav".to_owned()),
+        }])
+        .await?;
+
+        let requests = lock_unpoisoned(&requests);
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].messages[0].content.parts.len(), 1);
+        assert!(matches!(
+            requests[0].messages[0].content.parts[0],
+            ContentPart::Audio { .. }
+        ));
 
         Ok(())
     }
@@ -526,14 +610,17 @@ mod tests {
         let response = chat
             .execute(vec![ChatMessage {
                 role: MessageRole::System,
-                content: "Remind the assistant to stay concise.".to_owned(),
+                content: ChatContent::text("Remind the assistant to stay concise."),
                 tool_name: None,
                 tool_call_id: None,
                 metadata: metadata.clone(),
             }])
             .await?;
 
-        assert_eq!(response.message.content, "Reminder acknowledged.");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("Reminder acknowledged.")
+        );
 
         let requests = lock_unpoisoned(&requests);
         assert_eq!(requests.len(), 1);
@@ -588,7 +675,10 @@ mod tests {
 
         let agent = runtime.agent_session()?;
         let response = agent.prompt("Hello").await?;
-        assert_eq!(response.message.content, "agent reply");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("agent reply")
+        );
 
         let requests = lock_unpoisoned(&requests);
         assert_eq!(requests.len(), 1);
@@ -641,7 +731,10 @@ mod tests {
 
         let agent = runtime.agent_session()?;
         let response = agent.prompt("Review this patch").await?;
-        assert_eq!(response.message.content, "skill loaded");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("skill loaded")
+        );
 
         let requests = lock_unpoisoned(&requests);
         assert_eq!(requests.len(), 2);
@@ -650,12 +743,14 @@ mod tests {
         assert!(
             requests[1].messages[2]
                 .content
+                .text_parts_concatenated()
                 .contains("Prioritize bugs, regressions, and missing tests."),
             "expected the skill tool result to include the resolved prompt fragment"
         );
         assert!(
             requests[1].messages[2]
                 .content
+                .text_parts_concatenated()
                 .contains("Focus on correctness."),
             "expected the skill tool result to include the supplied skill arguments"
         );
@@ -701,7 +796,10 @@ mod tests {
         assert_eq!(mcp_tools[0].name, "lookup_weather");
 
         let response = agent.prompt("Hello").await?;
-        assert_eq!(response.message.content, "agent reply");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("agent reply")
+        );
 
         let requests = lock_unpoisoned(&requests);
         assert_eq!(requests.len(), 1);
@@ -768,7 +866,10 @@ mod tests {
             });
 
         let response = agent.prompt("What's the weather in Paris?").await?;
-        assert_eq!(response.message.content, "Paris is sunny.");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("Paris is sunny.")
+        );
 
         let requests = lock_unpoisoned(&requests);
         assert_eq!(requests.len(), 2);
@@ -777,7 +878,10 @@ mod tests {
             requests[1].messages[2].tool_name.as_deref(),
             Some("lookup_weather")
         );
-        assert_eq!(requests[1].messages[2].content, "weather for Paris: sunny");
+        assert_eq!(
+            requests[1].messages[2].content.as_single_text(),
+            Some("weather for Paris: sunny")
+        );
 
         Ok(())
     }
@@ -829,7 +933,10 @@ mod tests {
         assert_eq!(mcp_tools[0].name, "lookup_weather");
 
         let response = agent.prompt("What's the weather in Paris?").await?;
-        assert_eq!(response.message.content, "Paris is sunny.");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("Paris is sunny.")
+        );
 
         let requests = lock_unpoisoned(&requests);
         assert_eq!(requests.len(), 2);
@@ -844,7 +951,10 @@ mod tests {
             requests[1].messages[2].tool_name.as_deref(),
             Some("lookup_weather")
         );
-        assert_eq!(requests[1].messages[2].content, "weather for Paris: sunny");
+        assert_eq!(
+            requests[1].messages[2].content.as_single_text(),
+            Some("weather for Paris: sunny")
+        );
 
         Ok(())
     }
@@ -870,7 +980,10 @@ mod tests {
             .with_system_prompt_asset("system/tool-description-skill.md")?;
 
         let response = chat.prompt("Say something brief.").await?;
-        assert_eq!(response.message.content, "Prompt loaded.");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("Prompt loaded.")
+        );
 
         let requests = lock_unpoisoned(&requests);
         assert_eq!(requests.len(), 1);
@@ -906,7 +1019,10 @@ mod tests {
             .with_system_prompt_template("system/tool-description-skill.md", &context)?;
 
         let response = chat.prompt("Say something brief.").await?;
-        assert_eq!(response.message.content, "Rendered prompt loaded.");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("Rendered prompt loaded.")
+        );
 
         let requests = lock_unpoisoned(&requests);
         assert_eq!(requests.len(), 1);
@@ -928,7 +1044,10 @@ mod tests {
                 ChatChunk::MessageStart {
                     role: MessageRole::Assistant,
                 },
-                ChatChunk::ContentDelta("Looking up weather".to_owned()),
+                ChatChunk::ContentDelta(StreamTextDelta {
+                    part_index: 0,
+                    delta: "Looking up weather".to_owned(),
+                }),
                 ChatChunk::Finished(ChatResponse {
                     message: assistant_message("Looking up weather"),
                     tool_calls: vec![ToolCall {
@@ -945,7 +1064,10 @@ mod tests {
                 ChatChunk::MessageStart {
                     role: MessageRole::Assistant,
                 },
-                ChatChunk::ContentDelta("Paris is sunny.".to_owned()),
+                ChatChunk::ContentDelta(StreamTextDelta {
+                    part_index: 0,
+                    delta: "Paris is sunny.".to_owned(),
+                }),
                 ChatChunk::Finished(ChatResponse {
                     message: assistant_message("Paris is sunny."),
                     tool_calls: Vec::new(),
@@ -979,11 +1101,14 @@ mod tests {
 
         while let Some(event) = stream.next().await {
             match event? {
-                ChatExecutionEvent::Model(ChatChunk::ContentDelta(delta)) => {
+                ChatExecutionEvent::Model(ChatChunk::ContentDelta(StreamTextDelta {
+                    delta,
+                    ..
+                })) => {
                     content_deltas.push(delta);
                 }
                 ChatExecutionEvent::Model(ChatChunk::Finished(response)) => {
-                    finished_messages.push(response.message.content);
+                    finished_messages.push(response.message.content.text_parts_concatenated());
                 }
                 ChatExecutionEvent::ToolCall(call) => {
                     saw_tool_call = true;
@@ -1095,7 +1220,10 @@ mod tests {
         }
 
         let response = chat.prompt("What's the weather and time in Paris?").await?;
-        assert_eq!(response.message.content, "Paris is sunny and 9am.");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("Paris is sunny and 9am.")
+        );
 
         assert!(
             max_active_calls.load(Ordering::SeqCst) >= 2,
@@ -1200,7 +1328,10 @@ mod tests {
         }
 
         let response = chat.prompt("What's the weather and time in Paris?").await?;
-        assert_eq!(response.message.content, "Paris is sunny and 9am.");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("Paris is sunny and 9am.")
+        );
         assert!(
             max_active_calls.load(Ordering::SeqCst) >= 2,
             "concurrent mode should overlap tool executions",
@@ -1286,7 +1417,10 @@ mod tests {
         }
 
         let response = chat.prompt("What's the weather and time in Paris?").await?;
-        assert_eq!(response.message.content, "Paris is sunny and 9am.");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("Paris is sunny and 9am.")
+        );
 
         let execution_order = lock_unpoisoned(&execution_order);
         assert_eq!(
@@ -1417,7 +1551,10 @@ mod tests {
         }
 
         let response = chat.prompt("Build my Paris schedule.").await?;
-        assert_eq!(response.message.content, "Paris schedule assembled.");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("Paris schedule assembled.")
+        );
         assert_eq!(
             max_active_calls.load(Ordering::SeqCst),
             1,
@@ -1570,7 +1707,10 @@ mod tests {
         }
 
         let response = chat.prompt("Plan my Paris day.").await?;
-        assert_eq!(response.message.content, "Paris plan completed.");
+        assert_eq!(
+            response.message.content.as_single_text(),
+            Some("Paris plan completed.")
+        );
         assert_eq!(
             max_active_calls.load(Ordering::SeqCst),
             1,
@@ -1726,7 +1866,7 @@ mod tests {
     fn assistant_message(content: &str) -> ChatMessage {
         ChatMessage {
             role: MessageRole::Assistant,
-            content: content.to_owned(),
+            content: ChatContent::text(content),
             tool_name: None,
             tool_call_id: None,
             metadata: empty_metadata(),

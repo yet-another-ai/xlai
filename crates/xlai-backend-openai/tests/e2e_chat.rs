@@ -28,7 +28,12 @@ async fn openai_chat_smoke_test() -> Result<(), XlaiError> {
 
     assert_eq!(response.message.role, MessageRole::Assistant);
     assert!(
-        !response.message.content.trim().is_empty(),
+        !response
+            .message
+            .content
+            .text_parts_concatenated()
+            .trim()
+            .is_empty(),
         "assistant response should not be empty",
     );
     assert!(

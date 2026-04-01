@@ -11,12 +11,13 @@ use std::sync::Arc;
 #[cfg(target_arch = "wasm32")]
 use js_sys::{Function, Promise, Reflect, Uint8Array};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::JsFuture;
-use xlai_core::{ChatResponse, FinishReason, MessageRole, TokenUsage};
+use xlai_core::{ChatContent, ChatResponse, FinishReason, MessageRole, TokenUsage};
 #[cfg(target_arch = "wasm32")]
 use xlai_core::{ErrorKind, ToolDefinition, ToolResult, XlaiError};
 
@@ -38,6 +39,9 @@ struct WasmChatRequest {
     temperature: Option<f32>,
     #[serde(default)]
     max_output_tokens: Option<u32>,
+    /// When set, used as the user message body instead of plain-text [`Self::prompt`].
+    #[serde(default)]
+    content: Option<ChatContent>,
 }
 
 #[derive(Deserialize)]
@@ -55,6 +59,8 @@ struct WasmAgentRequest {
     temperature: Option<f32>,
     #[serde(default)]
     max_output_tokens: Option<u32>,
+    #[serde(default)]
+    content: Option<ChatContent>,
 }
 
 #[derive(Deserialize)]
@@ -111,7 +117,8 @@ struct WasmChatResponse {
 #[derive(Serialize)]
 struct WasmChatMessage {
     role: &'static str,
-    content: String,
+    /// Structured [`ChatContent`] as JSON (plain string or `{ "parts": [...] }`).
+    content: JsonValue,
 }
 
 #[derive(Serialize)]
@@ -138,10 +145,13 @@ struct WasmFsEntryInput {
 
 impl From<ChatResponse> for WasmChatResponse {
     fn from(response: ChatResponse) -> Self {
+        let content = serde_json::to_value(&response.message.content).unwrap_or_else(|_| {
+            JsonValue::String(response.message.content.text_parts_concatenated())
+        });
         Self {
             message: WasmChatMessage {
                 role: message_role_label(response.message.role),
-                content: response.message.content,
+                content,
             },
             finish_reason: finish_reason_label(response.finish_reason),
             usage: response.usage.map(Into::into),
@@ -396,6 +406,13 @@ impl WasmChatSession {
     pub async fn prompt(&self, content: String) -> Result<JsValue, JsValue> {
         serialize_chat_response(self.inner.prompt(content).await.map_err(js_error)?)
     }
+
+    /// Sends one user turn using structured [`ChatContent`] (multimodal) deserialized from JS.
+    #[wasm_bindgen(js_name = promptWithContent)]
+    pub async fn prompt_with_content(&self, content: JsValue) -> Result<JsValue, JsValue> {
+        let content: ChatContent = serde_wasm_bindgen::from_value(content).map_err(js_error)?;
+        serialize_chat_response(self.inner.prompt_content(content).await.map_err(js_error)?)
+    }
 }
 
 #[wasm_bindgen(js_name = AgentSession)]
@@ -435,6 +452,12 @@ impl WasmAgentSession {
     pub async fn prompt(&self, content: String) -> Result<JsValue, JsValue> {
         serialize_chat_response(self.inner.prompt(content).await.map_err(js_error)?)
     }
+
+    #[wasm_bindgen(js_name = promptWithContent)]
+    pub async fn prompt_with_content(&self, content: JsValue) -> Result<JsValue, JsValue> {
+        let content: ChatContent = serde_wasm_bindgen::from_value(content).map_err(js_error)?;
+        serialize_chat_response(self.inner.prompt_content(content).await.map_err(js_error)?)
+    }
 }
 
 #[must_use]
@@ -450,18 +473,55 @@ pub fn package_version() -> String {
 
 #[wasm_bindgen]
 pub async fn chat(options: JsValue) -> Result<JsValue, JsValue> {
-    let options: WasmChatRequest = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
-    let prompt = options.prompt.clone();
-    let chat = create_chat_session_inner(options.into(), None)?;
-    chat.prompt(prompt).await
+    let WasmChatRequest {
+        prompt,
+        content,
+        api_key,
+        base_url,
+        model,
+        system_prompt,
+        temperature,
+        max_output_tokens,
+    } = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
+    let user_content = content.unwrap_or_else(|| ChatContent::text(prompt.clone()));
+    let session_options = WasmChatSessionOptions {
+        api_key,
+        base_url,
+        model,
+        system_prompt,
+        temperature,
+        max_output_tokens,
+    };
+    let chat = create_chat_session_inner(session_options, None)?;
+    chat.prompt_with_content(serde_wasm_bindgen::to_value(&user_content).map_err(js_error)?)
+        .await
 }
 
 #[wasm_bindgen]
 pub async fn agent(options: JsValue) -> Result<JsValue, JsValue> {
-    let options: WasmAgentRequest = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
-    let prompt = options.prompt.clone();
-    let agent = create_agent_session_inner(options.into(), None)?;
-    agent.prompt(prompt).await
+    let WasmAgentRequest {
+        prompt,
+        content,
+        api_key,
+        base_url,
+        model,
+        system_prompt,
+        temperature,
+        max_output_tokens,
+    } = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
+    let user_content = content.unwrap_or_else(|| ChatContent::text(prompt.clone()));
+    let session_options = WasmChatSessionOptions {
+        api_key,
+        base_url,
+        model,
+        system_prompt,
+        temperature,
+        max_output_tokens,
+    };
+    let agent = create_agent_session_inner(session_options, None)?;
+    agent
+        .prompt_with_content(serde_wasm_bindgen::to_value(&user_content).map_err(js_error)?)
+        .await
 }
 
 #[wasm_bindgen(js_name = createChatSession)]
@@ -691,12 +751,14 @@ const fn fs_entry_kind_label(kind: FsEntryKind) -> &'static str {
 mod tests {
     use std::collections::BTreeMap;
 
+    use serde_json::json;
     use xlai_core::{
-        ChatMessage, FinishReason, FsEntry, FsEntryKind, FsPath, MessageRole, TokenUsage,
+        ChatContent, ChatMessage, FinishReason, FsEntry, FsEntryKind, FsPath, MessageRole,
+        TokenUsage,
     };
 
     use super::{
-        WasmAgentRequest, WasmChatResponse, WasmChatSessionOptions, WasmFsEntry,
+        WasmAgentRequest, WasmChatRequest, WasmChatResponse, WasmChatSessionOptions, WasmFsEntry,
         create_agent_session_inner,
     };
 
@@ -705,7 +767,7 @@ mod tests {
         let response = WasmChatResponse::from(xlai_core::ChatResponse {
             message: ChatMessage {
                 role: MessageRole::Assistant,
-                content: "hello from wasm".to_owned(),
+                content: ChatContent::text("hello from wasm"),
                 tool_name: None,
                 tool_call_id: None,
                 metadata: BTreeMap::new(),
@@ -721,7 +783,7 @@ mod tests {
         });
 
         assert_eq!(response.message.role, "assistant");
-        assert_eq!(response.message.content, "hello from wasm");
+        assert_eq!(response.message.content, json!("hello from wasm"));
         assert_eq!(response.finish_reason, "stopped");
 
         assert!(response.usage.is_some());
@@ -746,6 +808,29 @@ mod tests {
     }
 
     #[test]
+    fn wasm_chat_request_deserializes_optional_multimodal_content() {
+        let raw = serde_json::json!({
+            "prompt": "fallback",
+            "apiKey": "k",
+            "content": {
+                "parts": [
+                    {"type": "text", "text": "Describe this."},
+                    {
+                        "type": "image",
+                        "source": {"kind": "url", "url": "https://example.com/i.png"},
+                        "mime_type": null,
+                        "detail": null
+                    }
+                ]
+            }
+        });
+        let req: WasmChatRequest =
+            serde_json::from_value(raw).expect("deserialize WasmChatRequest");
+        assert!(req.content.is_some());
+        assert_eq!(req.content.as_ref().unwrap().parts.len(), 2);
+    }
+
+    #[test]
     fn wasm_agent_request_maps_into_session_options() {
         let options = WasmChatSessionOptions::from(WasmAgentRequest {
             prompt: "Hello".to_owned(),
@@ -755,6 +840,7 @@ mod tests {
             system_prompt: Some("Be concise.".to_owned()),
             temperature: Some(0.2),
             max_output_tokens: Some(512),
+            content: None,
         });
 
         assert_eq!(options.api_key, "test-key");

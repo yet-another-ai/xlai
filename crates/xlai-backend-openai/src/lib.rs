@@ -6,9 +6,10 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use xlai_core::{
-    BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatMessage, ChatModel, ChatRequest,
-    ChatResponse, ErrorKind, FinishReason, MessageRole, TokenUsage, ToolCall, ToolCallChunk,
-    ToolDefinition, ToolParameterType, XlaiError,
+    BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
+    ChatResponse, ContentPart, ErrorKind, FinishReason, ImageDetail, MediaSource, MessageRole,
+    StreamTextDelta, TokenUsage, ToolCall, ToolCallChunk, ToolDefinition, ToolParameterType,
+    XlaiError,
 };
 
 #[derive(Clone, Debug)]
@@ -150,7 +151,10 @@ impl ChatModel for OpenAiChatModel {
 
                     if let Some(content) = choice.delta.content {
                         state.message_content.push_str(&content);
-                        yield ChatChunk::ContentDelta(content);
+                        yield ChatChunk::ContentDelta(StreamTextDelta {
+                            part_index: 0,
+                            delta: content,
+                        });
                     }
 
                     if let Some(tool_calls) = choice.delta.tool_calls {
@@ -217,7 +221,7 @@ impl OpenAiChatRequest {
 #[derive(Serialize)]
 struct OpenAiRequestMessage {
     role: &'static str,
-    content: String,
+    content: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -235,10 +239,113 @@ impl From<ChatMessage> for OpenAiRequestMessage {
 
         Self {
             role,
-            content: message.content,
+            content: openai_request_content_value(&message),
             name: message.tool_name,
             tool_call_id: message.tool_call_id,
         }
+    }
+}
+
+fn openai_request_content_value(message: &ChatMessage) -> Value {
+    if message.role == MessageRole::Tool {
+        return Value::String(message.content.text_parts_concatenated());
+    }
+    chat_content_to_openai_request_value(&message.content)
+}
+
+fn chat_content_to_openai_request_value(content: &ChatContent) -> Value {
+    if let Some(text) = content.as_single_text() {
+        return Value::String(text.to_owned());
+    }
+    let parts: Vec<Value> = content
+        .parts
+        .iter()
+        .map(openai_request_part_value)
+        .collect();
+    Value::Array(parts)
+}
+
+fn openai_request_part_value(part: &ContentPart) -> Value {
+    match part {
+        ContentPart::Text { text } => serde_json::json!({
+            "type": "text",
+            "text": text,
+        }),
+        ContentPart::Image {
+            source,
+            mime_type,
+            detail,
+        } => {
+            let url = match source {
+                MediaSource::Url { url } => url.clone(),
+                MediaSource::InlineData {
+                    mime_type: inline_mime,
+                    data_base64,
+                } => {
+                    let mime = mime_type.as_deref().unwrap_or(inline_mime.as_str());
+                    format!("data:{mime};base64,{data_base64}")
+                }
+            };
+            let mut image_url = serde_json::json!({ "url": url });
+            if let Some(d) = detail {
+                image_url["detail"] = Value::String(image_detail_openai(*d).to_owned());
+            }
+            serde_json::json!({
+                "type": "image_url",
+                "image_url": image_url,
+            })
+        }
+        ContentPart::Audio { source, mime_type } => match source {
+            MediaSource::Url { url } => serde_json::json!({
+                "type": "text",
+                "text": format!("(Attached audio URL: {url})"),
+            }),
+            MediaSource::InlineData {
+                mime_type: inline_mime,
+                data_base64,
+            } => {
+                let mime = mime_type.as_deref().unwrap_or(inline_mime.as_str());
+                serde_json::json!({
+                    "type": "file",
+                    "file": {
+                        "filename": "audio",
+                        "file_data": format!("data:{mime};base64,{data_base64}"),
+                    },
+                })
+            }
+        },
+        ContentPart::File {
+            source,
+            mime_type,
+            filename,
+        } => match source {
+            MediaSource::Url { url } => serde_json::json!({
+                "type": "text",
+                "text": format!("(Attached file URL: {url})"),
+            }),
+            MediaSource::InlineData {
+                mime_type: inline_mime,
+                data_base64,
+            } => {
+                let mime = mime_type.as_deref().unwrap_or(inline_mime.as_str());
+                let fname = filename.clone().unwrap_or_else(|| "attachment".to_owned());
+                serde_json::json!({
+                    "type": "file",
+                    "file": {
+                        "filename": fname,
+                        "file_data": format!("data:{mime};base64,{data_base64}"),
+                    },
+                })
+            }
+        },
+    }
+}
+
+fn image_detail_openai(detail: ImageDetail) -> &'static str {
+    match detail {
+        ImageDetail::Auto => "auto",
+        ImageDetail::Low => "low",
+        ImageDetail::High => "high",
     }
 }
 
@@ -324,7 +431,7 @@ impl OpenAiChatResponse {
 
         let message = ChatMessage {
             role: MessageRole::Assistant,
-            content: choice.message.content.unwrap_or_default(),
+            content: openai_response_content_to_chat_content(choice.message.content.as_ref()),
             tool_name: None,
             tool_call_id: None,
             metadata: BTreeMap::new(),
@@ -358,9 +465,48 @@ struct OpenAiChoice {
 #[derive(Deserialize)]
 struct OpenAiResponseMessage {
     #[serde(default)]
-    content: Option<String>,
+    content: Option<Value>,
     #[serde(default)]
     tool_calls: Option<Vec<OpenAiToolCall>>,
+}
+
+fn openai_response_content_to_chat_content(value: Option<&Value>) -> ChatContent {
+    match value {
+        None | Some(Value::Null) => ChatContent::text(""),
+        Some(Value::String(s)) => ChatContent::text(s.clone()),
+        Some(Value::Array(items)) => {
+            let parts: Vec<ContentPart> = items
+                .iter()
+                .filter_map(parse_openai_response_content_part)
+                .collect();
+            if parts.is_empty() {
+                ChatContent::text("")
+            } else {
+                ChatContent::from_parts(parts)
+            }
+        }
+        Some(other) => ChatContent::text(other.to_string()),
+    }
+}
+
+fn parse_openai_response_content_part(value: &Value) -> Option<ContentPart> {
+    let obj = value.as_object()?;
+    let ty = obj.get("type")?.as_str()?;
+    match ty {
+        "text" => {
+            let text = obj.get("text")?.as_str()?.to_owned();
+            Some(ContentPart::Text { text })
+        }
+        "image_url" => {
+            let url = obj.get("image_url")?.get("url")?.as_str()?.to_owned();
+            Some(ContentPart::Image {
+                source: MediaSource::Url { url },
+                mime_type: None,
+                detail: None,
+            })
+        }
+        _ => None,
+    }
 }
 
 #[derive(Deserialize)]
@@ -478,7 +624,7 @@ impl StreamState {
         Ok(ChatResponse {
             message: ChatMessage {
                 role: MessageRole::Assistant,
-                content: self.message_content,
+                content: ChatContent::text(self.message_content),
                 tool_name: None,
                 tool_call_id: None,
                 metadata: BTreeMap::new(),
@@ -595,5 +741,119 @@ fn finish_reason_from_api(reason: Option<&str>) -> FinishReason {
         Some("length") => FinishReason::Length,
         Some("stop") => FinishReason::Stopped,
         _ => FinishReason::Completed,
+    }
+}
+
+#[cfg(test)]
+mod openai_multimodal_tests {
+    use std::collections::BTreeMap;
+
+    use serde_json::json;
+    use xlai_core::{ChatContent, ChatMessage, ChatRequest, ContentPart, MediaSource, MessageRole};
+
+    use super::OpenAiChatRequest;
+
+    #[test]
+    fn serializes_multimodal_user_message_as_content_array() {
+        let config = super::OpenAiConfig {
+            base_url: "https://api.openai.com/v1".to_owned(),
+            api_key: "k".to_owned(),
+            model: "gpt-test".to_owned(),
+        };
+        let request = ChatRequest {
+            model: None,
+            system_prompt: None,
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: ChatContent::from_parts(vec![
+                    ContentPart::Text {
+                        text: "Describe the image.".to_owned(),
+                    },
+                    ContentPart::Image {
+                        source: MediaSource::Url {
+                            url: "https://example.com/a.png".to_owned(),
+                        },
+                        mime_type: None,
+                        detail: None,
+                    },
+                ]),
+                tool_name: None,
+                tool_call_id: None,
+                metadata: BTreeMap::new(),
+            }],
+            available_tools: Vec::new(),
+            metadata: BTreeMap::new(),
+            temperature: None,
+            max_output_tokens: None,
+        };
+
+        let payload = OpenAiChatRequest::from_core_request(&config, request, false);
+        let v = serde_json::to_value(&payload).expect("serialize payload");
+        let content = &v["messages"][0]["content"];
+        assert!(content.is_array());
+        assert_eq!(content[0]["type"], json!("text"));
+        assert_eq!(content[1]["type"], json!("image_url"));
+    }
+
+    #[test]
+    fn serializes_plain_text_user_message_as_string_content() {
+        let config = super::OpenAiConfig {
+            base_url: "https://api.openai.com/v1".to_owned(),
+            api_key: "k".to_owned(),
+            model: "gpt-test".to_owned(),
+        };
+        let request = ChatRequest {
+            model: None,
+            system_prompt: None,
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: ChatContent::text("hello"),
+                tool_name: None,
+                tool_call_id: None,
+                metadata: BTreeMap::new(),
+            }],
+            available_tools: Vec::new(),
+            metadata: BTreeMap::new(),
+            temperature: None,
+            max_output_tokens: None,
+        };
+
+        let payload = OpenAiChatRequest::from_core_request(&config, request, false);
+        let v = serde_json::to_value(&payload).expect("serialize payload");
+        assert_eq!(v["messages"][0]["content"], json!("hello"));
+    }
+
+    #[test]
+    fn serializes_inline_audio_as_file_content_part() {
+        let config = super::OpenAiConfig {
+            base_url: "https://api.openai.com/v1".to_owned(),
+            api_key: "k".to_owned(),
+            model: "gpt-test".to_owned(),
+        };
+        let request = ChatRequest {
+            model: None,
+            system_prompt: None,
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: ChatContent::from_parts(vec![ContentPart::Audio {
+                    source: MediaSource::InlineData {
+                        mime_type: "audio/wav".to_owned(),
+                        data_base64: "UklGRg==".to_owned(),
+                    },
+                    mime_type: Some("audio/wav".to_owned()),
+                }]),
+                tool_name: None,
+                tool_call_id: None,
+                metadata: BTreeMap::new(),
+            }],
+            available_tools: Vec::new(),
+            metadata: BTreeMap::new(),
+            temperature: None,
+            max_output_tokens: None,
+        };
+
+        let payload = OpenAiChatRequest::from_core_request(&config, request, false);
+        let v = serde_json::to_value(&payload).expect("serialize payload");
+        assert_eq!(v["messages"][0]["content"][0]["type"], json!("file"));
     }
 }

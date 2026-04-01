@@ -263,12 +263,7 @@ Prioritize bugs, regressions, and missing tests.
                 ),
             ));
         }
-        if skills[0]
-            .metadata
-            .get("skill_dir")
-            .and_then(Value::as_str)
-            != Some("/skills/review")
-        {
+        if skills[0].metadata.get("skill_dir").and_then(Value::as_str) != Some("/skills/review") {
             return Err(XlaiError::new(
                 xlai_core::ErrorKind::Skill,
                 "expected resolved skill metadata to include the skill directory",
