@@ -6,10 +6,12 @@ if (app === null) {
   throw new Error('Expected #app to exist');
 }
 
+const appRoot = app;
+
 async function render(): Promise<void> {
   try {
     const version = await packageVersion();
-    app.innerHTML = `
+    appRoot.innerHTML = `
       <main>
         <h1>XLAI Wasm</h1>
         <p>Rust package version: <code>${version}</code></p>
@@ -17,7 +19,7 @@ async function render(): Promise<void> {
     `;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    app.innerHTML = `
+    appRoot.innerHTML = `
       <main>
         <h1>XLAI Wasm</h1>
         <p>Failed to initialize wasm: <code>${message}</code></p>

@@ -1,24 +1,14 @@
-import { fileURLToPath, URL } from 'node:url';
-
 import { defineConfig } from 'vite';
+import wasm from 'vite-plugin-wasm';
+import dts from 'vite-plugin-dts';
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
-  },
+  plugins: [wasm(), dts()],
   build: {
     lib: {
-      entry: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
-      fileName: 'index',
+      entry: 'src/index.ts',
       formats: ['es'],
-      name: 'XlaiWasm',
-    },
-    target: 'esnext',
-  },
-  test: {
-    environment: 'node',
-    include: ['src/**/*.test.ts'],
+      fileName: () => 'index.js',
+    }
   },
 });

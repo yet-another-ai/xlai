@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { initXlai, packageVersion } from './index';
+import { initXlai, packageVersion } from '../src/index';
 
 describe('xlai wasm package', () => {
   it('initializes the wasm module', async () => {

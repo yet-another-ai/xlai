@@ -86,11 +86,14 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check JavaScript formatting
+      - name: Format
         run: pnpm format:check
 
-      - name: Run JavaScript lint
+      - name: Lint
         run: pnpm lint
 
-      - name: Run tests
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
         run: pnpm test
