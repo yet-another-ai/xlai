@@ -7,6 +7,7 @@ Vite-based TypeScript package for the `xlai-wasm` Rust crate inside the `pnpm` w
 - `pnpm --filter @xlai/xlai dev` builds the Rust wasm package and starts the Vite dev server.
 - `pnpm --filter @xlai/xlai build` rebuilds the Rust wasm package and emits the Vite bundle.
 - `pnpm --filter @xlai/xlai test` rebuilds the Rust wasm package and runs Vitest.
+- `pnpm --filter @xlai/xlai test:e2e` runs the Playwright browser smoke test against the demo page.
 
 ## Requirements
 

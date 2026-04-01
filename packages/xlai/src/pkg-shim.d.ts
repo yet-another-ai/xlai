@@ -1,5 +1,6 @@
 declare module '../pkg/xlai_wasm.js' {
-  const init: (moduleOrPath?: string | URL | Request | Response | BufferSource | WebAssembly.Module) => Promise<unknown>;
+  type WasmModuleInput = string | URL | Request | Response | BufferSource | WebAssembly.Module;
+  const init: (options?: { module_or_path?: WasmModuleInput }) => Promise<unknown>;
 
   export default init;
   export function package_version(): string;

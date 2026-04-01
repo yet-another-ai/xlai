@@ -9,6 +9,7 @@
     "build": "pnpm run build:wasm && vite build",
     "preview": "vite preview",
     "test": "pnpm run build:wasm && vitest run",
-    "test:watch": "pnpm run build:wasm && vitest"
+    "test:watch": "pnpm run build:wasm && vitest",
+    "test:e2e": "playwright test"
   }
 }

@@ -14,7 +14,7 @@ async function loadWasmSource(): Promise<URL | Uint8Array> {
 
 export async function initXlai(): Promise<void> {
   initPromise ??= loadWasmSource()
-    .then((wasmSource) => initWasm(wasmSource))
+    .then((wasmSource) => initWasm({ module_or_path: wasmSource }))
     .then(() => undefined);
   return initPromise;
 }

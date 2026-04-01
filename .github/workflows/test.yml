@@ -1,4 +1,4 @@
-name: Test
+name: Unit Test
 
 on:
   push:
@@ -15,8 +15,8 @@ env:
   CARGO_INCREMENTAL: "0"
 
 jobs:
-  unit:
-    name: Unit Tests - ${{ matrix.name }}
+  unit-rust:
+    name: Rust - ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -52,7 +52,7 @@ jobs:
         run: cargo test --workspace
 
   javascript:
-    name: javascript
+    name: JavaScript
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -2,4 +2,6 @@ node_modules/
 dist/
 coverage/
 pkg/
+playwright-report/
+test-results/
 *.tsbuildinfo
