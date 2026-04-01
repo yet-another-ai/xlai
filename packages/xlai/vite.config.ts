@@ -9,6 +9,6 @@ export default defineConfig({
       entry: 'src/index.ts',
       formats: ['es'],
       fileName: () => 'index.js',
-    }
+    },
   },
 });
