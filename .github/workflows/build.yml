@@ -5,15 +5,15 @@ permissions:
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 env:
-  SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_GHA_ENABLED: 'true'
   RUSTC_WRAPPER: sccache
-  CARGO_INCREMENTAL: "0"
+  CARGO_INCREMENTAL: '0'
 
 jobs:
   native:
@@ -41,13 +41,10 @@ jobs:
             runner: macos-latest
             target: aarch64-apple-darwin
             artifact_path: target/aarch64-apple-darwin/release/libxlai_ffi.dylib
-          - name: wasm32
-            runner: ubuntu-latest
-            target: wasm32-unknown-unknown
-            artifact_path: target/wasm32-unknown-unknown/release/xlai_wasm.wasm
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -61,16 +58,60 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build native workspace
-        if: matrix.target != 'wasm32-unknown-unknown'
         run: cargo build --locked --release --workspace --exclude xlai-wasm --target ${{ matrix.target }}
-      
-      - name: Build wasm crate
-        if: matrix.target == 'wasm32-unknown-unknown'
-        run: cargo build --locked --release -p xlai-wasm --target wasm32-unknown-unknown
 
       - name: Upload xlai-ffi artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xlai-ffi-${{ matrix.target }}
           path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
+
+  javascript:
+    name: javascript
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Run sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - uses: pnpm/action-setup@v5
+        name: Install pnpm
+        with:
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build @yai-xlai/xlai package
+        run: pnpm --filter @yai-xlai/xlai build
+
+      - name: Upload @yai-xlai/xlai artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: xlai-js-package
+          path: |
+            packages/xlai/dist
+            packages/xlai/pkg
+            packages/xlai/package.json
+            packages/xlai/README.md
           if-no-files-found: error

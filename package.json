@@ -1,0 +1,33 @@
+{
+  "name": "xlai",
+  "packageManager": "pnpm@10.32.1",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.59.0",
+    "@types/node": "22.18.0",
+    "@vitest/coverage-v8": "^4.1.2",
+    "eslint": "^10.1.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.4.0",
+    "prettier": "^3.8.1",
+    "typescript": "6.0.2",
+    "typescript-eslint": "^8.58.0",
+    "vite": "8.0.3",
+    "vite-plugin-dts": "^4.5.4",
+    "vite-plugin-wasm": "^3.6.0",
+    "vitest": "4.1.2"
+  },
+  "scripts": {
+    "build": "pnpm --filter @yai-xlai/xlai build",
+    "build:wasm": "pnpm --filter @yai-xlai/xlai build:wasm",
+    "dev": "pnpm --filter @yai-xlai/xlai dev",
+    "format": "prettier --write .github package.json README.md .prettierrc.json eslint.config.mjs packages/xlai",
+    "format:check": "prettier --check .github package.json README.md .prettierrc.json eslint.config.mjs packages/xlai",
+    "lint": "eslint packages/xlai --max-warnings=0",
+    "typecheck": "pnpm --filter @yai-xlai/xlai typecheck",
+    "test": "pnpm --filter @yai-xlai/xlai test",
+    "test:watch": "pnpm --filter @yai-xlai/xlai test:watch",
+    "test:e2e": "pnpm --filter @yai-xlai/xlai test:e2e"
+  }
+}
