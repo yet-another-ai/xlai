@@ -8,6 +8,9 @@
 *.profdata
 coverage/
 lcov.info
+node_modules/
+.pnpm-store/
+pnpm-debug.log*
 
 # wasm-pack (browser builds)
 /pkg/

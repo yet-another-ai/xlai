@@ -1,0 +1,17 @@
+{
+  "name": "xlai",
+  "packageManager": "pnpm@10.32.1",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "typescript": "6.0.2",
+    "vite": "8.0.3",
+    "vitest": "4.1.2"
+  },
+  "scripts": {
+    "build": "pnpm --filter @xlai/xlai build",
+    "build:wasm": "pnpm --filter @xlai/xlai build:wasm",
+    "dev": "pnpm --filter @xlai/xlai dev",
+    "test": "pnpm --filter @xlai/xlai test",
+    "test:watch": "pnpm --filter @xlai/xlai test:watch"
+  }
+}

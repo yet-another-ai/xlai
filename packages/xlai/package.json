@@ -1,0 +1,14 @@
+{
+  "name": "@xlai/xlai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:wasm": "wasm-pack build ../../crates/xlai-wasm --target web --out-dir ../../packages/xlai/pkg --out-name xlai_wasm",
+    "dev": "pnpm run build:wasm && vite",
+    "build": "pnpm run build:wasm && vite build",
+    "preview": "vite preview",
+    "test": "pnpm run build:wasm && vitest run",
+    "test:watch": "pnpm run build:wasm && vitest"
+  }
+}

@@ -32,10 +32,12 @@ xlai/
 │   ├── xlai-native/
 │   ├── xlai-runtime/
 │   └── xlai-wasm/
+├── packages/
+│   └── xlai/
 └── .github/workflows/
 ```
 
-### Crates
+### Crates And Packages
 
 - `crates/xlai-core`
   Shared domain types and traits for chat, tools, embeddings, knowledge, and vector search.
@@ -47,6 +49,8 @@ xlai/
   Native Rust-facing facade crate that re-exports the runtime API.
 - `crates/xlai-wasm`
   Browser-facing `wasm-bindgen` facade crate for web integration.
+- `packages/xlai`
+  Vite-based TypeScript package published as `@xlai/xlai`, built on top of `xlai-wasm`, with Vitest coverage.
 - `crates/xlai-backend-openai`
   OpenAI-compatible backend implementation using `reqwest`.
 
@@ -79,6 +83,24 @@ cargo test --workspace
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo check -p xlai-wasm --target wasm32-unknown-unknown
+```
+
+### Install JavaScript dependencies
+
+```bash
+pnpm install
+```
+
+### Build `@xlai/xlai`
+
+```bash
+pnpm --filter @xlai/xlai build
+```
+
+### Test `@xlai/xlai`
+
+```bash
+pnpm --filter @xlai/xlai test
 ```
 
 ### Run clippy
@@ -223,6 +245,7 @@ The current OpenAI smoke test will also load `.env` automatically for local runs
 - macOS arm64
 - macOS x86_64 via cross-target build
 - `wasm32-unknown-unknown`
+- the `@xlai/xlai` package bundle through the `pnpm` workspace
 
 ### Test workflow
 
@@ -231,6 +254,7 @@ The current OpenAI smoke test will also load `.env` automatically for local runs
 - `cargo fmt --all -- --check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace`
+- `pnpm --filter @xlai/xlai test`
 
 ### E2E workflow
 
