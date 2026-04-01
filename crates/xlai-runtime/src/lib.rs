@@ -70,11 +70,6 @@ impl RuntimeBuilder {
 
     #[must_use]
     pub fn with_skill_store(mut self, skill_store: Arc<dyn SkillStore>) -> Self {
-        if self.file_system.is_none() {
-            let file_system: Arc<dyn FileSystem> = skill_store.clone();
-            self.file_system = Some(file_system);
-            self.capabilities.push(RuntimeCapability::FileSystem);
-        }
         self.skill_store = Some(skill_store);
         self.capabilities.push(RuntimeCapability::SkillResolution);
         self
@@ -1118,36 +1113,6 @@ mod tests {
         Ok(())
     }
 
-    #[allow(clippy::panic_in_result_fn)]
-    #[tokio::test]
-    async fn runtime_uses_skill_store_as_file_system_when_no_backend_is_configured()
-    -> Result<(), XlaiError> {
-        let runtime = RuntimeBuilder::new()
-            .with_chat_model(Arc::new(RecordingChatModel::new(
-                Arc::new(Mutex::new(Vec::new())),
-                vec![ChatResponse {
-                    message: assistant_message("unused"),
-                    tool_calls: Vec::new(),
-                    usage: None,
-                    finish_reason: FinishReason::Completed,
-                    metadata: empty_metadata(),
-                }],
-            )))
-            .with_skill_store(seed_markdown_skill_store().await?)
-            .build()?;
-
-        assert!(runtime.has_capability(RuntimeCapability::FileSystem));
-        let readme = runtime
-            .read_file(&FsPath::from("/skills/review/README.md"))
-            .await?;
-        assert_eq!(
-            String::from_utf8(readme).unwrap_or_default(),
-            "Extra skill file"
-        );
-
-        Ok(())
-    }
-
     fn weather_tool_definition() -> ToolDefinition {
         ToolDefinition {
             name: "lookup_weather".to_owned(),
@@ -1206,19 +1171,19 @@ mod tests {
 
     async fn seed_markdown_skill_store() -> Result<Arc<dyn SkillStore>, XlaiError> {
         let file_system = Arc::new(MemoryFileSystem::new());
-        let file_system_trait: Arc<dyn xlai_core::FileSystem> = file_system.clone();
+        let file_system_trait: Arc<dyn xlai_core::SkillFileSystem> = file_system.clone();
         let skill_store = Arc::new(MarkdownSkillStore::new(file_system_trait));
 
-        skill_store
+        file_system
             .create_dir_all(&FsPath::from("/skills/review"))
             .await?;
-        skill_store
+        file_system
             .write(
                 &FsPath::from("/skills/review/SKILL.md"),
                 sample_skill_markdown().into_bytes(),
             )
             .await?;
-        skill_store
+        file_system
             .write(
                 &FsPath::from("/skills/review/README.md"),
                 b"Extra skill file".to_vec(),

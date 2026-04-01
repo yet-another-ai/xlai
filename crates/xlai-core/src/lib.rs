@@ -353,7 +353,7 @@ pub trait ToolExecutor: RuntimeBound {
     fn call_tool(&self, call: ToolCall) -> BoxFuture<'_, Result<ToolResult, XlaiError>>;
 }
 
-pub trait SkillStore: FileSystem {
+pub trait SkillStore: SkillFileSystem {
     fn resolve_skills<'a>(
         &'a self,
         ids: &'a [SkillId],
@@ -400,6 +400,10 @@ pub trait WritableFileSystem: RuntimeBound {
 pub trait DirectoryFileSystem: RuntimeBound {
     fn list<'a>(&'a self, path: &'a FsPath) -> BoxFuture<'a, Result<Vec<FsEntry>, XlaiError>>;
 }
+
+pub trait SkillFileSystem: ReadableFileSystem + DirectoryFileSystem {}
+
+impl<T> SkillFileSystem for T where T: ReadableFileSystem + DirectoryFileSystem + ?Sized {}
 
 pub trait FileSystem: ReadableFileSystem + WritableFileSystem + DirectoryFileSystem {}
 

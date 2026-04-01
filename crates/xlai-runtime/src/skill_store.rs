@@ -5,26 +5,26 @@ use gray_matter::Matter;
 use gray_matter::engine::YAML;
 use serde::Deserialize;
 use xlai_core::{
-    BoxFuture, DirectoryFileSystem, ErrorKind, FileSystem, FsEntryKind, FsPath, ReadableFileSystem,
-    Skill, SkillStore, WritableFileSystem, XlaiError,
+    BoxFuture, DirectoryFileSystem, ErrorKind, FsEntryKind, FsPath, ReadableFileSystem, Skill,
+    SkillFileSystem, SkillStore, XlaiError,
 };
 
 const SKILL_FILE_NAME: &str = "SKILL.md";
 
 #[derive(Clone)]
 pub struct MarkdownSkillStore {
-    file_system: Arc<dyn FileSystem>,
+    file_system: Arc<dyn SkillFileSystem>,
     roots: Vec<FsPath>,
 }
 
 impl MarkdownSkillStore {
     #[must_use]
-    pub fn new(file_system: Arc<dyn FileSystem>) -> Self {
+    pub fn new(file_system: Arc<dyn SkillFileSystem>) -> Self {
         Self::with_roots(file_system, vec![FsPath::from("/")])
     }
 
     #[must_use]
-    pub fn with_roots(file_system: Arc<dyn FileSystem>, roots: Vec<FsPath>) -> Self {
+    pub fn with_roots(file_system: Arc<dyn SkillFileSystem>, roots: Vec<FsPath>) -> Self {
         Self { file_system, roots }
     }
 }
@@ -52,24 +52,6 @@ impl ReadableFileSystem for MarkdownSkillStore {
     }
 }
 
-impl WritableFileSystem for MarkdownSkillStore {
-    fn write<'a>(
-        &'a self,
-        path: &'a FsPath,
-        data: Vec<u8>,
-    ) -> BoxFuture<'a, Result<(), XlaiError>> {
-        self.file_system.write(path, data)
-    }
-
-    fn delete<'a>(&'a self, path: &'a FsPath) -> BoxFuture<'a, Result<(), XlaiError>> {
-        self.file_system.delete(path)
-    }
-
-    fn create_dir_all<'a>(&'a self, path: &'a FsPath) -> BoxFuture<'a, Result<(), XlaiError>> {
-        self.file_system.create_dir_all(path)
-    }
-}
-
 impl DirectoryFileSystem for MarkdownSkillStore {
     fn list<'a>(
         &'a self,
@@ -80,7 +62,7 @@ impl DirectoryFileSystem for MarkdownSkillStore {
 }
 
 async fn discover_skills(
-    file_system: &dyn FileSystem,
+    file_system: &dyn SkillFileSystem,
     roots: &[FsPath],
 ) -> Result<Vec<Skill>, XlaiError> {
     let mut skill_files = BTreeSet::new();
@@ -110,7 +92,7 @@ async fn discover_skills(
 }
 
 fn collect_skill_files<'a>(
-    file_system: &'a dyn FileSystem,
+    file_system: &'a dyn SkillFileSystem,
     path: &'a FsPath,
     skill_files: &'a mut BTreeSet<FsPath>,
 ) -> BoxFuture<'a, Result<(), XlaiError>> {
@@ -131,7 +113,7 @@ fn collect_skill_files<'a>(
     })
 }
 
-async fn load_skill(file_system: &dyn FileSystem, path: &FsPath) -> Result<Skill, XlaiError> {
+async fn load_skill(file_system: &dyn SkillFileSystem, path: &FsPath) -> Result<Skill, XlaiError> {
     let bytes = file_system.read(path).await?;
     let markdown = String::from_utf8(bytes).map_err(|error| {
         XlaiError::new(
@@ -198,7 +180,9 @@ struct SkillFrontMatter {
 mod tests {
     use std::sync::Arc;
 
-    use xlai_core::{FsPath, ReadableFileSystem, SkillStore, WritableFileSystem, XlaiError};
+    use xlai_core::{
+        FsPath, ReadableFileSystem, SkillFileSystem, SkillStore, WritableFileSystem, XlaiError,
+    };
 
     use super::MarkdownSkillStore;
     use crate::MemoryFileSystem;
@@ -232,7 +216,7 @@ Prioritize bugs, regressions, and missing tests.
             )
             .await?;
 
-        let file_system_trait: Arc<dyn xlai_core::FileSystem> = file_system;
+        let file_system_trait: Arc<dyn SkillFileSystem> = file_system;
         let skill_store = MarkdownSkillStore::new(file_system_trait);
         let skills = skill_store
             .resolve_skills(&["review.code".to_owned()])
