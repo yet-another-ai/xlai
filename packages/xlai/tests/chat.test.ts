@@ -141,9 +141,9 @@ describe('xlai chat api', () => {
       (argumentsValue: unknown) => Promise<unknown>,
     ];
     expect(definition.parameters[0]?.kind).toBe('String');
-    expect(
-      (definition as { execution_mode?: string }).execution_mode,
-    ).toBe('Concurrent');
+    expect((definition as { execution_mode?: string }).execution_mode).toBe(
+      'Concurrent',
+    );
     await expect(callback({ city: 'Paris' })).resolves.toEqual({
       tool_name: 'lookup_weather',
       content: 'weather for Paris: sunny',
