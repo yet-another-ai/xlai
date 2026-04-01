@@ -1179,12 +1179,10 @@ mod openai_multimodal_tests {
             metadata: BTreeMap::new(),
         };
 
-        let error = match OpenAiTranscriptionRequest::from_core_request(&config, request) {
-            Ok(_) => {
-                assert!(false, "url-based audio should be rejected");
-                return;
-            }
-            Err(error) => error,
+        let result = OpenAiTranscriptionRequest::from_core_request(&config, request);
+        assert!(result.is_err(), "url-based audio should be rejected");
+        let Err(error) = result else {
+            return;
         };
         assert_eq!(error.kind, xlai_core::ErrorKind::Unsupported);
         assert!(error.message.contains("inline audio"));
