@@ -68,7 +68,7 @@ jobs:
           if-no-files-found: error
 
   javascript:
-    name: javaScript
+    name: javascript
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -78,6 +78,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+
+      - name: Run sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
 
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
