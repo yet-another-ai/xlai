@@ -11,9 +11,9 @@ use std::sync::Arc;
 #[cfg(target_arch = "wasm32")]
 use js_sys::{Function, Promise, Reflect, Uint8Array};
 use serde::{Deserialize, Serialize};
-use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::JsFuture;
 use xlai_core::{ChatResponse, FinishReason, MessageRole, TokenUsage};
@@ -158,7 +158,10 @@ impl WasmMemoryFileSystem {
     }
 
     pub async fn exists(&self, path: String) -> Result<bool, JsValue> {
-        self.inner.exists(&FsPath::from(path)).await.map_err(js_error)
+        self.inner
+            .exists(&FsPath::from(path))
+            .await
+            .map_err(js_error)
     }
 
     pub async fn write(&self, path: String, data: Vec<u8>) -> Result<(), JsValue> {
@@ -237,7 +240,10 @@ impl JsFileSystem {
 
 #[cfg(target_arch = "wasm32")]
 impl ReadableFileSystem for JsFileSystem {
-    fn read<'a>(&'a self, path: &'a FsPath) -> xlai_core::BoxFuture<'a, Result<Vec<u8>, XlaiError>> {
+    fn read<'a>(
+        &'a self,
+        path: &'a FsPath,
+    ) -> xlai_core::BoxFuture<'a, Result<Vec<u8>, XlaiError>> {
         Box::pin(async move {
             let value = self.call0("read", path).await?;
             Ok(Uint8Array::new(&value).to_vec())
@@ -291,7 +297,10 @@ impl WritableFileSystem for JsFileSystem {
 
 #[cfg(target_arch = "wasm32")]
 impl DirectoryFileSystem for JsFileSystem {
-    fn list<'a>(&'a self, path: &'a FsPath) -> xlai_core::BoxFuture<'a, Result<Vec<FsEntry>, XlaiError>> {
+    fn list<'a>(
+        &'a self,
+        path: &'a FsPath,
+    ) -> xlai_core::BoxFuture<'a, Result<Vec<FsEntry>, XlaiError>> {
         Box::pin(async move {
             let value = self.call0("list", path).await?;
             let entries: Vec<WasmFsEntryInput> =
@@ -329,7 +338,11 @@ pub struct WasmChatSession {
 impl WasmChatSession {
     #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen(js_name = registerTool)]
-    pub fn register_tool(&mut self, definition: JsValue, callback: Function) -> Result<(), JsValue> {
+    pub fn register_tool(
+        &mut self,
+        definition: JsValue,
+        callback: Function,
+    ) -> Result<(), JsValue> {
         let definition: ToolDefinition =
             serde_wasm_bindgen::from_value(definition).map_err(js_error)?;
 
@@ -429,9 +442,7 @@ fn create_chat_session_with_dyn_file_system(
         runtime_builder = runtime_builder.with_file_system(file_system);
     }
 
-    let runtime = runtime_builder
-        .build()
-        .map_err(js_error)?;
+    let runtime = runtime_builder.build().map_err(js_error)?;
 
     let mut chat = runtime.chat_session();
 
@@ -490,7 +501,8 @@ fn file_system_js_value_error(error: JsValue) -> XlaiError {
 
 #[cfg(target_arch = "wasm32")]
 fn js_callback(target: &JsValue, name: &str) -> Result<Function, XlaiError> {
-    let value = Reflect::get(target, &JsValue::from_str(name)).map_err(file_system_js_value_error)?;
+    let value =
+        Reflect::get(target, &JsValue::from_str(name)).map_err(file_system_js_value_error)?;
     value.dyn_into::<Function>().map_err(|_| {
         XlaiError::new(
             xlai_core::ErrorKind::FileSystem,
@@ -528,7 +540,9 @@ const fn fs_entry_kind_label(kind: FsEntryKind) -> &'static str {
 mod tests {
     use std::collections::BTreeMap;
 
-    use xlai_core::{ChatMessage, FinishReason, FsEntry, FsEntryKind, FsPath, MessageRole, TokenUsage};
+    use xlai_core::{
+        ChatMessage, FinishReason, FsEntry, FsEntryKind, FsPath, MessageRole, TokenUsage,
+    };
 
     use super::{WasmChatResponse, WasmFsEntry};
 
