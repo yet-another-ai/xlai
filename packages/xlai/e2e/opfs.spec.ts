@@ -4,11 +4,6 @@ test('supports the filesystem API through OPFS', async ({
   page,
   browserName,
 }) => {
-  test.skip(
-    browserName !== 'chromium',
-    'run OPFS coverage where it is reliable',
-  );
-
   await page.goto('/');
 
   const packageModulePath = '/src/index.ts';

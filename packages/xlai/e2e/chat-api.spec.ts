@@ -6,10 +6,6 @@ test('calls the chat API with env-backed credentials', async ({
   browserName,
 }) => {
   test.skip(
-    browserName !== 'chromium',
-    'run the provider-backed smoke test once to avoid duplicate API calls',
-  );
-  test.skip(
     process.env.OPENAI_API_KEY === undefined ||
       process.env.OPENAI_API_KEY.trim() === '',
     'requires OPENAI_API_KEY from the environment or local .env file',
