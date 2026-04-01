@@ -20,6 +20,7 @@ futures-core = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 getrandom = "0.2"
 gray_matter = "0.3.2"
+js-sys = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["json", "stream"] }
 rust-embed = "8.11.0"
 serde = { version = "1", features = ["derive"] }

@@ -16,7 +16,7 @@
     "pkg"
   ],
   "scripts": {
-    "build:wasm": "wasm-pack build ../../crates/xlai-wasm --target web --out-dir ../../packages/xlai/pkg --out-name xlai_wasm",
+    "build:wasm": "node ./scripts/build-wasm.mjs",
     "dev": "pnpm run build:wasm && vite",
     "build": "pnpm run build:wasm && vite build",
     "lint": "eslint . --max-warnings=0",
