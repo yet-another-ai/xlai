@@ -97,7 +97,9 @@ pub async fn chat(options: JsValue) -> Result<JsValue, JsValue> {
                 .base_url
                 .unwrap_or_else(|| DEFAULT_OPENAI_BASE_URL.to_owned()),
             options.api_key,
-            options.model.unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_owned()),
+            options
+                .model
+                .unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_owned()),
         ))
         .build()
         .map_err(js_error)?;
