@@ -16,7 +16,7 @@ use xlai_core::{
 };
 
 pub use agent::{Agent, McpRegistry};
-pub use chat::{Chat, ChatExecutionEvent, ToolCallExecutionMode};
+pub use chat::{Chat, ChatExecutionEvent};
 #[cfg(not(target_arch = "wasm32"))]
 pub use fs::LocalFileSystem;
 pub use fs::{MemoryFileSystem, boxed_file_system};
@@ -25,7 +25,7 @@ pub use skill_store::MarkdownSkillStore;
 pub use tera::Context as PromptContext;
 pub use xlai_core::{
     ChatBackend, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath, ReadableFileSystem,
-    WritableFileSystem,
+    ToolCallExecutionMode, WritableFileSystem,
 };
 
 #[derive(Clone, Default)]
@@ -409,12 +409,13 @@ mod tests {
     use xlai_core::{
         BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatModel, ChatRequest, ChatResponse,
         FinishReason, FsEntryKind, FsPath, MessageRole, RuntimeCapability, Skill, SkillStore,
-        ToolCall, ToolDefinition, ToolParameter, ToolParameterType, WritableFileSystem, XlaiError,
+        ToolCall, ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType,
+        WritableFileSystem, XlaiError,
     };
 
     use super::{
         ChatExecutionEvent, EmbeddedPromptStore, MarkdownSkillStore, MemoryFileSystem,
-        PromptContext, RuntimeBuilder, ToolCallExecutionMode,
+        PromptContext, RuntimeBuilder,
     };
 
     fn empty_metadata() -> std::collections::BTreeMap<String, String> {
@@ -1084,9 +1085,7 @@ mod tests {
 
         let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
-        let mut chat = runtime
-            .chat_session()
-            .with_tool_call_execution_mode(ToolCallExecutionMode::Concurrent);
+        let mut chat = runtime.chat_session();
 
         {
             let active_calls = active_calls.clone();
@@ -1141,8 +1140,8 @@ mod tests {
 
     #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
-    async fn chat_can_execute_multiple_tool_calls_sequentially_when_requested()
-    -> Result<(), XlaiError> {
+    async fn chat_runs_tool_batch_sequentially_when_any_tool_is_sequential() -> Result<(), XlaiError>
+    {
         let execution_order = Arc::new(Mutex::new(Vec::new()));
         let model = Arc::new(RecordingChatModel::new(
             Arc::new(Mutex::new(Vec::new())),
@@ -1177,12 +1176,10 @@ mod tests {
 
         let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
-        let mut chat = runtime
-            .chat_session()
-            .with_tool_call_execution_mode(ToolCallExecutionMode::Sequential);
+        let mut chat = runtime.chat_session();
         {
             let execution_order = execution_order.clone();
-            chat.register_tool(weather_tool_definition(), move |arguments| {
+            chat.register_tool(weather_tool_definition_sequential(), move |arguments| {
                 let execution_order = execution_order.clone();
                 async move {
                     lock_unpoisoned(&execution_order).push(format!(
@@ -1311,6 +1308,14 @@ mod tests {
                 kind: ToolParameterType::String,
                 required: true,
             }],
+            execution_mode: ToolCallExecutionMode::Concurrent,
+        }
+    }
+
+    fn weather_tool_definition_sequential() -> ToolDefinition {
+        ToolDefinition {
+            execution_mode: ToolCallExecutionMode::Sequential,
+            ..weather_tool_definition()
         }
     }
 
@@ -1324,6 +1329,7 @@ mod tests {
                 kind: ToolParameterType::String,
                 required: true,
             }],
+            execution_mode: ToolCallExecutionMode::Concurrent,
         }
     }
 

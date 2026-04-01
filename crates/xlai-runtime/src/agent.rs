@@ -7,7 +7,7 @@ use serde_json::Value;
 use tera::Context;
 use xlai_core::{BoxStream, ChatMessage, ChatResponse, ToolDefinition, ToolResult, XlaiError};
 
-use crate::{Chat, ChatExecutionEvent, ToolCallExecutionMode, XlaiRuntime};
+use crate::{Chat, ChatExecutionEvent, XlaiRuntime};
 
 pub use mcp::McpRegistry;
 
@@ -87,17 +87,6 @@ impl Agent {
     #[must_use]
     pub fn with_max_tool_round_trips(mut self, max_tool_round_trips: usize) -> Self {
         self.chat = self.chat.with_max_tool_round_trips(max_tool_round_trips);
-        self
-    }
-
-    #[must_use]
-    pub fn with_tool_call_execution_mode(
-        mut self,
-        tool_call_execution_mode: ToolCallExecutionMode,
-    ) -> Self {
-        self.chat = self
-            .chat
-            .with_tool_call_execution_mode(tool_call_execution_mode);
         self
     }
 

@@ -29,6 +29,7 @@ fn definition() -> Result<ToolDefinition, XlaiError> {
     Ok(ToolDefinition {
         name: TOOL_NAME.to_owned(),
         description: EmbeddedPromptStore::render(TOOL_DESCRIPTION_TEMPLATE, &context)?,
+        execution_mode: Default::default(),
         parameters: vec![
             ToolParameter {
                 name: "skill".to_owned(),

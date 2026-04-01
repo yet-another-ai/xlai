@@ -20,6 +20,7 @@ export type {
   ChatResponse,
   ChatSessionOptions,
   ChatUsage,
+  ToolCallExecutionMode,
   ToolDefinition,
   ToolParameter,
   ToolParameterType,

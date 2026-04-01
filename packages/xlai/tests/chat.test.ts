@@ -141,6 +141,9 @@ describe('xlai chat api', () => {
       (argumentsValue: unknown) => Promise<unknown>,
     ];
     expect(definition.parameters[0]?.kind).toBe('String');
+    expect(
+      (definition as { execution_mode?: string }).execution_mode,
+    ).toBe('Concurrent');
     await expect(callback({ city: 'Paris' })).resolves.toEqual({
       tool_name: 'lookup_weather',
       content: 'weather for Paris: sunny',
@@ -160,5 +163,42 @@ describe('xlai chat api', () => {
       finishReason: 'completed',
     });
     expect(prompt).toHaveBeenCalledWith('What is the weather in Paris?');
+  });
+
+  it('passes sequential execution_mode to wasm tool definitions', async () => {
+    const registerTool = vi.fn();
+    const prompt = vi.fn().mockResolvedValue({
+      message: { role: 'assistant', content: 'ok' },
+      finishReason: 'completed',
+    });
+
+    vi.spyOn(
+      wasmModule as typeof wasmModule & {
+        createChatSession: (options: unknown) => {
+          registerTool: typeof registerTool;
+          prompt: typeof prompt;
+        };
+      },
+      'createChatSession',
+    ).mockReturnValue({ registerTool, prompt });
+
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+
+    const session = await createChatSession({});
+    session.registerTool(
+      {
+        name: 'slow_tool',
+        description: 'Must not overlap.',
+        parameters: [],
+        executionMode: 'sequential',
+      },
+      async () => ({ content: 'done' }),
+    );
+
+    const [definition] = registerTool.mock.calls[0] as [
+      { execution_mode?: string },
+      unknown,
+    ];
+    expect(definition.execution_mode).toBe('Sequential');
   });
 });

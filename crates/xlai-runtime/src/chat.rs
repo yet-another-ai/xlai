@@ -9,7 +9,8 @@ use serde_json::Value;
 use tera::Context;
 use xlai_core::{
     BoxFuture, BoxStream, ChatChunk, ChatMessage, ChatRequest, ChatResponse, ErrorKind, MaybeSend,
-    MessageRole, RuntimeBound, ToolCall, ToolDefinition, ToolResult, XlaiError,
+    MessageRole, RuntimeBound, ToolCall, ToolCallExecutionMode, ToolDefinition, ToolResult,
+    XlaiError,
 };
 
 use crate::{EmbeddedPromptStore, XlaiRuntime};
@@ -41,13 +42,6 @@ pub enum ChatExecutionEvent {
     ToolResult(ToolResult),
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum ToolCallExecutionMode {
-    #[default]
-    Concurrent,
-    Sequential,
-}
-
 #[derive(Clone)]
 struct ToolExecutionOutcome {
     call: ToolCall,
@@ -62,7 +56,6 @@ pub struct Chat {
     temperature: Option<f32>,
     max_output_tokens: Option<u32>,
     max_tool_round_trips: usize,
-    tool_call_execution_mode: ToolCallExecutionMode,
     tools: BTreeMap<String, RegisteredTool>,
 }
 
@@ -76,7 +69,6 @@ impl Chat {
             temperature: None,
             max_output_tokens: None,
             max_tool_round_trips: 8,
-            tool_call_execution_mode: ToolCallExecutionMode::Concurrent,
             tools: BTreeMap::new(),
         }
     }
@@ -137,15 +129,6 @@ impl Chat {
     #[must_use]
     pub fn with_max_tool_round_trips(mut self, max_tool_round_trips: usize) -> Self {
         self.max_tool_round_trips = max_tool_round_trips;
-        self
-    }
-
-    #[must_use]
-    pub fn with_tool_call_execution_mode(
-        mut self,
-        tool_call_execution_mode: ToolCallExecutionMode,
-    ) -> Self {
-        self.tool_call_execution_mode = tool_call_execution_mode;
         self
     }
 
@@ -274,7 +257,6 @@ impl Chat {
         let temperature = self.temperature;
         let max_output_tokens = self.max_output_tokens;
         let max_tool_round_trips = self.max_tool_round_trips;
-        let tool_call_execution_mode = self.tool_call_execution_mode;
         let tools = self.tools.clone();
 
         Box::pin(try_stream! {
@@ -324,7 +306,6 @@ impl Chat {
                     runtime.as_ref(),
                     &tools,
                     response.tool_calls,
-                    tool_call_execution_mode,
                 )
                 .await?;
 
@@ -358,13 +339,7 @@ impl Chat {
         &self,
         calls: Vec<ToolCall>,
     ) -> Result<Vec<ToolExecutionOutcome>, XlaiError> {
-        execute_tool_calls_from(
-            self.runtime.as_ref(),
-            &self.tools,
-            calls,
-            self.tool_call_execution_mode,
-        )
-        .await
+        execute_tool_calls_from(self.runtime.as_ref(), &self.tools, calls).await
     }
 }
 
@@ -396,12 +371,26 @@ async fn execute_tool_call_from(
     runtime.call_tool(call).await
 }
 
+fn resolve_tool_batch_execution_mode(
+    calls: &[ToolCall],
+    tools: &BTreeMap<String, RegisteredTool>,
+) -> ToolCallExecutionMode {
+    for call in calls {
+        if let Some(tool) = tools.get(&call.tool_name)
+            && tool.definition.execution_mode == ToolCallExecutionMode::Sequential
+        {
+            return ToolCallExecutionMode::Sequential;
+        }
+    }
+    ToolCallExecutionMode::Concurrent
+}
+
 async fn execute_tool_calls_from(
     runtime: &XlaiRuntime,
     tools: &BTreeMap<String, RegisteredTool>,
     calls: Vec<ToolCall>,
-    mode: ToolCallExecutionMode,
 ) -> Result<Vec<ToolExecutionOutcome>, XlaiError> {
+    let mode = resolve_tool_batch_execution_mode(&calls, tools);
     match mode {
         ToolCallExecutionMode::Sequential => {
             let mut outcomes = Vec::with_capacity(calls.len());

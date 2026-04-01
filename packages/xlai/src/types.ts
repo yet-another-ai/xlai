@@ -48,10 +48,18 @@ export interface ToolParameter {
   required: boolean;
 }
 
+/** Matches `xlai_core::ToolCallExecutionMode` JSON (`Concurrent` | `Sequential`). */
+export type ToolCallExecutionMode = 'concurrent' | 'sequential';
+
 export interface ToolDefinition {
   name: string;
   description: string;
   parameters: ToolParameter[];
+  /**
+   * When any tool in a model turn is `sequential`, all tool calls in that turn
+   * run one after another in model order (no overlap).
+   */
+  executionMode?: ToolCallExecutionMode;
 }
 
 export interface ToolResult {

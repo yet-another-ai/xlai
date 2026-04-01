@@ -136,8 +136,10 @@ Local `.env` files are ignored by Git.
 This is the current native Rust usage style:
 
 ```rust
-use xlai_native::core::{ToolDefinition, ToolParameter, ToolParameterType, ToolResult};
-use xlai_native::{OpenAiConfig, RuntimeBuilder, ToolCallExecutionMode};
+use xlai_native::core::{
+    ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolResult,
+};
+use xlai_native::{OpenAiConfig, RuntimeBuilder};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -153,8 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut chat = runtime
         .chat_session()
-        .with_system_prompt("Be concise.")
-        .with_tool_call_execution_mode(ToolCallExecutionMode::Concurrent);
+        .with_system_prompt("Be concise.");
 
     chat.register_tool(
         ToolDefinition {
@@ -166,6 +167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 kind: ToolParameterType::String,
                 required: true,
             }],
+            execution_mode: ToolCallExecutionMode::Concurrent,
         },
         |arguments| async move {
             let city = arguments["city"].as_str().unwrap_or("unknown");
@@ -188,7 +190,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 Agent sessions are available through the same runtime:
 
 ```rust
-use xlai_native::core::{ToolDefinition, ToolParameter, ToolParameterType, ToolResult};
+use xlai_native::core::{
+    ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolResult,
+};
 use xlai_native::{OpenAiConfig, RuntimeBuilder};
 
 #[tokio::main]
@@ -215,6 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 kind: ToolParameterType::String,
                 required: true,
             }],
+            execution_mode: ToolCallExecutionMode::Concurrent,
         },
         |arguments| async move {
             let city = arguments["city"].as_str().unwrap_or("unknown");
@@ -248,8 +253,9 @@ Current behavior:
 - tools are registered per chat session
 - tool calls are exposed to the model through the runtime request
 - local chat-session tools are executed before falling back to a runtime-level tool executor
-- multiple tool calls from the same model turn run concurrently by default
-- sequential execution can be selected explicitly
+- each tool’s `ToolDefinition::execution_mode` controls how its calls interact with other calls in the same model turn
+- if any invoked tool in a turn is `Sequential`, all tool calls in that turn run sequentially in model order (no overlap)
+- otherwise, tool calls in a turn run concurrently
 
 ## Streaming
 

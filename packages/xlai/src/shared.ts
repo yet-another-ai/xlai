@@ -129,6 +129,7 @@ function toWasmToolDefinition(definition: ToolDefinition): {
     kind: WasmToolParameterKind;
     required: boolean;
   }>;
+  execution_mode: 'Concurrent' | 'Sequential';
 } {
   return {
     name: definition.name,
@@ -139,6 +140,8 @@ function toWasmToolDefinition(definition: ToolDefinition): {
       kind: toolParameterKindToWasm(parameter.kind),
       required: parameter.required,
     })),
+    execution_mode:
+      definition.executionMode === 'sequential' ? 'Sequential' : 'Concurrent',
   };
 }
 
