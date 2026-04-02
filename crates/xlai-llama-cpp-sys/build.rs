@@ -43,7 +43,6 @@ fn main() -> BuildResult<()> {
     let mut config = cmake::Config::new(&source_dir);
     config
         .profile("Release")
-        .very_verbose(target_os == "windows")
         .build_target("common")
         .define("BUILD_SHARED_LIBS", "OFF")
         .define("GGML_STATIC", "ON")
@@ -87,6 +86,11 @@ fn main() -> BuildResult<()> {
         // nested vulkan-shaders-gen ExternalProject in CI. Prefer Ninja unless
         // the caller explicitly overrides the generator.
         config.generator("Ninja");
+    }
+
+    if target_os == "windows" {
+        config.configure_arg("-Wno-dev");
+        config.build_arg("-v");
     }
 
     let dst = config.build();
