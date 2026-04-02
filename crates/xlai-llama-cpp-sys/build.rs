@@ -33,6 +33,7 @@ fn main() -> BuildResult<()> {
     println!("cargo:rerun-if-env-changed=CMAKE_GENERATOR");
     println!("cargo:rerun-if-env-changed=CMAKE_PREFIX_PATH");
     println!("cargo:rerun-if-env-changed=CMAKE_TOOLCHAIN_FILE");
+    println!("cargo:rerun-if-env-changed=CARGO_TARGET_DIR");
     println!("cargo:rerun-if-env-changed=OpenBLAS_ROOT");
     println!("cargo:rerun-if-env-changed=VULKAN_SDK");
     println!("cargo:rerun-if-env-changed=VCPKG_INSTALLATION_ROOT");
@@ -97,11 +98,7 @@ fn main() -> BuildResult<()> {
     generate_bindings(&include_dir, &ggml_include_dir)?;
 
     emit_llama_search_paths(&dst, feature_set, enable_openblas);
-    if let Ok(cargo_target_dir) = env::var("CARGO_TARGET_DIR") {
-        emit_search_path(Path::new(&cargo_target_dir).join("release").as_path());
-    } else {
-        emit_search_path_variants(&dst.join("build/llguidance/source/target/release"));
-    }
+    emit_search_path_variants(&llguidance_output_dir(&dst));
     emit_vulkan_search_paths(feature_set.vulkan, &target_os);
     emit_search_path_variants(&dst.join("build/bin"));
 
@@ -308,6 +305,20 @@ fn emit_openblas_search_paths() {
     emit_search_path_variants(&installed_dir.join("bin"));
 }
 
+fn llguidance_output_dir(dst: &Path) -> PathBuf {
+    let target_root = if let Ok(cargo_target_dir) = env::var("CARGO_TARGET_DIR") {
+        PathBuf::from(cargo_target_dir)
+    } else {
+        dst.join("build/llguidance/source/target")
+    };
+
+    if let Ok(target_triple) = env::var("TARGET") {
+        target_root.join(target_triple).join("release")
+    } else {
+        target_root.join("release")
+    }
+}
+
 fn prepare_llama_source(vendor_source_dir: &Path) -> BuildResult<PathBuf> {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap_or_default());
     let patched_source_dir = out_dir.join("llama.cpp-patched");
@@ -397,7 +408,7 @@ fn patch_llama_common_cmake(path: &Path) -> BuildResult<()> {
     contents = replace_once(
         &contents,
         "    set(LLGUIDANCE_PATH ${LLGUIDANCE_SRC}/target/release)\n    set(LLGUIDANCE_LIB_NAME \"${CMAKE_STATIC_LIBRARY_PREFIX}llguidance${CMAKE_STATIC_LIBRARY_SUFFIX}\")\n",
-        "    set(LLGUIDANCE_LIB_NAME \"${CMAKE_STATIC_LIBRARY_PREFIX}llguidance${CMAKE_STATIC_LIBRARY_SUFFIX}\")\n\n    if (DEFINED ENV{CARGO_TARGET_DIR})\n        set(LLGUIDANCE_PATH $ENV{CARGO_TARGET_DIR}/release)\n    else()\n        set(LLGUIDANCE_PATH ${LLGUIDANCE_SRC}/target/release)\n    endif()\n",
+        "    set(LLGUIDANCE_LIB_NAME \"${CMAKE_STATIC_LIBRARY_PREFIX}llguidance${CMAKE_STATIC_LIBRARY_SUFFIX}\")\n\n    if (DEFINED ENV{CARGO_TARGET_DIR} AND NOT \"$ENV{CARGO_TARGET_DIR}\" STREQUAL \"\")\n        set(LLGUIDANCE_TARGET_DIR $ENV{CARGO_TARGET_DIR})\n    else()\n        set(LLGUIDANCE_TARGET_DIR ${LLGUIDANCE_SRC}/target)\n    endif()\n\n    if (DEFINED ENV{TARGET} AND NOT \"$ENV{TARGET}\" STREQUAL \"\")\n        set(LLGUIDANCE_PATH ${LLGUIDANCE_TARGET_DIR}/$ENV{TARGET}/release)\n        set(LLGUIDANCE_CARGO_TARGET_ARGS --target $ENV{TARGET})\n    else()\n        set(LLGUIDANCE_PATH ${LLGUIDANCE_TARGET_DIR}/release)\n        set(LLGUIDANCE_CARGO_TARGET_ARGS)\n    endif()\n",
         path,
     )?;
 
@@ -411,7 +422,7 @@ fn patch_llama_common_cmake(path: &Path) -> BuildResult<()> {
     contents = replace_once(
         &contents,
         "        BUILD_COMMAND cargo build --release --package llguidance\n",
-        "        BUILD_COMMAND ${CMAKE_COMMAND} -E env --unset=RUSTC --unset=RUSTC_WRAPPER --unset=RUSTC_WORKSPACE_WRAPPER --unset=CLIPPY_ARGS --unset=RUSTFLAGS --unset=CARGO_ENCODED_RUSTFLAGS --unset=CARGO_BUILD_RUSTFLAGS cargo build --release --package llguidance\n",
+        "        BUILD_COMMAND ${CMAKE_COMMAND} -E env --unset=RUSTC --unset=RUSTC_WRAPPER --unset=RUSTC_WORKSPACE_WRAPPER --unset=CLIPPY_ARGS --unset=RUSTFLAGS --unset=CARGO_ENCODED_RUSTFLAGS --unset=CARGO_BUILD_RUSTFLAGS cargo build --release --package llguidance ${LLGUIDANCE_CARGO_TARGET_ARGS}\n",
         path,
     )?;
 
