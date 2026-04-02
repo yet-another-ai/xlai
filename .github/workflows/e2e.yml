@@ -69,6 +69,7 @@ jobs:
         run: |
           mkdir -p "$(dirname "$LLAMA_CPP_FIXTURE_PATH")"
           hf download "$LLAMA_CPP_FIXTURE_REPO" "$LLAMA_CPP_FIXTURE_FILE" --repo-type model --local-dir "$(dirname "$LLAMA_CPP_FIXTURE_PATH")"
+          test -f "$LLAMA_CPP_FIXTURE_PATH"
 
       - name: Run ignored e2e tests
         env:
@@ -76,7 +77,7 @@ jobs:
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           OPENAI_TRANSCRIPTION_MODEL: ${{ vars.OPENAI_TRANSCRIPTION_MODEL }}
-          LLAMA_CPP_MODEL: ${{ env.LLAMA_CPP_FIXTURE_PATH }}
+          LLAMA_CPP_MODEL: ${{ github.workspace }}/${{ env.LLAMA_CPP_FIXTURE_PATH }}
         run: cargo test --workspace -- --ignored
 
   e2e-javascript:
