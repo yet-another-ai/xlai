@@ -223,6 +223,7 @@ fn prepare_llama_source(vendor_source_dir: &Path) -> BuildResult<PathBuf> {
     })?;
 
     patch_llama_common_cmake(&patched_source_dir.join("common/CMakeLists.txt"))?;
+    patch_llama_ggml_vulkan_cmake(&patched_source_dir.join("ggml/src/ggml-vulkan/CMakeLists.txt"))?;
     Ok(patched_source_dir)
 }
 
@@ -310,6 +311,32 @@ fn patch_llama_common_cmake(path: &Path) -> BuildResult<()> {
     fs::write(path, contents).map_err(|error| {
         io::Error::other(format!(
             "failed to write patched llama.cpp CMake file `{}`: {error}",
+            path.display()
+        ))
+    })?;
+
+    Ok(())
+}
+
+fn patch_llama_ggml_vulkan_cmake(path: &Path) -> BuildResult<()> {
+    let mut contents = fs::read_to_string(path).map_err(|error| {
+        io::Error::other(format!(
+            "failed to read patched llama.cpp Vulkan CMake file `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    contents = normalize_newlines(&contents);
+
+    contents = replace_once(
+        &contents,
+        "    ExternalProject_Add(\n        vulkan-shaders-gen\n        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vulkan-shaders\n",
+        "    ExternalProject_Add(\n        vulkan-shaders-gen\n        PREFIX ${CMAKE_BINARY_DIR}/vkgen\n        TMP_DIR ${CMAKE_BINARY_DIR}/vkgen-tmp\n        STAMP_DIR ${CMAKE_BINARY_DIR}/vkgen-stamp\n        BINARY_DIR ${CMAKE_BINARY_DIR}/vkgen-build\n        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vulkan-shaders\n",
+        path,
+    )?;
+
+    fs::write(path, contents).map_err(|error| {
+        io::Error::other(format!(
+            "failed to write patched llama.cpp Vulkan CMake file `{}`: {error}",
             path.display()
         ))
     })?;
