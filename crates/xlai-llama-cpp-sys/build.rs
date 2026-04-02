@@ -14,6 +14,8 @@ fn main() -> BuildResult<()> {
     let vendor_dir = source_dir.join("vendor");
     let ggml_include_dir = source_dir.join("ggml/include");
     let wrapper_cpp = Path::new("src/wrapper.cpp");
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let enable_accelerate = target_os == "macos";
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed={}", vendor_source_dir.display());
@@ -36,7 +38,10 @@ fn main() -> BuildResult<()> {
         .define("LLAMA_LLGUIDANCE", "ON")
         .define("GGML_OPENMP", "OFF")
         .define("GGML_BLAS", "OFF")
-        .define("GGML_ACCELERATE", "OFF")
+        .define(
+            "GGML_ACCELERATE",
+            if enable_accelerate { "ON" } else { "OFF" },
+        )
         .define("GGML_METAL", "OFF")
         .define("GGML_RPC", "OFF")
         .define("GGML_VULKAN", "OFF")
@@ -90,7 +95,6 @@ fn main() -> BuildResult<()> {
         println!("cargo:rustc-link-lib=static={library}");
     }
 
-    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     match target_os.as_str() {
         "macos" | "ios" => {
             println!("cargo:rustc-link-lib=c++");
@@ -190,6 +194,7 @@ fn patch_llama_common_cmake(path: &Path) -> BuildResult<()> {
             path.display()
         ))
     })?;
+    contents = normalize_newlines(&contents);
 
     contents = replace_once(
         &contents,
@@ -220,6 +225,10 @@ fn patch_llama_common_cmake(path: &Path) -> BuildResult<()> {
     })?;
 
     Ok(())
+}
+
+fn normalize_newlines(contents: &str) -> String {
+    contents.replace("\r\n", "\n").replace('\r', "\n")
 }
 
 fn replace_once(contents: &str, from: &str, to: &str, path: &Path) -> BuildResult<String> {
