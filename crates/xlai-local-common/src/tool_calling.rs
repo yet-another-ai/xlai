@@ -4,12 +4,12 @@ use xlai_core::{ErrorKind, ToolCall, ToolDefinition, ToolParameterType, XlaiErro
 
 use crate::prompt_store::EmbeddedPromptStore;
 
-pub(crate) enum ToolResponse {
+pub enum ToolResponse {
     AssistantMessage(String),
     ToolCalls(Vec<ToolCall>),
 }
 
-pub(crate) fn tool_call_instruction(tools: &[ToolDefinition]) -> Result<String, XlaiError> {
+pub fn tool_call_instruction(tools: &[ToolDefinition]) -> Result<String, XlaiError> {
     let tool_specs = tools
         .iter()
         .map(|tool| {
@@ -32,7 +32,7 @@ pub(crate) fn tool_call_instruction(tools: &[ToolDefinition]) -> Result<String, 
     EmbeddedPromptStore::render("system/tool-calling.md", &context)
 }
 
-pub(crate) fn tool_response_schema(tools: &[ToolDefinition]) -> Value {
+pub fn tool_response_schema(tools: &[ToolDefinition]) -> Value {
     let variants = tools
         .iter()
         .map(|tool| {
@@ -68,7 +68,7 @@ pub(crate) fn tool_response_schema(tools: &[ToolDefinition]) -> Value {
     })
 }
 
-pub(crate) fn parse_tool_response(
+pub fn parse_tool_response(
     generated: &str,
     tools: &[ToolDefinition],
 ) -> Result<ToolResponse, XlaiError> {
@@ -76,7 +76,7 @@ pub(crate) fn parse_tool_response(
     let value: Value = serde_json::from_str(generated).map_err(|error| {
         XlaiError::new(
             ErrorKind::Provider,
-            format!("llama.cpp tool-calling output was not valid JSON: {error}"),
+            format!("tool-calling output was not valid JSON: {error}"),
         )
     })?;
 
@@ -84,20 +84,20 @@ pub(crate) fn parse_tool_response(
     let validator = jsonschema::validator_for(&schema).map_err(|error| {
         XlaiError::new(
             ErrorKind::Validation,
-            format!("llama.cpp tool-calling schema is invalid: {error}"),
+            format!("tool-calling schema is invalid: {error}"),
         )
     })?;
     if let Err(error) = validator.validate(&value) {
         return Err(XlaiError::new(
             ErrorKind::Provider,
-            format!("llama.cpp tool-calling output did not match the required schema: {error}"),
+            format!("tool-calling output did not match the required schema: {error}"),
         ));
     }
 
     let envelope = value.as_object().ok_or_else(|| {
         XlaiError::new(
             ErrorKind::Provider,
-            "llama.cpp tool-calling output must be a JSON object",
+            "tool-calling output must be a JSON object",
         )
     })?;
     let assistant_response = envelope
@@ -110,7 +110,7 @@ pub(crate) fn parse_tool_response(
         .ok_or_else(|| {
             XlaiError::new(
                 ErrorKind::Provider,
-                "llama.cpp tool-calling output must include a `tool_calls` array",
+                "tool-calling output must include a `tool_calls` array",
             )
         })?;
 
@@ -119,7 +119,7 @@ pub(crate) fn parse_tool_response(
         if assistant_response.trim().is_empty() {
             return Err(XlaiError::new(
                 ErrorKind::Provider,
-                "llama.cpp tool-calling output contained neither a final assistant response nor any tool calls",
+                "tool-calling output contained neither a final assistant response nor any tool calls",
             ));
         }
         return Ok(ToolResponse::AssistantMessage(assistant_response));
@@ -131,7 +131,7 @@ pub(crate) fn parse_tool_response(
     {
         return Err(XlaiError::new(
             ErrorKind::Provider,
-            "llama.cpp tool-calling output may not include both assistant text and tool calls in the same turn",
+            "tool-calling output may not include both assistant text and tool calls in the same turn",
         ));
     }
 
@@ -140,7 +140,7 @@ pub(crate) fn parse_tool_response(
             .iter()
             .enumerate()
             .map(|(index, call)| ToolCall {
-                id: format!("llama_tool_call_{}", index + 1),
+                id: format!("local_tool_call_{}", index + 1),
                 tool_name: call
                     .get("name")
                     .and_then(Value::as_str)

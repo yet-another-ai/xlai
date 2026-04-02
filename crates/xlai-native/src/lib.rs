@@ -1,5 +1,8 @@
 pub use xlai_backend_llama_cpp::{LlamaCppChatModel, LlamaCppConfig};
 pub use xlai_backend_openai::{OpenAiChatModel, OpenAiConfig, OpenAiTranscriptionModel};
+pub use xlai_backend_transformersjs::{
+    TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
+};
 pub use xlai_core as core;
 pub use xlai_runtime::{
     Agent, Chat, ChatExecutionEvent, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath,

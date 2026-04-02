@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, clippy::panic)]
+
 use serde_json::json;
 use xlai_core::{
     ChatContent, ChatMessage, ContentPart, ErrorKind, MessageRole, StructuredOutput,
@@ -10,8 +12,10 @@ use crate::prompt::{
     prompt_messages_with_constraints, render_manual_prompt, validate_structured_output,
     validate_structured_output_schema,
 };
-use crate::request::{PreparedRequest, PromptMessage, PromptRole, extract_text_content};
-use crate::tool_calling::{ToolResponse, parse_tool_response, tool_response_schema};
+use crate::request::{
+    PreparedRequest, PromptMessage, PromptRole, extract_text_content, validate_prepared_for_llama,
+};
+use xlai_local_common::{ToolResponse, parse_tool_response, tool_response_schema};
 
 #[test]
 fn manual_prompt_renderer_appends_assistant_turn() {
@@ -24,7 +28,8 @@ fn manual_prompt_renderer_appends_assistant_turn() {
             role: PromptRole::User,
             content: "Say hello".to_owned(),
         },
-    ]);
+    ])
+    .expect("render manual prompt");
 
     assert!(prompt.contains("System: Be concise."));
     assert!(prompt.contains("User: Say hello"));
@@ -55,7 +60,7 @@ fn prepared_request_allows_tool_calls() {
         max_output_tokens: 64,
     };
 
-    let result = request.validate_against(&config);
+    let result = validate_prepared_for_llama(&request, &config);
     assert!(result.is_ok(), "tool definitions should now be accepted");
 }
 
@@ -239,13 +244,13 @@ fn prepared_request_rejects_combined_tools_and_structured_output() {
         max_output_tokens: 64,
     };
 
-    let result = request.validate_against(&config);
+    let result = validate_prepared_for_llama(&request, &config);
     assert!(matches!(
         result,
         Err(XlaiError {
             kind: ErrorKind::Unsupported,
             message,
-        }) if message.contains("combining structured output with tool calling")
+        }) if message.contains("cannot be combined with tool calling")
     ));
 }
 
@@ -377,7 +382,7 @@ fn tool_response_parser_returns_tool_calls() {
         return;
     };
     assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].id, "llama_tool_call_1");
+    assert_eq!(calls[0].id, "local_tool_call_1");
     assert_eq!(calls[0].tool_name, "lookup_weather");
     assert_eq!(calls[0].arguments, json!({ "city": "Paris" }));
 }

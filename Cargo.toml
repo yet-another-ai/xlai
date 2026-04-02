@@ -2,7 +2,9 @@
 members = [
     "crates/xlai-backend-llama-cpp",
     "crates/xlai-backend-openai",
+    "crates/xlai-backend-transformersjs",
     "crates/xlai-core", "crates/xlai-ffi",
+    "crates/xlai-local-common",
     "crates/xlai-llama-cpp-sys",
     "crates/xlai-native",
     "crates/xlai-runtime",
