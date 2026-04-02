@@ -42,5 +42,27 @@ declare module '../pkg/xlai_wasm.js' {
     options: unknown,
     fileSystem: unknown,
   ): WasmToolSession;
+  export function createTransformersChatSession(
+    options: unknown,
+  ): WasmToolSession;
+  export function createTransformersChatSessionWithMemoryFileSystem(
+    options: unknown,
+    fileSystem: unknown,
+  ): WasmToolSession;
+  export function createTransformersChatSessionWithFileSystem(
+    options: unknown,
+    fileSystem: unknown,
+  ): WasmToolSession;
+  export function createTransformersAgentSession(
+    options: unknown,
+  ): WasmToolSession;
+  export function createTransformersAgentSessionWithMemoryFileSystem(
+    options: unknown,
+    fileSystem: unknown,
+  ): WasmToolSession;
+  export function createTransformersAgentSessionWithFileSystem(
+    options: unknown,
+    fileSystem: unknown,
+  ): WasmToolSession;
   export function package_version(): string;
 }

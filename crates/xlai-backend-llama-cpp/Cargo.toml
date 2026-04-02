@@ -12,12 +12,10 @@ vulkan = ["xlai-llama-cpp-sys/vulkan"]
 
 [dependencies]
 async-stream.workspace = true
-jsonschema.workspace = true
-rust-embed.workspace = true
 serde_json.workspace = true
-tera.workspace = true
 tokio.workspace = true
 xlai-core = { path = "../xlai-core" }
+xlai-local-common = { path = "../xlai-local-common" }
 xlai-llama-cpp-sys = { path = "../xlai-llama-cpp-sys" }
 
 [dev-dependencies]

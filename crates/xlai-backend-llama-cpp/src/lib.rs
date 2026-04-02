@@ -10,16 +10,14 @@ use xlai_core::{
 use xlai_llama_cpp_sys as sys;
 
 mod prompt;
-mod prompt_store;
 mod request;
-mod tool_calling;
 
 #[cfg(test)]
 mod tests;
 
 use prompt::{render_prompt, validate_structured_output};
-use request::PreparedRequest;
-use tool_calling::{ToolResponse, parse_tool_response, tool_response_schema};
+use request::{PreparedRequest, prepared_from_core_request, validate_prepared_for_llama};
+use xlai_local_common::{ToolResponse, parse_tool_response, tool_response_schema};
 
 #[derive(Clone, Debug)]
 pub struct LlamaCppConfig {
@@ -190,7 +188,7 @@ impl LlamaCppChatModel {
     where
         F: FnMut(ChatChunk) -> Result<(), XlaiError>,
     {
-        prepared.validate_against(&self.config)?;
+        validate_prepared_for_llama(&prepared, &self.config)?;
 
         let loaded = self.load_model()?;
         let loaded = loaded.lock().map_err(|_| {
@@ -432,7 +430,7 @@ impl ChatModel for LlamaCppChatModel {
     fn generate(&self, request: ChatRequest) -> BoxFuture<'_, Result<ChatResponse, XlaiError>> {
         let model = self.clone();
         Box::pin(async move {
-            let prepared = PreparedRequest::from_core_request(&model.config, request)?;
+            let prepared = prepared_from_core_request(&model.config, request)?;
             tokio::task::spawn_blocking(move || model.run_generation(prepared, |_| Ok(())))
                 .await
                 .map_err(map_join_error)?
@@ -442,7 +440,7 @@ impl ChatModel for LlamaCppChatModel {
     fn generate_stream(&self, request: ChatRequest) -> BoxStream<'_, Result<ChatChunk, XlaiError>> {
         let model = self.clone();
         Box::pin(try_stream! {
-            let prepared = PreparedRequest::from_core_request(&model.config, request)?;
+            let prepared = prepared_from_core_request(&model.config, request)?;
             let (sender, mut receiver) = mpsc::unbounded_channel();
 
             tokio::spawn(async move {

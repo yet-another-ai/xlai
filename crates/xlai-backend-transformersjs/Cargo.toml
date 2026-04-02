@@ -1,0 +1,26 @@
+[package]
+name = "xlai-backend-transformersjs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Browser/wasm chat backend delegating generation to JavaScript @huggingface/transformers + llguidance"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+xlai-core = { path = "../xlai-core" }
+xlai-local-common = { path = "../xlai-local-common" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { workspace = true, features = ["js"] }
+js-sys.workspace = true
+serde-wasm-bindgen.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

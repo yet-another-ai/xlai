@@ -16,5 +16,6 @@ workspace = true
 [dependencies]
 xlai-backend-llama-cpp = { path = "../xlai-backend-llama-cpp" }
 xlai-backend-openai = { path = "../xlai-backend-openai" }
+xlai-backend-transformersjs = { path = "../xlai-backend-transformersjs" }
 xlai-core = { path = "../xlai-core" }
 xlai-runtime = { path = "../xlai-runtime" }

@@ -9,7 +9,27 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./transformers": {
+      "import": "./dist/transformers.js",
+      "types": "./dist/transformers.d.ts"
     }
+  },
+  "peerDependencies": {
+    "@huggingface/transformers": "^3.8.0",
+    "transformers-llguidance": "^0.2.1"
+  },
+  "peerDependenciesMeta": {
+    "@huggingface/transformers": {
+      "optional": true
+    },
+    "transformers-llguidance": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "transformers-llguidance": "^0.2.1"
   },
   "files": [
     "dist",
