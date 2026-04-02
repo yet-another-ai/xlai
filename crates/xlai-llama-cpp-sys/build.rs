@@ -28,6 +28,7 @@ fn main() -> BuildResult<()> {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed={}", vendor_source_dir.display());
     println!("cargo:rerun-if-changed={}", wrapper_cpp.display());
+    println!("cargo:rerun-if-env-changed=CMAKE_GENERATOR");
     println!("cargo:rerun-if-env-changed=VULKAN_SDK");
 
     let mut config = cmake::Config::new(&source_dir);
@@ -65,6 +66,11 @@ fn main() -> BuildResult<()> {
 
     if let Ok(generator) = env::var("CMAKE_GENERATOR") {
         config.generator(generator);
+    } else if target_os == "windows" {
+        // Visual Studio's multi-config generator has been flaky for llama.cpp's
+        // nested vulkan-shaders-gen ExternalProject in CI. Prefer Ninja unless
+        // the caller explicitly overrides the generator.
+        config.generator("Ninja");
     }
 
     let dst = config.build();
