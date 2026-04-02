@@ -1,15 +1,19 @@
 [package]
-name = "xlai-native"
+name = "xlai-backend-llama-cpp"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[dependencies]
+async-stream.workspace = true
+tokio.workspace = true
+xlai-core = { path = "../xlai-core" }
+xlai-llama-cpp-sys = { path = "../xlai-llama-cpp-sys" }
+
+[dev-dependencies]
+tokio.workspace = true
+xlai-runtime = { path = "../xlai-runtime" }
+
 [lints]
 workspace = true
-
-[dependencies]
-xlai-backend-llama-cpp = { path = "../xlai-backend-llama-cpp" }
-xlai-backend-openai = { path = "../xlai-backend-openai" }
-xlai-core = { path = "../xlai-core" }
-xlai-runtime = { path = "../xlai-runtime" }

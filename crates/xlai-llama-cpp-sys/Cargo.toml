@@ -1,0 +1,15 @@
+[package]
+name = "xlai-llama-cpp-sys"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+links = "llama"
+build = "build.rs"
+
+[build-dependencies]
+bindgen.workspace = true
+cmake.workspace = true
+
+[lints]
+workspace = true

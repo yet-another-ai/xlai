@@ -26,9 +26,11 @@ Already implemented:
 ```text
 xlai/
 ├── crates/
+│   ├── xlai-backend-llama-cpp/
 │   ├── xlai-backend-openai/
 │   ├── xlai-core/
 │   ├── xlai-ffi/
+│   ├── xlai-llama-cpp-sys/
 │   ├── xlai-native/
 │   ├── xlai-runtime/
 │   └── xlai-wasm/
@@ -49,6 +51,10 @@ xlai/
   Native Rust-facing facade crate that re-exports the runtime API.
 - `crates/xlai-wasm`
   Browser-facing `wasm-bindgen` facade crate for web integration.
+- `crates/xlai-backend-llama-cpp`
+  Native `llama.cpp` chat backend for local GGUF inference.
+- `crates/xlai-llama-cpp-sys`
+  Vendored `llama.cpp` submodule plus generated/raw FFI bindings and build integration.
 - `packages/xlai`
   Vite-based TypeScript package published as `@yai-xlai/xlai`, built on top of `xlai-wasm`, with Vitest coverage.
 - `crates/xlai-backend-openai`
@@ -240,6 +246,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+For local native inference, the same builder can be pointed at `llama.cpp`:
+
+```rust
+use xlai_native::{LlamaCppConfig, RuntimeBuilder};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let runtime = RuntimeBuilder::new()
+        .with_chat_backend(
+            LlamaCppConfig::new(std::env::var("LLAMA_CPP_MODEL")?)
+                .with_context_size(4096)
+                .with_max_output_tokens(256),
+        )
+        .build()?;
+
+    let response = runtime
+        .chat_session()
+        .with_system_prompt("Be concise.")
+        .prompt("Reply with a short greeting.")
+        .await?;
+
+    println!("{}", response.message.content);
+    Ok(())
+}
+```
+
 ## Tool Calling
 
 `Chat` sessions can register tools directly with async callbacks. `Agent` sessions
@@ -333,6 +365,13 @@ The OpenAI e2e environment currently expects:
 - `OPENAI_MODEL` as a GitHub environment variable
 - `OPENAI_TRANSCRIPTION_MODEL` as a GitHub environment variable
 
+The ignored native `llama.cpp` smoke test expects:
+
+- `LLAMA_CPP_MODEL` pointing to a local GGUF model file, or the default fixture path `fixtures/llama.cpp/Qwen3.5-0.8B-Q4_0.gguf`
+
+The repository intentionally ignores downloaded GGUF fixtures under `fixtures/llama.cpp/`.
+CI downloads that fixture with the Hugging Face CLI and caches it between runs.
+
 ## Current Design Notes
 
 - unified API across native and browser targets
@@ -353,12 +392,19 @@ Planned or expected next areas include:
 
 ## Support of LLM API Providers
 
+### Chat API
+
 - [x] OpenAI-compatible Backends
   - [x] [AIHubMix](https://aihubmix.com/?aff=OOiX)
   - [x] [OpenRouter](https://openrouter.ai/)
   - [x] [OpenAI](https://platform.openai.com/docs/guides/gpt/chat-completions-api)
   - [x] [Azure OpenAI API](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference)
-- [ ] llama.cpp Backends
+- [x] llama.cpp Backends
+  - [x] CPU
+
+### ASR API
+
+- [x] [OpenAI](https://developers.openai.com/api/docs/guides/speech-to-text)
 
 ## License
 
