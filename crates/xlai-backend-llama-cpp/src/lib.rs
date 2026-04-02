@@ -5,9 +5,18 @@ use async_stream::try_stream;
 use tokio::sync::mpsc;
 use xlai_core::{
     BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
-    ChatResponse, ContentPart, ErrorKind, FinishReason, MessageRole, ToolDefinition, XlaiError,
+    ChatResponse, ErrorKind, FinishReason, MessageRole, StructuredOutputFormat, XlaiError,
 };
 use xlai_llama_cpp_sys as sys;
+
+mod prompt;
+mod request;
+
+#[cfg(test)]
+mod tests;
+
+use prompt::{render_prompt, validate_structured_output};
+use request::PreparedRequest;
 
 #[derive(Clone, Debug)]
 pub struct LlamaCppConfig {
@@ -144,30 +153,9 @@ struct RuntimeState {
 }
 
 #[derive(Debug)]
-struct LoadedModel {
+pub(crate) struct LoadedModel {
     model: sys::Model,
     default_chat_template: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct PromptMessage {
-    role: PromptRole,
-    content: String,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum PromptRole {
-    System,
-    User,
-    Assistant,
-}
-
-#[derive(Clone, Debug)]
-struct PreparedRequest {
-    messages: Vec<PromptMessage>,
-    available_tools: Vec<ToolDefinition>,
-    temperature: f32,
-    max_output_tokens: u32,
 }
 
 impl LlamaCppChatModel {
@@ -270,13 +258,51 @@ impl LlamaCppChatModel {
                 .map_err(map_provider_error)?;
         }
 
-        let mut sampler = sys::Sampler::new(&sys::SamplerParams {
-            seed: self.config.seed,
-            temperature: prepared.temperature,
-            top_k: self.config.top_k,
-            top_p: self.config.top_p,
-        })
-        .map_err(map_provider_error)?;
+        let mut sampler = if let Some(structured_output) = &prepared.structured_output {
+            match &structured_output.format {
+                StructuredOutputFormat::JsonSchema { schema } => {
+                    let schema = serde_json::to_string(schema).map_err(|error| {
+                        XlaiError::new(
+                            ErrorKind::Validation,
+                            format!("structured output schema could not be serialized: {error}"),
+                        )
+                    })?;
+                    sys::Sampler::new_with_json_schema(
+                        &sys::SamplerParams {
+                            seed: self.config.seed,
+                            temperature: prepared.temperature,
+                            top_k: self.config.top_k,
+                            top_p: self.config.top_p,
+                        },
+                        &vocab,
+                        &schema,
+                    )
+                    .map_err(map_provider_error)?
+                }
+                StructuredOutputFormat::LarkGrammar { grammar } => {
+                    sys::Sampler::new_with_llguidance(
+                        &sys::SamplerParams {
+                            seed: self.config.seed,
+                            temperature: prepared.temperature,
+                            top_k: self.config.top_k,
+                            top_p: self.config.top_p,
+                        },
+                        &vocab,
+                        "lark",
+                        grammar,
+                    )
+                    .map_err(map_provider_error)?
+                }
+            }
+        } else {
+            sys::Sampler::new(&sys::SamplerParams {
+                seed: self.config.seed,
+                temperature: prepared.temperature,
+                top_k: self.config.top_k,
+                top_p: self.config.top_p,
+            })
+            .map_err(map_provider_error)?
+        };
 
         emit(ChatChunk::MessageStart {
             role: MessageRole::Assistant,
@@ -310,6 +336,10 @@ impl LlamaCppChatModel {
                 .decode(&mut decode_token)
                 .map_err(map_provider_error)?;
             output_tokens = output_tokens.saturating_add(1);
+        }
+
+        if let Some(structured_output) = &prepared.structured_output {
+            validate_structured_output(structured_output, &generated)?;
         }
 
         Ok(ChatResponse {
@@ -397,123 +427,6 @@ impl ChatModel for LlamaCppChatModel {
     }
 }
 
-impl PreparedRequest {
-    fn from_core_request(config: &LlamaCppConfig, request: ChatRequest) -> Result<Self, XlaiError> {
-        let mut messages = Vec::new();
-
-        if let Some(system_prompt) = request.system_prompt {
-            let system_prompt = system_prompt.trim();
-            if !system_prompt.is_empty() {
-                messages.push(PromptMessage {
-                    role: PromptRole::System,
-                    content: system_prompt.to_owned(),
-                });
-            }
-        }
-
-        for message in request.messages {
-            messages.push(PromptMessage {
-                role: PromptRole::from_message_role(message.role)?,
-                content: extract_text_content(&message)?,
-            });
-        }
-
-        let requested_model = request.model;
-        if let Some(model_name) = requested_model.as_deref() {
-            let expected = config.resolved_model_name();
-            if model_name != expected {
-                return Err(XlaiError::new(
-                    ErrorKind::Validation,
-                    format!(
-                        "chat request targeted model `{model_name}`, but this llama.cpp backend is configured for `{expected}`"
-                    ),
-                ));
-            }
-        }
-
-        Ok(Self {
-            messages,
-            available_tools: request.available_tools,
-            temperature: request.temperature.unwrap_or(config.temperature),
-            max_output_tokens: request
-                .max_output_tokens
-                .unwrap_or(config.max_output_tokens),
-        })
-    }
-
-    fn validate_against(&self, config: &LlamaCppConfig) -> Result<(), XlaiError> {
-        if self.messages.is_empty() {
-            return Err(XlaiError::new(
-                ErrorKind::Validation,
-                "llama.cpp chat requests must contain at least one message or system prompt",
-            ));
-        }
-
-        if self.max_output_tokens == 0 {
-            return Err(XlaiError::new(
-                ErrorKind::Validation,
-                "llama.cpp max_output_tokens must be greater than zero",
-            ));
-        }
-
-        if !self.available_tools.is_empty() {
-            let tool_names = self
-                .available_tools
-                .iter()
-                .map(|tool| tool.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            return Err(XlaiError::new(
-                ErrorKind::Unsupported,
-                format!(
-                    "llama.cpp tool calling is not implemented yet; requested tools: {tool_names}"
-                ),
-            ));
-        }
-
-        if config.n_gpu_layers > 0 && !sys::supports_gpu_offload() {
-            return Err(XlaiError::new(
-                ErrorKind::Unsupported,
-                "this xlai llama.cpp build was compiled without GPU offload support",
-            ));
-        }
-
-        Ok(())
-    }
-}
-
-impl PromptRole {
-    fn from_message_role(role: MessageRole) -> Result<Self, XlaiError> {
-        match role {
-            MessageRole::System => Ok(Self::System),
-            MessageRole::User => Ok(Self::User),
-            MessageRole::Assistant => Ok(Self::Assistant),
-            MessageRole::Tool => Err(XlaiError::new(
-                ErrorKind::Unsupported,
-                "llama.cpp tool result messages are not implemented yet",
-            )),
-        }
-    }
-
-    #[must_use]
-    fn as_template_role(self) -> &'static str {
-        match self {
-            Self::System => "system",
-            Self::User => "user",
-            Self::Assistant => "assistant",
-        }
-    }
-
-    #[must_use]
-    fn as_manual_label(self) -> &'static str {
-        match self {
-            Self::System => "System",
-            Self::User => "User",
-            Self::Assistant => "Assistant",
-        }
-    }
-}
-
 fn load_model(config: &LlamaCppConfig) -> Result<LoadedModel, XlaiError> {
     let model = sys::Model::load_from_file(
         &config.model_path,
@@ -531,73 +444,13 @@ fn load_model(config: &LlamaCppConfig) -> Result<LoadedModel, XlaiError> {
     })
 }
 
-fn render_prompt(
-    config: &LlamaCppConfig,
-    loaded: &LoadedModel,
-    prepared: &PreparedRequest,
-) -> Result<String, XlaiError> {
-    if let Some(template) = config
-        .chat_template
-        .as_deref()
-        .or(loaded.default_chat_template.as_deref())
-    {
-        let template_messages = prepared
-            .messages
-            .iter()
-            .map(|message| sys::ChatMessage {
-                role: message.role.as_template_role(),
-                content: message.content.as_str(),
-            })
-            .collect::<Vec<_>>();
-        return sys::apply_chat_template(template, &template_messages, true)
-            .map_err(map_provider_error);
-    }
-
-    Ok(render_manual_prompt(&prepared.messages))
-}
-
-fn render_manual_prompt(messages: &[PromptMessage]) -> String {
-    let mut prompt = String::new();
-
-    for message in messages {
-        prompt.push_str(message.role.as_manual_label());
-        prompt.push_str(": ");
-        prompt.push_str(message.content.trim());
-        prompt.push_str("\n\n");
-    }
-
-    prompt.push_str("Assistant:");
-    prompt
-}
-
-fn extract_text_content(message: &ChatMessage) -> Result<String, XlaiError> {
-    let mut text = String::new();
-
-    for part in &message.content.parts {
-        match part {
-            ContentPart::Text { text: part_text } => text.push_str(part_text),
-            _ => {
-                return Err(XlaiError::new(
-                    ErrorKind::Unsupported,
-                    format!(
-                        "llama.cpp currently supports text-only chat content; message role {:?} contained a non-text part",
-                        message.role
-                    ),
-                ));
-            }
-        }
-    }
-
-    Ok(text)
-}
-
 fn resolve_context_size(config: &LlamaCppConfig, model: &sys::Model) -> u32 {
     config
         .context_size
         .unwrap_or_else(|| model.train_context_size().max(2048))
 }
 
-fn map_provider_error(error: sys::LlamaError) -> XlaiError {
+pub(crate) fn map_provider_error(error: sys::LlamaError) -> XlaiError {
     XlaiError::new(ErrorKind::Provider, error.to_string())
 }
 
@@ -606,92 +459,4 @@ fn map_join_error(error: tokio::task::JoinError) -> XlaiError {
         ErrorKind::Provider,
         format!("llama.cpp background generation task failed: {error}"),
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use xlai_core::{ChatContent, ToolCallExecutionMode, ToolParameter, ToolParameterType};
-
-    #[test]
-    fn manual_prompt_renderer_appends_assistant_turn() {
-        let prompt = render_manual_prompt(&[
-            PromptMessage {
-                role: PromptRole::System,
-                content: "Be concise.".to_owned(),
-            },
-            PromptMessage {
-                role: PromptRole::User,
-                content: "Say hello".to_owned(),
-            },
-        ]);
-
-        assert!(prompt.contains("System: Be concise."));
-        assert!(prompt.contains("User: Say hello"));
-        assert!(prompt.ends_with("Assistant:"));
-    }
-
-    #[test]
-    fn prepared_request_rejects_tool_calls_for_now() {
-        let config = LlamaCppConfig::new("/tmp/model.gguf");
-        let request = PreparedRequest {
-            messages: vec![PromptMessage {
-                role: PromptRole::User,
-                content: "hi".to_owned(),
-            }],
-            available_tools: vec![ToolDefinition {
-                name: "lookup_weather".to_owned(),
-                description: "Lookup weather".to_owned(),
-                parameters: vec![ToolParameter {
-                    name: "city".to_owned(),
-                    description: "City".to_owned(),
-                    kind: ToolParameterType::String,
-                    required: true,
-                }],
-                execution_mode: ToolCallExecutionMode::Concurrent,
-            }],
-            temperature: 0.8,
-            max_output_tokens: 64,
-        };
-
-        let result = request.validate_against(&config);
-        assert!(matches!(
-            result,
-            Err(XlaiError {
-                kind: ErrorKind::Unsupported,
-                message,
-            }) if message.contains("tool calling")
-        ));
-    }
-
-    #[test]
-    fn text_extraction_rejects_multimodal_content() {
-        let message = ChatMessage {
-            role: MessageRole::User,
-            content: ChatContent::from_parts(vec![
-                ContentPart::Text {
-                    text: "describe this".to_owned(),
-                },
-                ContentPart::Image {
-                    source: xlai_core::MediaSource::Url {
-                        url: "https://example.com/image.png".to_owned(),
-                    },
-                    mime_type: None,
-                    detail: None,
-                },
-            ]),
-            tool_name: None,
-            tool_call_id: None,
-            metadata: Default::default(),
-        };
-
-        let result = extract_text_content(&message);
-        assert!(matches!(
-            result,
-            Err(XlaiError {
-                kind: ErrorKind::Unsupported,
-                ..
-            })
-        ));
-    }
 }

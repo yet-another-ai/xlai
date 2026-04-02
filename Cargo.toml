@@ -25,6 +25,7 @@ futures-core = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 getrandom = "0.2"
 gray_matter = "0.3.2"
+jsonschema = { version = "0.45.0", default-features = false }
 js-sys = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["json", "multipart", "stream"] }
 rust-embed = "8.11.0"

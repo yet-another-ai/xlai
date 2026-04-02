@@ -6,8 +6,8 @@ mod mcp;
 use serde_json::Value;
 use tera::Context;
 use xlai_core::{
-    BoxStream, ChatContent, ChatMessage, ChatResponse, ContentPart, ToolDefinition, ToolResult,
-    XlaiError,
+    BoxStream, ChatContent, ChatMessage, ChatResponse, ContentPart, StructuredOutput,
+    ToolDefinition, ToolResult, XlaiError,
 };
 
 use crate::{Chat, ChatExecutionEvent, XlaiRuntime};
@@ -84,6 +84,12 @@ impl Agent {
     #[must_use]
     pub fn with_max_output_tokens(mut self, max_output_tokens: u32) -> Self {
         self.chat = self.chat.with_max_output_tokens(max_output_tokens);
+        self
+    }
+
+    #[must_use]
+    pub fn with_structured_output(mut self, structured_output: StructuredOutput) -> Self {
+        self.chat = self.chat.with_structured_output(structured_output);
         self
     }
 

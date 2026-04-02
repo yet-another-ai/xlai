@@ -1,27 +1,39 @@
 use std::env;
+use std::error::Error;
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
-fn main() {
-    let source_dir = Path::new("vendor/llama.cpp");
+type BuildResult<T> = Result<T, Box<dyn Error>>;
+
+fn main() -> BuildResult<()> {
+    let vendor_source_dir = Path::new("vendor/llama.cpp");
+    let source_dir = prepare_llama_source(vendor_source_dir)?;
     let include_dir = source_dir.join("include");
+    let common_dir = source_dir.join("common");
+    let vendor_dir = source_dir.join("vendor");
     let ggml_include_dir = source_dir.join("ggml/include");
+    let wrapper_cpp = Path::new("src/wrapper.cpp");
 
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed={}", source_dir.display());
+    println!("cargo:rerun-if-changed={}", vendor_source_dir.display());
+    println!("cargo:rerun-if-changed={}", wrapper_cpp.display());
 
-    let mut config = cmake::Config::new(source_dir);
+    let mut config = cmake::Config::new(&source_dir);
     config
         .profile("Release")
-        .build_target("llama")
+        .build_target("common")
         .define("BUILD_SHARED_LIBS", "OFF")
         .define("GGML_STATIC", "ON")
         .define("GGML_BACKEND_DL", "OFF")
-        .define("LLAMA_BUILD_COMMON", "OFF")
+        .define("LLAMA_BUILD_COMMON", "ON")
         .define("LLAMA_BUILD_TESTS", "OFF")
         .define("LLAMA_BUILD_TOOLS", "OFF")
         .define("LLAMA_BUILD_EXAMPLES", "OFF")
         .define("LLAMA_BUILD_SERVER", "OFF")
         .define("LLAMA_BUILD_WEBUI", "OFF")
+        .define("LLAMA_OPENSSL", "OFF")
+        .define("LLAMA_LLGUIDANCE", "ON")
         .define("GGML_OPENMP", "OFF")
         .define("GGML_BLAS", "OFF")
         .define("GGML_ACCELERATE", "OFF")
@@ -42,16 +54,39 @@ fn main() {
     }
 
     let dst = config.build();
-    generate_bindings(&include_dir, &ggml_include_dir);
+    build_wrapper(
+        &include_dir,
+        &common_dir,
+        &vendor_dir,
+        &ggml_include_dir,
+        wrapper_cpp,
+    );
+    generate_bindings(&include_dir, &ggml_include_dir)?;
 
     emit_search_path(&dst.join("lib"));
     emit_search_path(&dst.join("lib64"));
     emit_search_path(&dst.join("build"));
+    emit_search_path(&dst.join("build/common"));
     emit_search_path(&dst.join("build/src"));
     emit_search_path(&dst.join("build/ggml/src"));
+    emit_search_path(&dst.join("build/vendor/cpp-httplib"));
+    if let Ok(cargo_target_dir) = env::var("CARGO_TARGET_DIR") {
+        emit_search_path(Path::new(&cargo_target_dir).join("release").as_path());
+    } else {
+        emit_search_path(&dst.join("build/llguidance/source/target/release"));
+    }
     emit_search_path(&dst.join("build/bin"));
 
-    for library in ["llama", "ggml", "ggml-base", "ggml-cpu"] {
+    for library in [
+        "xlai_llama_cpp_wrapper",
+        "common",
+        "cpp-httplib",
+        "llguidance",
+        "llama",
+        "ggml",
+        "ggml-base",
+        "ggml-cpu",
+    ] {
         println!("cargo:rustc-link-lib=static={library}");
     }
 
@@ -68,6 +103,135 @@ fn main() {
         }
         _ => {}
     }
+
+    Ok(())
+}
+
+fn prepare_llama_source(vendor_source_dir: &Path) -> BuildResult<PathBuf> {
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap_or_default());
+    let patched_source_dir = out_dir.join("llama.cpp-patched");
+
+    if patched_source_dir.exists() {
+        fs::remove_dir_all(&patched_source_dir).map_err(|error| {
+            io::Error::other(format!(
+                "failed to clear patched llama.cpp source directory `{}`: {error}",
+                patched_source_dir.display()
+            ))
+        })?;
+    }
+
+    copy_dir_all(vendor_source_dir, &patched_source_dir).map_err(|error| {
+        io::Error::other(format!(
+            "failed to copy llama.cpp sources from `{}` to `{}`: {error}",
+            vendor_source_dir.display(),
+            patched_source_dir.display()
+        ))
+    })?;
+
+    patch_llama_common_cmake(&patched_source_dir.join("common/CMakeLists.txt"))?;
+    Ok(patched_source_dir)
+}
+
+fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<()> {
+    fs::create_dir_all(dst)?;
+
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let destination = dst.join(entry.file_name());
+        let file_type = entry.file_type()?;
+
+        if file_type.is_dir() {
+            copy_dir_all(&path, &destination)?;
+        } else if file_type.is_symlink() {
+            copy_symlink(&path, &destination)?;
+        } else {
+            fs::copy(&path, &destination)?;
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
+    use std::os::unix::fs::symlink;
+
+    let target = fs::read_link(src)?;
+    symlink(target, dst)
+}
+
+#[cfg(windows)]
+fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
+    use std::os::windows::fs::{symlink_dir, symlink_file};
+
+    let target = fs::read_link(src)?;
+    if src.is_dir() {
+        symlink_dir(target, dst)
+    } else {
+        symlink_file(target, dst)
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
+    let metadata = fs::metadata(src)?;
+    if metadata.is_dir() {
+        copy_dir_all(src, dst)
+    } else {
+        fs::copy(src, dst).map(|_| ())
+    }
+}
+
+fn patch_llama_common_cmake(path: &Path) -> BuildResult<()> {
+    let mut contents = fs::read_to_string(path).map_err(|error| {
+        io::Error::other(format!(
+            "failed to read patched llama.cpp CMake file `{}`: {error}",
+            path.display()
+        ))
+    })?;
+
+    contents = replace_once(
+        &contents,
+        "    set(LLGUIDANCE_PATH ${LLGUIDANCE_SRC}/target/release)\n    set(LLGUIDANCE_LIB_NAME \"${CMAKE_STATIC_LIBRARY_PREFIX}llguidance${CMAKE_STATIC_LIBRARY_SUFFIX}\")\n",
+        "    set(LLGUIDANCE_LIB_NAME \"${CMAKE_STATIC_LIBRARY_PREFIX}llguidance${CMAKE_STATIC_LIBRARY_SUFFIX}\")\n\n    if (DEFINED ENV{CARGO_TARGET_DIR})\n        set(LLGUIDANCE_PATH $ENV{CARGO_TARGET_DIR}/release)\n    else()\n        set(LLGUIDANCE_PATH ${LLGUIDANCE_SRC}/target/release)\n    endif()\n",
+        path,
+    )?;
+
+    contents = replace_once(
+        &contents,
+        "    add_dependencies(llguidance llguidance_ext)\n\n    target_include_directories(${TARGET} PRIVATE ${LLGUIDANCE_PATH})\n",
+        "    add_dependencies(llguidance llguidance_ext)\n    add_dependencies(${TARGET} llguidance_ext)\n\n    target_include_directories(${TARGET} PRIVATE ${LLGUIDANCE_PATH})\n",
+        path,
+    )?;
+
+    contents = replace_once(
+        &contents,
+        "        BUILD_COMMAND cargo build --release --package llguidance\n",
+        "        BUILD_COMMAND ${CMAKE_COMMAND} -E env --unset=RUSTC --unset=RUSTC_WRAPPER --unset=RUSTC_WORKSPACE_WRAPPER --unset=CLIPPY_ARGS --unset=RUSTFLAGS --unset=CARGO_ENCODED_RUSTFLAGS --unset=CARGO_BUILD_RUSTFLAGS cargo build --release --package llguidance\n",
+        path,
+    )?;
+
+    fs::write(path, contents).map_err(|error| {
+        io::Error::other(format!(
+            "failed to write patched llama.cpp CMake file `{}`: {error}",
+            path.display()
+        ))
+    })?;
+
+    Ok(())
+}
+
+fn replace_once(contents: &str, from: &str, to: &str, path: &Path) -> BuildResult<String> {
+    if !contents.contains(from) {
+        return Err(io::Error::other(format!(
+            "expected to patch `{}` but the target snippet was not found; upstream llama.cpp layout may have changed",
+            path.display()
+        ))
+        .into());
+    }
+
+    Ok(contents.replacen(from, to, 1))
 }
 
 fn emit_search_path(path: &Path) {
@@ -76,7 +240,25 @@ fn emit_search_path(path: &Path) {
     }
 }
 
-fn generate_bindings(include_dir: &Path, ggml_include_dir: &Path) {
+fn build_wrapper(
+    include_dir: &Path,
+    common_dir: &Path,
+    vendor_dir: &Path,
+    ggml_include_dir: &Path,
+    wrapper_cpp: &Path,
+) {
+    cc::Build::new()
+        .cpp(true)
+        .file(wrapper_cpp)
+        .include(include_dir)
+        .include(common_dir)
+        .include(vendor_dir)
+        .include(ggml_include_dir)
+        .std("c++17")
+        .compile("xlai_llama_cpp_wrapper");
+}
+
+fn generate_bindings(include_dir: &Path, ggml_include_dir: &Path) -> BuildResult<()> {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap_or_default());
     let bindings = bindgen::Builder::default()
         .header(include_dir.join("llama.h").display().to_string())
@@ -89,19 +271,15 @@ fn generate_bindings(include_dir: &Path, ggml_include_dir: &Path) {
         .allowlist_var("LLAMA_.*")
         .allowlist_var("GGML_.*")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate();
-
-    let bindings = match bindings {
-        Ok(bindings) => bindings,
-        Err(error) => {
-            eprintln!("failed to generate llama.cpp bindings: {error}");
-            std::process::exit(1);
-        }
-    };
+        .generate()
+        .map_err(|error| {
+            io::Error::other(format!("failed to generate llama.cpp bindings: {error}"))
+        })?;
 
     let output = out_dir.join("bindings.rs");
-    if let Err(error) = bindings.write_to_file(output) {
-        eprintln!("failed to write llama.cpp bindings: {error}");
-        std::process::exit(1);
-    }
+    bindings.write_to_file(output).map_err(|error| {
+        io::Error::other(format!("failed to write llama.cpp bindings: {error}"))
+    })?;
+
+    Ok(())
 }

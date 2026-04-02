@@ -17,6 +17,19 @@ pub mod raw {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
+unsafe extern "C" {
+    fn xlai_llama_sampler_init_llguidance(
+        vocab: *const raw::llama_vocab,
+        grammar_kind: *const c_char,
+        grammar_data: *const c_char,
+    ) -> *mut raw::llama_sampler;
+    fn xlai_llama_sampler_init_json_schema(
+        vocab: *const raw::llama_vocab,
+        json_schema: *const c_char,
+    ) -> *mut raw::llama_sampler;
+    fn xlai_llama_last_error_message() -> *const c_char;
+}
+
 pub type Token = raw::llama_token;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -479,6 +492,17 @@ impl Sampler {
     ///
     /// Returns an error if llama.cpp fails to construct the sampler chain.
     pub fn new(params: &SamplerParams) -> Result<Self, LlamaError> {
+        Self::new_with_grammar(params, None)
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if llama.cpp fails to construct the sampler chain or
+    /// the optional grammar sampler.
+    pub fn new_with_grammar(
+        params: &SamplerParams,
+        grammar: Option<(&VocabRef<'_>, &str, &str)>,
+    ) -> Result<Self, LlamaError> {
         // SAFETY: `llama_sampler_chain_default_params` is a pure upstream
         // initializer that returns a by-value configuration struct.
         let chain_params = unsafe { raw::llama_sampler_chain_default_params() };
@@ -488,6 +512,129 @@ impl Sampler {
             .ok_or_else(|| LlamaError::new("llama.cpp could not create a sampler chain"))?;
 
         let mut sampler = Self { inner };
+
+        if let Some((vocab, grammar_str, grammar_root)) = grammar {
+            sampler.add_grammar_sampler(vocab, grammar_str, grammar_root)?;
+        }
+
+        if params.temperature <= 0.0 {
+            sampler.add_owned_sampler(
+                // SAFETY: this constructor allocates a standalone sampler.
+                unsafe { raw::llama_sampler_init_greedy() },
+                "greedy sampler",
+            )?;
+            return Ok(sampler);
+        }
+
+        if params.top_k > 0 {
+            sampler.add_owned_sampler(
+                // SAFETY: this constructor allocates a standalone sampler.
+                unsafe { raw::llama_sampler_init_top_k(params.top_k) },
+                "top-k sampler",
+            )?;
+        }
+
+        if (0.0..1.0).contains(&params.top_p) {
+            sampler.add_owned_sampler(
+                // SAFETY: this constructor allocates a standalone sampler.
+                unsafe { raw::llama_sampler_init_top_p(params.top_p, 1) },
+                "top-p sampler",
+            )?;
+        }
+
+        sampler.add_owned_sampler(
+            // SAFETY: this constructor allocates a standalone sampler.
+            unsafe { raw::llama_sampler_init_temp(params.temperature) },
+            "temperature sampler",
+        )?;
+        sampler.add_owned_sampler(
+            // SAFETY: this constructor allocates a standalone sampler.
+            unsafe { raw::llama_sampler_init_dist(params.seed) },
+            "distribution sampler",
+        )?;
+
+        Ok(sampler)
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if llama.cpp fails to construct the sampler chain or
+    /// initialize a JSON-schema-constrained sampler.
+    pub fn new_with_json_schema(
+        params: &SamplerParams,
+        vocab: &VocabRef<'_>,
+        json_schema: &str,
+    ) -> Result<Self, LlamaError> {
+        // SAFETY: `llama_sampler_chain_default_params` is a pure upstream
+        // initializer that returns a by-value configuration struct.
+        let chain_params = unsafe { raw::llama_sampler_chain_default_params() };
+        // SAFETY: the params were created by llama.cpp itself.
+        let sampler = unsafe { raw::llama_sampler_chain_init(chain_params) };
+        let inner = NonNull::new(sampler)
+            .ok_or_else(|| LlamaError::new("llama.cpp could not create a sampler chain"))?;
+
+        let mut sampler = Self { inner };
+        sampler.add_json_schema_sampler(vocab, json_schema)?;
+
+        if params.temperature <= 0.0 {
+            sampler.add_owned_sampler(
+                // SAFETY: this constructor allocates a standalone sampler.
+                unsafe { raw::llama_sampler_init_greedy() },
+                "greedy sampler",
+            )?;
+            return Ok(sampler);
+        }
+
+        if params.top_k > 0 {
+            sampler.add_owned_sampler(
+                // SAFETY: this constructor allocates a standalone sampler.
+                unsafe { raw::llama_sampler_init_top_k(params.top_k) },
+                "top-k sampler",
+            )?;
+        }
+
+        if (0.0..1.0).contains(&params.top_p) {
+            sampler.add_owned_sampler(
+                // SAFETY: this constructor allocates a standalone sampler.
+                unsafe { raw::llama_sampler_init_top_p(params.top_p, 1) },
+                "top-p sampler",
+            )?;
+        }
+
+        sampler.add_owned_sampler(
+            // SAFETY: this constructor allocates a standalone sampler.
+            unsafe { raw::llama_sampler_init_temp(params.temperature) },
+            "temperature sampler",
+        )?;
+        sampler.add_owned_sampler(
+            // SAFETY: this constructor allocates a standalone sampler.
+            unsafe { raw::llama_sampler_init_dist(params.seed) },
+            "distribution sampler",
+        )?;
+
+        Ok(sampler)
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if llama.cpp fails to construct the sampler chain or
+    /// initialize an LLGuidance grammar sampler.
+    pub fn new_with_llguidance(
+        params: &SamplerParams,
+        vocab: &VocabRef<'_>,
+        grammar_kind: &str,
+        grammar_data: &str,
+    ) -> Result<Self, LlamaError> {
+        // SAFETY: `llama_sampler_chain_default_params` is a pure upstream
+        // initializer that returns a by-value configuration struct.
+        let chain_params = unsafe { raw::llama_sampler_chain_default_params() };
+        // SAFETY: the params were created by llama.cpp itself.
+        let sampler = unsafe { raw::llama_sampler_chain_init(chain_params) };
+        let inner = NonNull::new(sampler)
+            .ok_or_else(|| LlamaError::new("llama.cpp could not create a sampler chain"))?;
+
+        let mut sampler = Self { inner };
+        sampler.add_llguidance_sampler(vocab, grammar_kind, grammar_data)?;
 
         if params.temperature <= 0.0 {
             sampler.add_owned_sampler(
@@ -541,6 +688,94 @@ impl Sampler {
     ) -> Result<(), LlamaError> {
         let sampler = NonNull::new(sampler)
             .ok_or_else(|| LlamaError::new(format!("llama.cpp could not create the {name}")))?;
+        // SAFETY: the chain and owned sampler are valid. Ownership of the child
+        // sampler moves into the chain.
+        unsafe { raw::llama_sampler_chain_add(self.inner.as_ptr(), sampler.as_ptr()) };
+        Ok(())
+    }
+
+    fn add_grammar_sampler(
+        &mut self,
+        vocab: &VocabRef<'_>,
+        grammar_str: &str,
+        grammar_root: &str,
+    ) -> Result<(), LlamaError> {
+        let grammar_str = CString::new(grammar_str)
+            .map_err(|_| LlamaError::new("grammar may not contain interior NUL bytes"))?;
+        let grammar_root = CString::new(grammar_root)
+            .map_err(|_| LlamaError::new("grammar root may not contain interior NUL bytes"))?;
+        self.add_owned_sampler(
+            // SAFETY: the vocab pointer is borrowed from a live model, both C
+            // strings are valid for the duration of the call, and ownership of
+            // the returned sampler transfers into the sampler chain.
+            unsafe {
+                raw::llama_sampler_init_grammar(
+                    vocab.inner.as_ptr(),
+                    grammar_str.as_ptr(),
+                    grammar_root.as_ptr(),
+                )
+            },
+            "grammar sampler",
+        )
+    }
+
+    fn add_json_schema_sampler(
+        &mut self,
+        vocab: &VocabRef<'_>,
+        json_schema: &str,
+    ) -> Result<(), LlamaError> {
+        let json_schema = CString::new(json_schema)
+            .map_err(|_| LlamaError::new("JSON schema may not contain interior NUL bytes"))?;
+        let sampler =
+            NonNull::new(
+                // SAFETY: the vocab pointer is borrowed from a live model, the JSON
+                // schema C string remains alive for the duration of the call, and
+                // ownership of the returned sampler transfers into the sampler
+                // chain when initialization succeeds.
+                unsafe {
+                    xlai_llama_sampler_init_json_schema(vocab.inner.as_ptr(), json_schema.as_ptr())
+                },
+            )
+            .ok_or_else(|| {
+                LlamaError::new(llguidance_error_message().unwrap_or_else(|| {
+                    "llama.cpp could not create the JSON schema sampler".to_owned()
+                }))
+            })?;
+        // SAFETY: the chain and owned sampler are valid. Ownership of the child
+        // sampler moves into the chain.
+        unsafe { raw::llama_sampler_chain_add(self.inner.as_ptr(), sampler.as_ptr()) };
+        Ok(())
+    }
+
+    fn add_llguidance_sampler(
+        &mut self,
+        vocab: &VocabRef<'_>,
+        grammar_kind: &str,
+        grammar_data: &str,
+    ) -> Result<(), LlamaError> {
+        let grammar_kind = CString::new(grammar_kind)
+            .map_err(|_| LlamaError::new("grammar kind may not contain interior NUL bytes"))?;
+        let grammar_data = CString::new(grammar_data)
+            .map_err(|_| LlamaError::new("grammar data may not contain interior NUL bytes"))?;
+        let sampler =
+            NonNull::new(
+                // SAFETY: the vocab pointer is borrowed from a live model, both C
+                // strings remain alive for the duration of the call, and ownership
+                // of the returned sampler transfers into the sampler chain when
+                // initialization succeeds.
+                unsafe {
+                    xlai_llama_sampler_init_llguidance(
+                        vocab.inner.as_ptr(),
+                        grammar_kind.as_ptr(),
+                        grammar_data.as_ptr(),
+                    )
+                },
+            )
+            .ok_or_else(|| {
+                LlamaError::new(llguidance_error_message().unwrap_or_else(|| {
+                    "llama.cpp could not create the LLGuidance sampler".to_owned()
+                }))
+            })?;
         // SAFETY: the chain and owned sampler are valid. Ownership of the child
         // sampler moves into the chain.
         unsafe { raw::llama_sampler_chain_add(self.inner.as_ptr(), sampler.as_ptr()) };
@@ -644,4 +879,21 @@ fn ensure_backend_initialized() {
         // SAFETY: llama.cpp documents this as a one-time process-level init.
         unsafe { raw::llama_backend_init() };
     });
+}
+
+fn llguidance_error_message() -> Option<String> {
+    // SAFETY: the wrapper returns either null or a stable NUL-terminated
+    // thread-local string pointer valid until the next wrapper call.
+    let message = unsafe { xlai_llama_last_error_message() };
+    if message.is_null() {
+        return None;
+    }
+
+    // SAFETY: non-null pointers from the wrapper always reference a
+    // NUL-terminated string.
+    Some(
+        unsafe { CStr::from_ptr(message) }
+            .to_string_lossy()
+            .into_owned(),
+    )
 }
