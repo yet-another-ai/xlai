@@ -1,8 +1,11 @@
 use serde_json::Value;
+use tera::Context;
 use xlai_core::{ErrorKind, StructuredOutput, StructuredOutputFormat, XlaiError};
 use xlai_llama_cpp_sys as sys;
 
+use crate::prompt_store::EmbeddedPromptStore;
 use crate::request::{PreparedRequest, PromptMessage, PromptRole};
+use crate::tool_calling::tool_call_instruction;
 use crate::{LlamaCppConfig, LoadedModel, map_provider_error};
 
 pub(crate) fn render_prompt(
@@ -10,7 +13,7 @@ pub(crate) fn render_prompt(
     loaded: &LoadedModel,
     prepared: &PreparedRequest,
 ) -> Result<String, XlaiError> {
-    let prompt_messages = prompt_messages_with_structured_output(prepared)?;
+    let prompt_messages = prompt_messages_with_constraints(prepared)?;
 
     if let Some(template) = config
         .chat_template
@@ -45,15 +48,15 @@ pub(crate) fn render_manual_prompt(messages: &[PromptMessage]) -> String {
     prompt
 }
 
-pub(crate) fn prompt_messages_with_structured_output(
+pub(crate) fn prompt_messages_with_constraints(
     prepared: &PreparedRequest,
 ) -> Result<Vec<PromptMessage>, XlaiError> {
-    let Some(structured_output) = &prepared.structured_output else {
+    let instruction = combined_instruction(prepared)?;
+    let Some(instruction) = instruction else {
         return Ok(prepared.messages.clone());
     };
 
     let mut messages = prepared.messages.clone();
-    let instruction = structured_output_instruction(structured_output)?;
     if let Some(system_message) = messages
         .iter_mut()
         .find(|message| message.role == PromptRole::System)
@@ -75,10 +78,36 @@ pub(crate) fn prompt_messages_with_structured_output(
     Ok(messages)
 }
 
+fn combined_instruction(prepared: &PreparedRequest) -> Result<Option<String>, XlaiError> {
+    let mut sections = Vec::new();
+
+    if !prepared.available_tools.is_empty() {
+        sections.push(tool_call_instruction(&prepared.available_tools)?);
+    }
+
+    if let Some(structured_output) = &prepared.structured_output {
+        sections.push(structured_output_instruction(structured_output)?);
+    }
+
+    if sections.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(sections.join("\n\n")))
+}
+
 pub(crate) fn structured_output_instruction(
     structured_output: &StructuredOutput,
 ) -> Result<String, XlaiError> {
-    let mut instruction = match &structured_output.format {
+    let mut context = Context::new();
+    if let Some(name) = structured_output.name.as_deref() {
+        context.insert("name", name);
+    }
+    if let Some(description) = structured_output.description.as_deref() {
+        context.insert("description", description);
+    }
+
+    match &structured_output.format {
         StructuredOutputFormat::JsonSchema { schema } => {
             let schema = serde_json::to_string_pretty(schema).map_err(|error| {
                 XlaiError::new(
@@ -86,31 +115,14 @@ pub(crate) fn structured_output_instruction(
                     format!("structured output schema could not be serialized: {error}"),
                 )
             })?;
-            let mut instruction = String::from(
-                "Respond with exactly one valid JSON value that matches the provided JSON Schema. Do not add markdown fences, prose, or any text before or after the JSON.",
-            );
-            instruction.push_str("\nJSON Schema:\n");
-            instruction.push_str(&schema);
-            instruction
+            context.insert("schema", &schema);
+            EmbeddedPromptStore::render("system/structured-output-json-schema.md", &context)
         }
         StructuredOutputFormat::LarkGrammar { grammar } => {
-            let mut instruction = String::from(
-                "Respond with output that matches the provided Lark grammar exactly. Do not add markdown fences, prose, or any text outside the grammar-constrained output.",
-            );
-            instruction.push_str("\nLark Grammar:\n");
-            instruction.push_str(grammar);
-            instruction
+            context.insert("grammar", grammar);
+            EmbeddedPromptStore::render("system/structured-output-lark-grammar.md", &context)
         }
-    };
-    if let Some(name) = structured_output.name.as_deref() {
-        instruction.push_str("\nSchema name: ");
-        instruction.push_str(name);
     }
-    if let Some(description) = structured_output.description.as_deref() {
-        instruction.push_str("\nSchema description: ");
-        instruction.push_str(description);
-    }
-    Ok(instruction)
 }
 
 pub(crate) fn validate_structured_output_schema(

@@ -17,6 +17,7 @@ pub(crate) enum PromptRole {
     System,
     User,
     Assistant,
+    Tool,
 }
 
 #[derive(Clone, Debug)]
@@ -95,18 +96,10 @@ impl PreparedRequest {
             validate_structured_output_schema(structured_output)?;
         }
 
-        if !self.available_tools.is_empty() {
-            let tool_names = self
-                .available_tools
-                .iter()
-                .map(|tool| tool.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
+        if self.structured_output.is_some() && !self.available_tools.is_empty() {
             return Err(XlaiError::new(
                 ErrorKind::Unsupported,
-                format!(
-                    "llama.cpp tool calling is not implemented yet; requested tools: {tool_names}"
-                ),
+                "llama.cpp does not currently support combining structured output with tool calling in the same request",
             ));
         }
 
@@ -127,10 +120,7 @@ impl PromptRole {
             MessageRole::System => Ok(Self::System),
             MessageRole::User => Ok(Self::User),
             MessageRole::Assistant => Ok(Self::Assistant),
-            MessageRole::Tool => Err(XlaiError::new(
-                ErrorKind::Unsupported,
-                "llama.cpp tool result messages are not implemented yet",
-            )),
+            MessageRole::Tool => Ok(Self::Tool),
         }
     }
 
@@ -140,6 +130,7 @@ impl PromptRole {
             Self::System => "system",
             Self::User => "user",
             Self::Assistant => "assistant",
+            Self::Tool => "tool",
         }
     }
 
@@ -149,6 +140,7 @@ impl PromptRole {
             Self::System => "System",
             Self::User => "User",
             Self::Assistant => "Assistant",
+            Self::Tool => "Tool",
         }
     }
 }
@@ -169,6 +161,23 @@ pub(crate) fn extract_text_content(message: &ChatMessage) -> Result<String, Xlai
                 ));
             }
         }
+    }
+
+    if message.role == MessageRole::Tool {
+        let mut content = String::new();
+        if let Some(tool_name) = message.tool_name.as_deref() {
+            content.push_str("Tool: ");
+            content.push_str(tool_name);
+        } else {
+            content.push_str("Tool result");
+        }
+        if let Some(tool_call_id) = message.tool_call_id.as_deref() {
+            content.push_str("\nCall ID: ");
+            content.push_str(tool_call_id);
+        }
+        content.push_str("\nResult:\n");
+        content.push_str(&text);
+        return Ok(content);
     }
 
     Ok(text)

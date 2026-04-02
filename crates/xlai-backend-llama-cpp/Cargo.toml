@@ -8,7 +8,9 @@ license.workspace = true
 [dependencies]
 async-stream.workspace = true
 jsonschema.workspace = true
+rust-embed.workspace = true
 serde_json.workspace = true
+tera.workspace = true
 tokio.workspace = true
 xlai-core = { path = "../xlai-core" }
 xlai-llama-cpp-sys = { path = "../xlai-llama-cpp-sys" }

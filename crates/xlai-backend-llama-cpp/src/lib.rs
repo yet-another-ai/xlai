@@ -10,13 +10,16 @@ use xlai_core::{
 use xlai_llama_cpp_sys as sys;
 
 mod prompt;
+mod prompt_store;
 mod request;
+mod tool_calling;
 
 #[cfg(test)]
 mod tests;
 
 use prompt::{render_prompt, validate_structured_output};
 use request::PreparedRequest;
+use tool_calling::{ToolResponse, parse_tool_response, tool_response_schema};
 
 #[derive(Clone, Debug)]
 pub struct LlamaCppConfig {
@@ -258,7 +261,28 @@ impl LlamaCppChatModel {
                 .map_err(map_provider_error)?;
         }
 
-        let mut sampler = if let Some(structured_output) = &prepared.structured_output {
+        let tool_call_schema = (!prepared.available_tools.is_empty())
+            .then(|| tool_response_schema(&prepared.available_tools));
+
+        let mut sampler = if let Some(schema) = tool_call_schema.as_ref() {
+            let schema = serde_json::to_string(schema).map_err(|error| {
+                XlaiError::new(
+                    ErrorKind::Validation,
+                    format!("tool-calling schema could not be serialized: {error}"),
+                )
+            })?;
+            sys::Sampler::new_with_json_schema(
+                &sys::SamplerParams {
+                    seed: self.config.seed,
+                    temperature: prepared.temperature,
+                    top_k: self.config.top_k,
+                    top_p: self.config.top_p,
+                },
+                &vocab,
+                &schema,
+            )
+            .map_err(map_provider_error)?
+        } else if let Some(structured_output) = &prepared.structured_output {
             match &structured_output.format {
                 StructuredOutputFormat::JsonSchema { schema } => {
                     let schema = serde_json::to_string(schema).map_err(|error| {
@@ -304,9 +328,12 @@ impl LlamaCppChatModel {
             .map_err(map_provider_error)?
         };
 
-        emit(ChatChunk::MessageStart {
-            role: MessageRole::Assistant,
-        })?;
+        let tool_mode = !prepared.available_tools.is_empty();
+        if !tool_mode {
+            emit(ChatChunk::MessageStart {
+                role: MessageRole::Assistant,
+            })?;
+        }
 
         let mut generated = String::new();
         let mut output_tokens = 0_u32;
@@ -325,10 +352,12 @@ impl LlamaCppChatModel {
                 .map_err(map_provider_error)?;
             if !piece.is_empty() {
                 generated.push_str(&piece);
-                emit(ChatChunk::ContentDelta(xlai_core::StreamTextDelta {
-                    part_index: 0,
-                    delta: piece,
-                }))?;
+                if !tool_mode {
+                    emit(ChatChunk::ContentDelta(xlai_core::StreamTextDelta {
+                        part_index: 0,
+                        delta: piece,
+                    }))?;
+                }
             }
 
             let mut decode_token = vec![token];
@@ -338,19 +367,40 @@ impl LlamaCppChatModel {
             output_tokens = output_tokens.saturating_add(1);
         }
 
-        if let Some(structured_output) = &prepared.structured_output {
-            validate_structured_output(structured_output, &generated)?;
-        }
+        let (message_text, tool_calls, finish_reason) = if tool_mode {
+            match parse_tool_response(&generated, &prepared.available_tools)? {
+                ToolResponse::AssistantMessage(message_text) => {
+                    emit(ChatChunk::MessageStart {
+                        role: MessageRole::Assistant,
+                    })?;
+                    if !message_text.is_empty() {
+                        emit(ChatChunk::ContentDelta(xlai_core::StreamTextDelta {
+                            part_index: 0,
+                            delta: message_text.clone(),
+                        }))?;
+                    }
+                    (message_text, Vec::new(), finish_reason)
+                }
+                ToolResponse::ToolCalls(tool_calls) => {
+                    (String::new(), tool_calls, FinishReason::ToolCalls)
+                }
+            }
+        } else {
+            if let Some(structured_output) = &prepared.structured_output {
+                validate_structured_output(structured_output, &generated)?;
+            }
+            (generated, Vec::new(), finish_reason)
+        };
 
         Ok(ChatResponse {
             message: ChatMessage {
                 role: MessageRole::Assistant,
-                content: ChatContent::text(generated),
+                content: ChatContent::text(message_text),
                 tool_name: None,
                 tool_call_id: None,
                 metadata: Default::default(),
             },
-            tool_calls: Vec::new(),
+            tool_calls,
             usage: Some(xlai_core::TokenUsage {
                 input_tokens: prompt_tokens.len().try_into().unwrap_or(u32::MAX),
                 output_tokens,

@@ -2702,7 +2702,9 @@ version = "0.1.0"
 dependencies = [
  "async-stream",
  "jsonschema",
+ "rust-embed",
  "serde_json",
+ "tera",
  "tokio",
  "xlai-core",
  "xlai-llama-cpp-sys",
