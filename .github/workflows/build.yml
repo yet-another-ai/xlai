@@ -78,7 +78,7 @@ jobs:
       - name: Install macOS Vulkan prerequisites
         if: runner.os == 'macOS' && contains(matrix.feature_set, 'vulkan')
         run: |
-          brew install glslc pkg-config
+          brew install shaderc pkg-config
 
       - name: Install Vulkan SDK
         if: contains(matrix.feature_set, 'vulkan')
@@ -115,29 +115,6 @@ jobs:
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
-
-      - name: Install Linux build prerequisites
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libasound2-dev \
-            libjack-jackd2-dev \
-            libjack-jackd2-0 \
-            libpipewire-0.3-dev \
-            glslc \
-            pkg-config
-      
-      - name: Install macOS build prerequisites
-        if: runner.os == 'macOS'
-        run: |
-          brew install glslc pkg-configs
-
-      - name: Install Vulkan SDK
-        id: install_vulkan_sdk
-        uses: jakoch/install-vulkan-sdk-action@v1
-        with:
-          vulkan_version: latest
 
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
