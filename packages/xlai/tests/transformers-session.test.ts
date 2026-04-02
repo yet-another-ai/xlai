@@ -131,8 +131,10 @@ describe('transformers sessions', () => {
     expect(
       mockState.createTransformersChatSessionWithFileSystem,
     ).toHaveBeenCalledTimes(1);
-    const [, bridge] =
-      mockState.createTransformersChatSessionWithFileSystem.mock.calls[0] ?? [];
+    const firstCall = mockState.createTransformersChatSessionWithFileSystem.mock
+      .calls[0] as unknown as [unknown, Record<string, unknown>] | undefined;
+    expect(firstCall).toBeDefined();
+    const bridge = firstCall?.[1];
     expect(bridge).toMatchObject({
       read: expect.any(Function),
       exists: expect.any(Function),

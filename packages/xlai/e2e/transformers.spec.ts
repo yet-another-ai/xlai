@@ -18,8 +18,9 @@ test('runs transformers.js constrained generation with a real browser model', as
 
   const result = await page.evaluate(
     async ({ modelId }) => {
+      const modulePath = '/src/transformers/index.ts';
       const { createTransformersChatSession, createXlaiTransformersJsAdapter } =
-        await import('/src/transformers/index.ts');
+        await import(/* @vite-ignore */ modulePath);
 
       const adapter = await createXlaiTransformersJsAdapter({
         speculationDepth: 5,
