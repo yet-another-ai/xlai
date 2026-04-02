@@ -1,5 +1,6 @@
 use std::env;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -42,6 +43,7 @@ fn main() -> BuildResult<()> {
     let mut config = cmake::Config::new(&source_dir);
     config
         .profile("Release")
+        .very_verbose(target_os == "windows")
         .build_target("common")
         .define("BUILD_SHARED_LIBS", "OFF")
         .define("GGML_STATIC", "ON")
@@ -351,6 +353,12 @@ fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<()> {
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let path = entry.path();
+        let file_name = entry.file_name();
+
+        if file_name == OsStr::new(".git") {
+            continue;
+        }
+
         let destination = dst.join(entry.file_name());
         let file_type = entry.file_type()?;
 
