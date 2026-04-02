@@ -78,6 +78,10 @@ The workspace uses:
 cargo build --workspace
 ```
 
+On Linux and Windows, the native `llama.cpp` build now enables OpenBLAS by default.
+Install an OpenBLAS development package first, or disable default features for the
+native crates if you need a no-BLAS build.
+
 ### Test
 
 ```bash
@@ -401,7 +405,7 @@ Planned or expected next areas include:
   - [x] [Azure OpenAI API](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference)
 - [x] llama.cpp Backends
   - [x] CPU
-  - [ ] BLAS
+  - [x] BLAS
   - [x] Accelerate.framework
   - [x] Metal
   - [x] Vulkan

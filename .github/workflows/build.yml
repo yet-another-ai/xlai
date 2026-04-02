@@ -67,18 +67,42 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Install Linux OpenBLAS prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev
+
+      - name: Install Windows OpenBLAS prerequisites
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vcpkgRoot = if ($env:VCPKG_INSTALLATION_ROOT) { $env:VCPKG_INSTALLATION_ROOT } else { Join-Path $env:USERPROFILE vcpkg }
+
+          if (-not (Test-Path "$vcpkgRoot\vcpkg.exe")) {
+            if (-not (Test-Path $vcpkgRoot)) {
+              git clone https://github.com/microsoft/vcpkg $vcpkgRoot
+            }
+            & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
+          }
+
+          $env:VCPKG_INSTALLATION_ROOT = $vcpkgRoot
+          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_INSTALLATION_ROOT=$vcpkgRoot"
+          & "$vcpkgRoot\vcpkg.exe" install openblas:x64-windows-static-md
+
+          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake"
+          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_TARGET_TRIPLET=x64-windows-static-md"
+
       - name: Install Linux Vulkan prerequisites
         if: runner.os == 'Linux' && contains(matrix.feature_set, 'vulkan')
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            glslc \
-            pkg-config
+          sudo apt-get install -y glslc
 
       - name: Install macOS Vulkan prerequisites
         if: runner.os == 'macOS' && contains(matrix.feature_set, 'vulkan')
         run: |
-          brew install shaderc pkg-config
+          brew install shaderc
 
       - name: Install Vulkan SDK
         if: contains(matrix.feature_set, 'vulkan')

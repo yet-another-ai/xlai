@@ -6,7 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 
 [features]
-default = []
+default = ["openblas"]
+openblas = ["xlai-backend-llama-cpp/openblas"]
 metal = ["xlai-backend-llama-cpp/metal"]
 vulkan = ["xlai-backend-llama-cpp/vulkan"]
 
