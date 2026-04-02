@@ -75,7 +75,7 @@ fn main() -> BuildResult<()> {
         .define("GGML_VIRTGPU", "OFF")
         .define("GGML_WEBGPU", "OFF");
 
-    apply_cmake_env_overrides(&mut config);
+    apply_cmake_env_overrides(&mut config, enable_openblas);
 
     if let Ok(generator) = env::var("CMAKE_GENERATOR") {
         config.generator(generator);
@@ -194,7 +194,7 @@ impl BackendFeatureSet {
     }
 }
 
-fn apply_cmake_env_overrides(config: &mut cmake::Config) {
+fn apply_cmake_env_overrides(config: &mut cmake::Config, enable_openblas: bool) {
     if let Ok(toolchain_file) = env::var("CMAKE_TOOLCHAIN_FILE") {
         config.define("CMAKE_TOOLCHAIN_FILE", toolchain_file);
     }
@@ -209,6 +209,12 @@ fn apply_cmake_env_overrides(config: &mut cmake::Config) {
 
     if let Ok(vcpkg_triplet) = env::var("VCPKG_TARGET_TRIPLET") {
         config.define("VCPKG_TARGET_TRIPLET", vcpkg_triplet);
+    }
+
+    if enable_openblas && let Some(include_dir) = resolve_openblas_include_dir() {
+        let include_dir = include_dir.display().to_string();
+        config.define("BLAS_INCLUDE_DIRS", &include_dir);
+        config.define("OpenBLAS_INCLUDE_DIR", include_dir);
     }
 }
 
@@ -253,6 +259,32 @@ fn emit_vulkan_search_paths(enable_vulkan: bool, target_os: &str) {
             emit_search_path(&vulkan_sdk.join("Lib"));
         }
         _ => {}
+    }
+}
+
+fn resolve_openblas_include_dir() -> Option<PathBuf> {
+    if let Ok(openblas_root) = env::var("OpenBLAS_ROOT") {
+        let include_dir = PathBuf::from(openblas_root).join("include");
+        if include_dir.exists() {
+            return Some(include_dir);
+        }
+    }
+
+    let Ok(vcpkg_root) = env::var("VCPKG_INSTALLATION_ROOT") else {
+        return None;
+    };
+    let Ok(vcpkg_triplet) = env::var("VCPKG_TARGET_TRIPLET") else {
+        return None;
+    };
+
+    let include_dir = Path::new(&vcpkg_root)
+        .join("installed")
+        .join(vcpkg_triplet)
+        .join("include");
+    if include_dir.exists() {
+        Some(include_dir)
+    } else {
+        None
     }
 }
 
