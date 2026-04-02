@@ -129,6 +129,10 @@ mod tests {
         }
     }
 
+    fn normalize_newlines(text: &str) -> String {
+        text.replace("\r\n", "\n").replace('\r', "\n")
+    }
+
     #[test]
     fn manual_prompt_renderer_uses_embedded_template() {
         let prompt = match render_manual_prompt(&[
@@ -146,7 +150,7 @@ mod tests {
         };
 
         assert_eq!(
-            prompt,
+            normalize_newlines(&prompt),
             "System: Be concise.\n\nUser: Say hello\n\nAssistant:"
         );
     }
@@ -181,8 +185,9 @@ mod tests {
         };
 
         assert_eq!(messages[0].role, PromptRole::System);
-        assert!(messages[0].content.starts_with("Be concise.\n\n"));
-        assert!(messages[0].content.contains("lookup_weather"));
+        let system_message = normalize_newlines(&messages[0].content);
+        assert!(system_message.starts_with("Be concise.\n\n"));
+        assert!(system_message.contains("lookup_weather"));
         assert_eq!(messages[1].role, PromptRole::User);
     }
 
