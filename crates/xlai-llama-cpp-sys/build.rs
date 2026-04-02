@@ -77,22 +77,22 @@ fn main() -> BuildResult<()> {
     );
     generate_bindings(&include_dir, &ggml_include_dir)?;
 
-    emit_search_path(&dst.join("lib"));
-    emit_search_path(&dst.join("lib64"));
-    emit_search_path(&dst.join("build"));
-    emit_search_path(&dst.join("build/common"));
-    emit_search_path(&dst.join("build/src"));
-    emit_search_path(&dst.join("build/ggml/src"));
-    emit_search_path(&dst.join("build/ggml/src/ggml-metal"));
-    emit_search_path(&dst.join("build/ggml/src/ggml-vulkan"));
-    emit_search_path(&dst.join("build/vendor/cpp-httplib"));
+    emit_search_path_variants(&dst.join("lib"));
+    emit_search_path_variants(&dst.join("lib64"));
+    emit_search_path_variants(&dst.join("build"));
+    emit_search_path_variants(&dst.join("build/common"));
+    emit_search_path_variants(&dst.join("build/src"));
+    emit_search_path_variants(&dst.join("build/ggml/src"));
+    emit_search_path_variants(&dst.join("build/ggml/src/ggml-metal"));
+    emit_search_path_variants(&dst.join("build/ggml/src/ggml-vulkan"));
+    emit_search_path_variants(&dst.join("build/vendor/cpp-httplib"));
     if let Ok(cargo_target_dir) = env::var("CARGO_TARGET_DIR") {
         emit_search_path(Path::new(&cargo_target_dir).join("release").as_path());
     } else {
-        emit_search_path(&dst.join("build/llguidance/source/target/release"));
+        emit_search_path_variants(&dst.join("build/llguidance/source/target/release"));
     }
     emit_vulkan_search_paths(feature_set.vulkan, &target_os);
-    emit_search_path(&dst.join("build/bin"));
+    emit_search_path_variants(&dst.join("build/bin"));
 
     let mut libraries = vec![
         "xlai_llama_cpp_wrapper",
@@ -117,6 +117,9 @@ fn main() -> BuildResult<()> {
     match target_os.as_str() {
         "macos" | "ios" => {
             println!("cargo:rustc-link-lib=c++");
+            if enable_accelerate {
+                println!("cargo:rustc-link-lib=framework=Accelerate");
+            }
             if feature_set.metal {
                 println!("cargo:rustc-link-lib=framework=Foundation");
                 println!("cargo:rustc-link-lib=framework=Metal");
@@ -327,6 +330,14 @@ fn replace_once(contents: &str, from: &str, to: &str, path: &Path) -> BuildResul
 fn emit_search_path(path: &Path) {
     if path.exists() {
         println!("cargo:rustc-link-search=native={}", path.display());
+    }
+}
+
+fn emit_search_path_variants(path: &Path) {
+    emit_search_path(path);
+
+    for config in ["Release", "RelWithDebInfo", "Debug", "MinSizeRel"] {
+        emit_search_path(&path.join(config));
     }
 }
 
