@@ -96,15 +96,7 @@ fn main() -> BuildResult<()> {
     );
     generate_bindings(&include_dir, &ggml_include_dir)?;
 
-    emit_search_path_variants(&dst.join("lib"));
-    emit_search_path_variants(&dst.join("lib64"));
-    emit_search_path_variants(&dst.join("build"));
-    emit_search_path_variants(&dst.join("build/common"));
-    emit_search_path_variants(&dst.join("build/src"));
-    emit_search_path_variants(&dst.join("build/ggml/src"));
-    emit_search_path_variants(&dst.join("build/ggml/src/ggml-metal"));
-    emit_search_path_variants(&dst.join("build/ggml/src/ggml-vulkan"));
-    emit_search_path_variants(&dst.join("build/vendor/cpp-httplib"));
+    emit_llama_search_paths(&dst, feature_set, enable_openblas);
     if let Ok(cargo_target_dir) = env::var("CARGO_TARGET_DIR") {
         emit_search_path(Path::new(&cargo_target_dir).join("release").as_path());
     } else {
@@ -217,6 +209,27 @@ fn apply_cmake_env_overrides(config: &mut cmake::Config) {
 
     if let Ok(vcpkg_triplet) = env::var("VCPKG_TARGET_TRIPLET") {
         config.define("VCPKG_TARGET_TRIPLET", vcpkg_triplet);
+    }
+}
+
+fn emit_llama_search_paths(dst: &Path, feature_set: BackendFeatureSet, enable_openblas: bool) {
+    emit_search_path_variants(&dst.join("lib"));
+    emit_search_path_variants(&dst.join("lib64"));
+    emit_search_path_variants(&dst.join("build"));
+    emit_search_path_variants(&dst.join("build/common"));
+    emit_search_path_variants(&dst.join("build/src"));
+    emit_search_path_variants(&dst.join("build/ggml/src"));
+    emit_search_path_variants(&dst.join("build/vendor/cpp-httplib"));
+    let ggml_src_dir = dst.join("build/ggml/src");
+
+    if enable_openblas {
+        emit_search_path_variants(&ggml_src_dir.join("ggml-blas"));
+    }
+    if feature_set.metal {
+        emit_search_path_variants(&ggml_src_dir.join("ggml-metal"));
+    }
+    if feature_set.vulkan {
+        emit_search_path_variants(&ggml_src_dir.join("ggml-vulkan"));
     }
 }
 
