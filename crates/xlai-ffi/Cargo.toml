@@ -5,6 +5,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+default = []
+metal = ["xlai-native/metal"]
+vulkan = ["xlai-native/vulkan"]
+
 [lib]
 crate-type = ["cdylib"]
 

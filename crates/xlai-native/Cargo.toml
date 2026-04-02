@@ -5,10 +5,16 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+default = []
+metal = ["xlai-backend-llama-cpp/metal"]
+vulkan = ["xlai-backend-llama-cpp/vulkan"]
+
 [lints]
 workspace = true
 
 [dependencies]
+xlai-backend-llama-cpp = { path = "../xlai-backend-llama-cpp" }
 xlai-backend-openai = { path = "../xlai-backend-openai" }
 xlai-core = { path = "../xlai-core" }
 xlai-runtime = { path = "../xlai-runtime" }

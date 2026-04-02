@@ -26,25 +26,35 @@ jobs:
           - name: linux-x86_64
             runner: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            feature_set: vulkan
+            cargo_features: xlai-ffi/vulkan
             artifact_path: target/x86_64-unknown-linux-gnu/release/libxlai_ffi.so
           - name: windows-x86_64
             runner: windows-latest
             target: x86_64-pc-windows-msvc
+            feature_set: vulkan
+            cargo_features: xlai-ffi/vulkan
             artifact_path: |
               target/x86_64-pc-windows-msvc/release/xlai_ffi.dll
               target/x86_64-pc-windows-msvc/release/xlai_ffi.lib
           - name: macos-x86_64
             runner: macos-latest
             target: x86_64-apple-darwin
+            feature_set: metal,vulkan
+            cargo_features: xlai-ffi/metal,xlai-ffi/vulkan
             artifact_path: target/x86_64-apple-darwin/release/libxlai_ffi.dylib
           - name: macos-arm64
             runner: macos-latest
             target: aarch64-apple-darwin
+            feature_set: metal,vulkan
+            cargo_features: xlai-ffi/metal,xlai-ffi/vulkan
             artifact_path: target/aarch64-apple-darwin/release/libxlai_ffi.dylib
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -57,8 +67,27 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Install Linux Vulkan prerequisites
+        if: runner.os == 'Linux' && contains(matrix.feature_set, 'vulkan')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            glslc \
+            pkg-config
+
+      - name: Install macOS Vulkan prerequisites
+        if: runner.os == 'macOS' && contains(matrix.feature_set, 'vulkan')
+        run: |
+          brew install shaderc pkg-config
+
+      - name: Install Vulkan SDK
+        if: contains(matrix.feature_set, 'vulkan')
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: latest
+
       - name: Build native workspace
-        run: cargo build --locked --release --workspace --exclude xlai-wasm --target ${{ matrix.target }}
+        run: cargo build --locked --release --workspace --exclude xlai-wasm --target ${{ matrix.target }} --features ${{ matrix.cargo_features }}
 
       - name: Upload xlai-ffi artifact
         uses: actions/upload-artifact@v7
@@ -73,6 +102,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

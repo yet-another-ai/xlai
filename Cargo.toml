@@ -1,7 +1,9 @@
 [workspace]
 members = [
+    "crates/xlai-backend-llama-cpp",
     "crates/xlai-backend-openai",
     "crates/xlai-core", "crates/xlai-ffi",
+    "crates/xlai-llama-cpp-sys",
     "crates/xlai-native",
     "crates/xlai-runtime",
     "crates/xlai-wasm",
@@ -17,10 +19,13 @@ license = "Apache-2.0"
 [workspace.dependencies]
 async-stream = "0.3"
 base64 = "0.22"
+bindgen = "0.72"
+cmake = "0.1"
 futures-core = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 getrandom = "0.2"
 gray_matter = "0.3.2"
+jsonschema = { version = "0.45.0", default-features = false }
 js-sys = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["json", "multipart", "stream"] }
 rust-embed = "8.11.0"

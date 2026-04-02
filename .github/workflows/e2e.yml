@@ -13,6 +13,9 @@ env:
   SCCACHE_GHA_ENABLED: 'true'
   RUSTC_WRAPPER: sccache
   CARGO_INCREMENTAL: '0'
+  LLAMA_CPP_FIXTURE_PATH: fixtures/llama.cpp/Qwen3.5-0.8B-Q4_0.gguf
+  LLAMA_CPP_FIXTURE_REPO: unsloth/Qwen3.5-0.8B-GGUF
+  LLAMA_CPP_FIXTURE_FILE: Qwen3.5-0.8B-Q4_0.gguf
 
 jobs:
   e2e-rust:
@@ -35,6 +38,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -45,12 +50,34 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Install Hugging Face CLI
+        run: python -m pip install --upgrade "huggingface_hub[cli]"
+
+      - name: Cache llama.cpp test fixture
+        uses: actions/cache@v5
+        with:
+          path: fixtures/llama.cpp
+          key: llama-cpp-fixture-${{ env.LLAMA_CPP_FIXTURE_FILE }}-v1
+
+      - name: Download llama.cpp test fixture
+        shell: bash
+        run: |
+          mkdir -p "$(dirname "$LLAMA_CPP_FIXTURE_PATH")"
+          hf download "$LLAMA_CPP_FIXTURE_REPO" "$LLAMA_CPP_FIXTURE_FILE" --repo-type model --local-dir "$(dirname "$LLAMA_CPP_FIXTURE_PATH")"
+          test -f "$LLAMA_CPP_FIXTURE_PATH"
+
       - name: Run ignored e2e tests
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           OPENAI_TRANSCRIPTION_MODEL: ${{ vars.OPENAI_TRANSCRIPTION_MODEL }}
+          LLAMA_CPP_MODEL: ${{ github.workspace }}/${{ env.LLAMA_CPP_FIXTURE_PATH }}
         run: cargo test --workspace -- --ignored
 
   e2e-javascript:

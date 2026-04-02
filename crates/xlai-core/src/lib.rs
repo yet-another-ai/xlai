@@ -352,12 +352,67 @@ pub enum FinishReason {
     Stopped,
 }
 
+/// Structured output request for providers that can honor it.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum StructuredOutputFormat {
+    JsonSchema { schema: Value },
+    LarkGrammar { grammar: String },
+}
+
+/// Structured output request for providers that can honor it.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct StructuredOutput {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(flatten)]
+    pub format: StructuredOutputFormat,
+}
+
+impl StructuredOutput {
+    #[must_use]
+    pub fn json_schema(schema: Value) -> Self {
+        Self {
+            name: None,
+            description: None,
+            format: StructuredOutputFormat::JsonSchema { schema },
+        }
+    }
+
+    #[must_use]
+    pub fn lark_grammar(grammar: impl Into<String>) -> Self {
+        Self {
+            name: None,
+            description: None,
+            format: StructuredOutputFormat::LarkGrammar {
+                grammar: grammar.into(),
+            },
+        }
+    }
+
+    #[must_use]
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ChatRequest {
     pub model: Option<String>,
     pub system_prompt: Option<String>,
     pub messages: Vec<ChatMessage>,
     pub available_tools: Vec<ToolDefinition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structured_output: Option<StructuredOutput>,
     #[serde(default)]
     pub metadata: Metadata,
     pub temperature: Option<f32>,
@@ -684,7 +739,10 @@ impl<T> FileSystem for T where
 mod tests {
     use serde_json::json;
 
-    use super::{ChatContent, ChatMessage, ContentPart, MediaSource, MessageRole};
+    use super::{
+        ChatContent, ChatMessage, ContentPart, MediaSource, MessageRole, StructuredOutput,
+        StructuredOutputFormat,
+    };
 
     #[test]
     fn chat_message_deserializes_missing_metadata_as_empty_map() {
@@ -793,5 +851,60 @@ mod tests {
             return;
         };
         assert_eq!(back, c);
+    }
+
+    #[test]
+    fn structured_output_round_trips_json_schema_format() {
+        let output = StructuredOutput::json_schema(json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            },
+            "required": ["name"],
+            "additionalProperties": false
+        }))
+        .with_name("person")
+        .with_description("A person object");
+
+        let serialized = serde_json::to_value(&output);
+        assert!(serialized.is_ok(), "serialize");
+        let Ok(v) = serialized else {
+            return;
+        };
+        assert_eq!(v["type"], json!("json_schema"));
+        assert_eq!(v["schema"]["type"], json!("object"));
+
+        let deserialized: Result<StructuredOutput, _> = serde_json::from_value(v);
+        assert!(deserialized.is_ok(), "deserialize");
+        let Ok(back) = deserialized else {
+            return;
+        };
+        assert_eq!(back, output);
+    }
+
+    #[test]
+    fn structured_output_round_trips_lark_grammar_format() {
+        let output = StructuredOutput::lark_grammar("start: NAME\nNAME: /[a-z]+/")
+            .with_name("record")
+            .with_description("A simple lark grammar");
+
+        let serialized = serde_json::to_value(&output);
+        assert!(serialized.is_ok(), "serialize");
+        let Ok(v) = serialized else {
+            return;
+        };
+        assert_eq!(v["type"], json!("lark_grammar"));
+        assert_eq!(v["grammar"], json!("start: NAME\nNAME: /[a-z]+/"));
+
+        let deserialized: Result<StructuredOutput, _> = serde_json::from_value(v);
+        assert!(deserialized.is_ok(), "deserialize");
+        let Ok(back) = deserialized else {
+            return;
+        };
+        assert_eq!(back, output);
+        assert!(matches!(
+            back.format,
+            StructuredOutputFormat::LarkGrammar { .. }
+        ));
     }
 }

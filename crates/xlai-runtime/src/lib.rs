@@ -449,10 +449,10 @@ mod tests {
     use xlai_core::{
         BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
         ChatResponse, ContentPart, FinishReason, FsEntryKind, FsPath, MediaSource, MessageRole,
-        Metadata, RuntimeCapability, Skill, SkillStore, StreamTextDelta, ToolCall,
-        ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType,
-        TranscriptionModel, TranscriptionRequest, TranscriptionResponse, WritableFileSystem,
-        XlaiError,
+        Metadata, RuntimeCapability, Skill, SkillStore, StreamTextDelta, StructuredOutput,
+        StructuredOutputFormat, ToolCall, ToolCallExecutionMode, ToolDefinition, ToolParameter,
+        ToolParameterType, TranscriptionModel, TranscriptionRequest, TranscriptionResponse,
+        WritableFileSystem, XlaiError,
     };
 
     use super::{
@@ -1075,6 +1075,54 @@ mod tests {
                 .as_deref()
                 .is_some_and(|prompt| prompt.contains("tool_skill"))
         );
+
+        Ok(())
+    }
+
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn chat_session_propagates_structured_output_requests() -> Result<(), XlaiError> {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let model = Arc::new(RecordingChatModel::new(
+            requests.clone(),
+            vec![ChatResponse {
+                message: assistant_message("{\"name\":\"Ada\"}"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            }],
+        ));
+
+        let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+        let chat = runtime.chat_session().with_structured_output(
+            StructuredOutput::lark_grammar("start: NAME\nNAME: /[A-Z][a-z]+/")
+                .with_name("person")
+                .with_description("Capitalized name"),
+        );
+
+        let _response = chat.prompt("Return a name.").await?;
+
+        let requests = lock_unpoisoned(&requests);
+        assert_eq!(requests.len(), 1);
+        let structured_output = requests[0].structured_output.as_ref();
+        assert!(
+            structured_output.is_some(),
+            "structured output should be propagated"
+        );
+        let Some(structured_output) = structured_output else {
+            return Ok(());
+        };
+        assert_eq!(structured_output.name.as_deref(), Some("person"));
+        assert_eq!(
+            structured_output.description.as_deref(),
+            Some("Capitalized name")
+        );
+        assert!(matches!(
+            &structured_output.format,
+            StructuredOutputFormat::LarkGrammar { grammar }
+                if grammar == "start: NAME\nNAME: /[A-Z][a-z]+/"
+        ));
 
         Ok(())
     }

@@ -9,8 +9,8 @@ use serde_json::Value;
 use tera::Context;
 use xlai_core::{
     BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatRequest, ChatResponse,
-    ContentPart, ErrorKind, MaybeSend, MessageRole, RuntimeBound, ToolCall, ToolCallExecutionMode,
-    ToolDefinition, ToolResult, XlaiError,
+    ContentPart, ErrorKind, MaybeSend, MessageRole, RuntimeBound, StructuredOutput, ToolCall,
+    ToolCallExecutionMode, ToolDefinition, ToolResult, XlaiError,
 };
 
 use crate::{EmbeddedPromptStore, XlaiRuntime};
@@ -55,6 +55,7 @@ pub struct Chat {
     system_prompt: Option<String>,
     temperature: Option<f32>,
     max_output_tokens: Option<u32>,
+    structured_output: Option<StructuredOutput>,
     max_tool_round_trips: usize,
     tools: BTreeMap<String, RegisteredTool>,
 }
@@ -68,6 +69,7 @@ impl Chat {
             system_prompt: None,
             temperature: None,
             max_output_tokens: None,
+            structured_output: None,
             max_tool_round_trips: 8,
             tools: BTreeMap::new(),
         }
@@ -123,6 +125,12 @@ impl Chat {
     #[must_use]
     pub fn with_max_output_tokens(mut self, max_output_tokens: u32) -> Self {
         self.max_output_tokens = Some(max_output_tokens);
+        self
+    }
+
+    #[must_use]
+    pub fn with_structured_output(mut self, structured_output: StructuredOutput) -> Self {
+        self.structured_output = Some(structured_output);
         self
     }
 
@@ -292,6 +300,7 @@ impl Chat {
         let system_prompt = self.system_prompt.clone();
         let temperature = self.temperature;
         let max_output_tokens = self.max_output_tokens;
+        let structured_output = self.structured_output.clone();
         let max_tool_round_trips = self.max_tool_round_trips;
         let tools = self.tools.clone();
 
@@ -305,6 +314,7 @@ impl Chat {
                         .values()
                         .map(|tool| tool.definition.clone())
                         .collect(),
+                    structured_output: structured_output.clone(),
                     metadata: BTreeMap::new(),
                     temperature,
                     max_output_tokens,
@@ -363,6 +373,7 @@ impl Chat {
             system_prompt: self.system_prompt.clone(),
             messages,
             available_tools: self.tool_definitions(),
+            structured_output: self.structured_output.clone(),
             metadata: BTreeMap::new(),
             temperature: self.temperature,
             max_output_tokens: self.max_output_tokens,
