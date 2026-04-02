@@ -6,6 +6,12 @@ use std::path::{Path, PathBuf};
 
 type BuildResult<T> = Result<T, Box<dyn Error>>;
 
+#[derive(Clone, Copy, Debug, Default)]
+struct BackendFeatureSet {
+    metal: bool,
+    vulkan: bool,
+}
+
 fn main() -> BuildResult<()> {
     let vendor_source_dir = Path::new("vendor/llama.cpp");
     let source_dir = prepare_llama_source(vendor_source_dir)?;
@@ -15,11 +21,14 @@ fn main() -> BuildResult<()> {
     let ggml_include_dir = source_dir.join("ggml/include");
     let wrapper_cpp = Path::new("src/wrapper.cpp");
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+    let feature_set = BackendFeatureSet::from_cargo_features(&target_os)?;
     let enable_accelerate = target_os == "macos";
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed={}", vendor_source_dir.display());
     println!("cargo:rerun-if-changed={}", wrapper_cpp.display());
+    println!("cargo:rerun-if-env-changed=VULKAN_SDK");
 
     let mut config = cmake::Config::new(&source_dir);
     config
@@ -42,9 +51,9 @@ fn main() -> BuildResult<()> {
             "GGML_ACCELERATE",
             if enable_accelerate { "ON" } else { "OFF" },
         )
-        .define("GGML_METAL", "OFF")
+        .define("GGML_METAL", if feature_set.metal { "ON" } else { "OFF" })
         .define("GGML_RPC", "OFF")
-        .define("GGML_VULKAN", "OFF")
+        .define("GGML_VULKAN", if feature_set.vulkan { "ON" } else { "OFF" })
         .define("GGML_CUDA", "OFF")
         .define("GGML_HIP", "OFF")
         .define("GGML_SYCL", "OFF")
@@ -74,15 +83,18 @@ fn main() -> BuildResult<()> {
     emit_search_path(&dst.join("build/common"));
     emit_search_path(&dst.join("build/src"));
     emit_search_path(&dst.join("build/ggml/src"));
+    emit_search_path(&dst.join("build/ggml/src/ggml-metal"));
+    emit_search_path(&dst.join("build/ggml/src/ggml-vulkan"));
     emit_search_path(&dst.join("build/vendor/cpp-httplib"));
     if let Ok(cargo_target_dir) = env::var("CARGO_TARGET_DIR") {
         emit_search_path(Path::new(&cargo_target_dir).join("release").as_path());
     } else {
         emit_search_path(&dst.join("build/llguidance/source/target/release"));
     }
+    emit_vulkan_search_paths(feature_set.vulkan, &target_os);
     emit_search_path(&dst.join("build/bin"));
 
-    for library in [
+    let mut libraries = vec![
         "xlai_llama_cpp_wrapper",
         "common",
         "cpp-httplib",
@@ -91,24 +103,93 @@ fn main() -> BuildResult<()> {
         "ggml",
         "ggml-base",
         "ggml-cpu",
-    ] {
+    ];
+    if feature_set.metal {
+        libraries.push("ggml-metal");
+    }
+    if feature_set.vulkan {
+        libraries.push("ggml-vulkan");
+    }
+    for library in libraries {
         println!("cargo:rustc-link-lib=static={library}");
     }
 
     match target_os.as_str() {
         "macos" | "ios" => {
             println!("cargo:rustc-link-lib=c++");
+            if feature_set.metal {
+                println!("cargo:rustc-link-lib=framework=Foundation");
+                println!("cargo:rustc-link-lib=framework=Metal");
+                println!("cargo:rustc-link-lib=framework=MetalKit");
+            }
+            if feature_set.vulkan {
+                println!("cargo:rustc-link-lib=vulkan");
+            }
         }
         "linux" | "android" => {
             println!("cargo:rustc-link-lib=stdc++");
             println!("cargo:rustc-link-lib=dl");
             println!("cargo:rustc-link-lib=m");
             println!("cargo:rustc-link-lib=pthread");
+            if feature_set.vulkan {
+                println!("cargo:rustc-link-lib=vulkan");
+            }
+        }
+        "windows" => {
+            if feature_set.vulkan {
+                let library_name = if target_env == "msvc" {
+                    "vulkan-1"
+                } else {
+                    "vulkan"
+                };
+                println!("cargo:rustc-link-lib={library_name}");
+            }
         }
         _ => {}
     }
 
     Ok(())
+}
+
+impl BackendFeatureSet {
+    fn from_cargo_features(target_os: &str) -> BuildResult<Self> {
+        let feature_set = Self {
+            metal: env::var_os("CARGO_FEATURE_METAL").is_some(),
+            vulkan: env::var_os("CARGO_FEATURE_VULKAN").is_some(),
+        };
+
+        if feature_set.metal && target_os != "macos" {
+            return Err(io::Error::other(
+                "the `metal` Cargo feature is only supported on macOS targets",
+            )
+            .into());
+        }
+
+        Ok(feature_set)
+    }
+}
+
+fn emit_vulkan_search_paths(enable_vulkan: bool, target_os: &str) {
+    if !enable_vulkan {
+        return;
+    }
+
+    let Some(vulkan_sdk) = env::var_os("VULKAN_SDK") else {
+        return;
+    };
+    let vulkan_sdk = PathBuf::from(vulkan_sdk);
+
+    match target_os {
+        "windows" => {
+            emit_search_path(&vulkan_sdk.join("Lib"));
+        }
+        "macos" | "ios" | "linux" | "android" => {
+            emit_search_path(&vulkan_sdk.join("lib"));
+            emit_search_path(&vulkan_sdk.join("macOS/lib"));
+            emit_search_path(&vulkan_sdk.join("Lib"));
+        }
+        _ => {}
+    }
 }
 
 fn prepare_llama_source(vendor_source_dir: &Path) -> BuildResult<PathBuf> {

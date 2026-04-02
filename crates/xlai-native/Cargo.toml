@@ -5,6 +5,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+default = []
+metal = ["xlai-backend-llama-cpp/metal"]
+vulkan = ["xlai-backend-llama-cpp/vulkan"]
+
 [lints]
 workspace = true
 

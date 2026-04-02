@@ -7,6 +7,11 @@ license.workspace = true
 links = "llama"
 build = "build.rs"
 
+[features]
+default = []
+metal = []
+vulkan = []
+
 [build-dependencies]
 bindgen.workspace = true
 cc = "1.2.58"

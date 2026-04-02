@@ -5,6 +5,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+default = []
+metal = ["xlai-llama-cpp-sys/metal"]
+vulkan = ["xlai-llama-cpp-sys/vulkan"]
+
 [dependencies]
 async-stream.workspace = true
 jsonschema.workspace = true
