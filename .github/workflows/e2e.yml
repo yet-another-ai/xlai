@@ -113,6 +113,7 @@ jobs:
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           OPENAI_TRANSCRIPTION_MODEL: ${{ vars.OPENAI_TRANSCRIPTION_MODEL }}
+          OPENAI_TTS_MODEL: ${{ vars.OPENAI_TTS_MODEL }}
           LLAMA_CPP_MODEL: ${{ github.workspace }}/${{ env.LLAMA_CPP_FIXTURE_PATH }}
         run: cargo test --workspace -- --ignored
 
@@ -163,6 +164,7 @@ jobs:
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           OPENAI_TRANSCRIPTION_MODEL: ${{ vars.OPENAI_TRANSCRIPTION_MODEL }}
+          OPENAI_TTS_MODEL: ${{ vars.OPENAI_TTS_MODEL }}
         run: pnpm test:e2e
 
       - name: Upload Playwright report

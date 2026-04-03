@@ -1,5 +1,7 @@
 pub use xlai_backend_llama_cpp::{LlamaCppChatModel, LlamaCppConfig};
-pub use xlai_backend_openai::{OpenAiChatModel, OpenAiConfig, OpenAiTranscriptionModel};
+pub use xlai_backend_openai::{
+    OpenAiChatModel, OpenAiConfig, OpenAiTranscriptionModel, OpenAiTtsModel,
+};
 pub use xlai_backend_transformersjs::{
     TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
 };

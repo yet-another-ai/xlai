@@ -1,17 +1,22 @@
+use std::collections::BTreeMap;
+
 use async_stream::try_stream;
-use futures_util::StreamExt;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use futures_util::{StreamExt, stream as stream_util};
 use reqwest::Client;
 use reqwest::StatusCode;
 use xlai_core::{
     BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatModel, ChatRequest, ChatResponse, ErrorKind,
-    MessageRole, StreamTextDelta, TranscriptionBackend, TranscriptionModel, TranscriptionRequest,
-    TranscriptionResponse, XlaiError,
+    MediaSource, MessageRole, StreamTextDelta, TranscriptionBackend, TranscriptionModel,
+    TranscriptionRequest, TranscriptionResponse, TtsBackend, TtsChunk, TtsDeliveryMode, TtsModel,
+    TtsRequest, TtsResponse, XlaiError,
 };
 
 mod request;
 mod response;
 mod stream;
 mod transcription;
+mod tts;
 
 #[cfg(test)]
 mod tests;
@@ -20,6 +25,11 @@ use request::OpenAiChatRequest;
 use response::{OpenAiChatResponse, OpenAiErrorEnvelope};
 use stream::{OpenAiStreamResponse, SseParser, StreamState, update_finish_reason};
 use transcription::{OpenAiTranscriptionRequest, OpenAiTranscriptionResponse};
+use tts::{
+    ParsedSpeechSse, build_speech_json_body, merge_header_metadata, mime_for_tts_format,
+    openai_model_supports_speech_sse, parse_speech_sse_data, resolved_tts_model,
+    tts_response_from_unary_bytes,
+};
 
 #[derive(Clone, Debug)]
 pub struct OpenAiConfig {
@@ -27,6 +37,7 @@ pub struct OpenAiConfig {
     pub api_key: String,
     pub model: String,
     pub transcription_model: Option<String>,
+    pub tts_model: Option<String>,
 }
 
 impl OpenAiConfig {
@@ -41,12 +52,19 @@ impl OpenAiConfig {
             api_key: api_key.into(),
             model: model.into(),
             transcription_model: None,
+            tts_model: None,
         }
     }
 
     #[must_use]
     pub fn with_transcription_model(mut self, model: impl Into<String>) -> Self {
         self.transcription_model = Some(model.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_tts_model(mut self, model: impl Into<String>) -> Self {
+        self.tts_model = Some(model.into());
         self
     }
 
@@ -60,6 +78,10 @@ impl OpenAiConfig {
             self.base_url.trim_end_matches('/')
         )
     }
+
+    fn audio_speech_url(&self) -> String {
+        format!("{}/audio/speech", self.base_url.trim_end_matches('/'))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -70,6 +92,12 @@ pub struct OpenAiChatModel {
 
 #[derive(Clone, Debug)]
 pub struct OpenAiTranscriptionModel {
+    client: Client,
+    config: OpenAiConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct OpenAiTtsModel {
     client: Client,
     config: OpenAiConfig,
 }
@@ -94,6 +122,16 @@ impl OpenAiTranscriptionModel {
     }
 }
 
+impl OpenAiTtsModel {
+    #[must_use]
+    pub fn new(config: OpenAiConfig) -> Self {
+        Self {
+            client: Client::new(),
+            config,
+        }
+    }
+}
+
 impl ChatBackend for OpenAiConfig {
     type Model = OpenAiChatModel;
 
@@ -107,6 +145,14 @@ impl TranscriptionBackend for OpenAiConfig {
 
     fn into_transcription_model(self) -> Self::Model {
         OpenAiTranscriptionModel::new(self)
+    }
+}
+
+impl TtsBackend for OpenAiConfig {
+    type Model = OpenAiTtsModel;
+
+    fn into_tts_model(self) -> Self::Model {
+        OpenAiTtsModel::new(self)
     }
 }
 
@@ -251,6 +297,181 @@ impl TranscriptionModel for OpenAiTranscriptionModel {
 
             Ok(response.into_core_response())
         })
+    }
+}
+
+impl TtsModel for OpenAiTtsModel {
+    fn provider_name(&self) -> &'static str {
+        "openai-compatible"
+    }
+
+    fn synthesize(&self, request: TtsRequest) -> BoxFuture<'_, Result<TtsResponse, XlaiError>> {
+        Box::pin(async move {
+            let endpoint = self.config.audio_speech_url();
+            let body = build_speech_json_body(&self.config, &request, None)?;
+
+            let response = self
+                .client
+                .post(endpoint)
+                .bearer_auth(&self.config.api_key)
+                .header(reqwest::header::ACCEPT, "application/octet-stream")
+                .json(&body)
+                .send()
+                .await
+                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+
+            let meta = merge_header_metadata(response.headers());
+            let response = require_success_response(response).await?;
+
+            let content_type = response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned);
+
+            let bytes = response
+                .bytes()
+                .await
+                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?
+                .to_vec();
+
+            let response_format = request
+                .response_format
+                .unwrap_or(xlai_core::TtsAudioFormat::Mp3);
+            let mut tts = tts_response_from_unary_bytes(bytes, response_format, meta);
+            if let Some(ct) = content_type {
+                tts.mime_type = ct.clone();
+                if let MediaSource::InlineData { mime_type, .. } = &mut tts.audio {
+                    *mime_type = ct;
+                }
+            }
+            Ok(tts)
+        })
+    }
+
+    fn synthesize_stream(&self, request: TtsRequest) -> BoxStream<'_, Result<TtsChunk, XlaiError>> {
+        match request.delivery {
+            TtsDeliveryMode::Unary => Box::pin(try_stream! {
+                let response = self.synthesize(request).await?;
+                yield TtsChunk::Started {
+                    mime_type: response.mime_type.clone(),
+                    metadata: BTreeMap::new(),
+                };
+                let data_base64 = match &response.audio {
+                    MediaSource::InlineData { data_base64, .. } => data_base64.clone(),
+                    MediaSource::Url { .. } => Err(XlaiError::new(
+                        ErrorKind::Unsupported,
+                        "openai-compatible TTS stream fallback requires inline audio bytes",
+                    ))?,
+                };
+                yield TtsChunk::AudioDelta { data_base64 };
+                yield TtsChunk::Finished { response };
+            }),
+            TtsDeliveryMode::Stream => {
+                let model = resolved_tts_model(&self.config, &request);
+                if !openai_model_supports_speech_sse(&model) {
+                    let message = format!(
+                        "openai-compatible speech SSE streaming is not supported for model {model}"
+                    );
+                    return Box::pin(stream_util::once(async move {
+                        Err(XlaiError::new(ErrorKind::Unsupported, message))
+                    }));
+                }
+
+                let this = self.clone();
+                Box::pin(try_stream! {
+                    let endpoint = this.config.audio_speech_url();
+                    let body = build_speech_json_body(&this.config, &request, Some("sse"))?;
+
+                    let response = this
+                        .client
+                        .post(endpoint)
+                        .bearer_auth(&this.config.api_key)
+                        .header(reqwest::header::ACCEPT, "text/event-stream")
+                        .json(&body)
+                        .send()
+                        .await
+                        .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+
+                    let meta = merge_header_metadata(response.headers());
+                    let response = require_success_response(response).await?;
+
+                    let response_format =
+                        request.response_format.unwrap_or(xlai_core::TtsAudioFormat::Mp3);
+                    let mime_type = mime_for_tts_format(response_format).to_owned();
+                    yield TtsChunk::Started {
+                        mime_type: mime_type.clone(),
+                        metadata: meta.clone(),
+                    };
+
+                    let mut parser = SseParser::default();
+                    let mut assembled: Vec<u8> = Vec::new();
+                    let mut bytes_stream = response.bytes_stream();
+
+                    while let Some(chunk) = bytes_stream.next().await {
+                        let chunk = chunk
+                            .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+
+                        for event in parser.push(&chunk) {
+                            if event == "[DONE]" {
+                                let response_done = xlai_core::TtsResponse {
+                                    audio: MediaSource::InlineData {
+                                        mime_type: mime_type.clone(),
+                                        data_base64: STANDARD.encode(&assembled),
+                                    },
+                                    mime_type: mime_type.clone(),
+                                    metadata: meta.clone(),
+                                };
+                                yield TtsChunk::Finished {
+                                    response: response_done,
+                                };
+                                return;
+                            }
+
+                            match parse_speech_sse_data(&event)? {
+                                ParsedSpeechSse::DeltaBase64(b64) => {
+                                    let decoded = STANDARD.decode(b64.as_str()).map_err(|error| {
+                                        XlaiError::new(
+                                            ErrorKind::Provider,
+                                            format!("invalid base64 in speech SSE delta: {error}"),
+                                        )
+                                    })?;
+                                    assembled.extend_from_slice(&decoded);
+                                    yield TtsChunk::AudioDelta { data_base64: b64 };
+                                }
+                                ParsedSpeechSse::Done => {
+                                    let response_done = xlai_core::TtsResponse {
+                                        audio: MediaSource::InlineData {
+                                            mime_type: mime_type.clone(),
+                                            data_base64: STANDARD.encode(&assembled),
+                                        },
+                                        mime_type: mime_type.clone(),
+                                        metadata: meta.clone(),
+                                    };
+                                    yield TtsChunk::Finished {
+                                        response: response_done,
+                                    };
+                                    return;
+                                }
+                                ParsedSpeechSse::Ignored => {}
+                            }
+                        }
+                    }
+
+                    let response_done = xlai_core::TtsResponse {
+                        audio: MediaSource::InlineData {
+                            mime_type: mime_type.clone(),
+                            data_base64: STANDARD.encode(&assembled),
+                        },
+                        mime_type: mime_type.clone(),
+                        metadata: meta.clone(),
+                    };
+                    yield TtsChunk::Finished {
+                        response: response_done,
+                    };
+                })
+            }
+        }
     }
 }
 

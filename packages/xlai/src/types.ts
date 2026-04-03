@@ -123,3 +123,54 @@ export interface ChatSessionOptions {
 }
 
 export type AgentSessionOptions = ChatSessionOptions;
+
+/** Matches `xlai_core::VoiceReferenceSample` JSON. */
+export interface VoiceReferenceSample {
+  audio: MediaSource;
+  mime_type?: string | null;
+  transcript?: string | null;
+  weight?: number | null;
+  metadata?: Record<string, unknown>;
+}
+
+/** Matches `xlai_core::VoiceSpec` JSON (`kind` + snake_case variants). */
+export type VoiceSpec =
+  | { kind: 'preset'; name: string }
+  | { kind: 'provider_ref'; id: string; provider?: string | null }
+  | { kind: 'clone'; references: VoiceReferenceSample[] };
+
+/** Matches `xlai_core::TtsAudioFormat` JSON. */
+export type TtsAudioFormatWire =
+  | 'mp3'
+  | 'opus'
+  | 'aac'
+  | 'flac'
+  | 'wav'
+  | 'pcm';
+
+export interface TtsOptions {
+  input: string;
+  voice: VoiceSpec;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  ttsModel?: string;
+  responseFormat?: TtsAudioFormatWire;
+  speed?: number;
+  instructions?: string;
+  /** When omitted, unary `tts` defaults to `unary`; `ttsStream` defaults to `stream`. */
+  delivery?: 'unary' | 'stream';
+}
+
+/** Matches `xlai_core::TtsResponse` JSON. */
+export interface TtsResponse {
+  audio: MediaSource;
+  mime_type: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Matches `xlai_core::TtsChunk` JSON (`type` tag, snake_case). */
+export type TtsChunk =
+  | { type: 'started'; mime_type: string; metadata?: Record<string, unknown> }
+  | { type: 'audio_delta'; data_base64: string }
+  | { type: 'finished'; response: TtsResponse };

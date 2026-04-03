@@ -15,6 +15,7 @@ crate-type = ["cdylib"]
 workspace = true
 
 [dependencies]
+futures-util.workspace = true
 js-sys.workspace = true
 serde.workspace = true
 serde_json.workspace = true
