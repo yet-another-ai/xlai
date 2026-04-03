@@ -44,6 +44,39 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Cache Windows vcpkg OpenBLAS
+        if: runner.os == 'Windows'
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.VCPKG_ROOT }}
+          key: vcpkg-openblas-${{ runner.os }}-${{ env.VCPKG_OPENBLAS_TRIPLET }}-v1
+
+      - name: Install Linux OpenBLAS prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev
+
+      - name: Install Windows OpenBLAS prerequisites
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vcpkgRoot = $env:VCPKG_ROOT
+
+          if (-not (Test-Path "$vcpkgRoot\vcpkg.exe")) {
+            if (-not (Test-Path $vcpkgRoot)) {
+              git clone https://github.com/microsoft/vcpkg $vcpkgRoot
+            }
+            & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
+          }
+
+          $env:VCPKG_INSTALLATION_ROOT = $vcpkgRoot
+          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_INSTALLATION_ROOT=$vcpkgRoot"
+          & "$vcpkgRoot\vcpkg.exe" install "openblas:$env:VCPKG_OPENBLAS_TRIPLET"
+
+          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake"
+          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_TARGET_TRIPLET=$env:VCPKG_OPENBLAS_TRIPLET"
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
