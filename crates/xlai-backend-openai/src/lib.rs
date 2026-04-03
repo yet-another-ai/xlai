@@ -4,7 +4,6 @@ use async_stream::try_stream;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use futures_util::{StreamExt, stream as stream_util};
 use reqwest::Client;
-use reqwest::StatusCode;
 use xlai_core::{
     BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatModel, ChatRequest, ChatResponse, ErrorKind,
     MediaSource, MessageRole, StreamTextDelta, TranscriptionBackend, TranscriptionModel,
@@ -12,6 +11,7 @@ use xlai_core::{
     TtsRequest, TtsResponse, XlaiError,
 };
 
+mod provider_response;
 mod request;
 mod response;
 mod stream;
@@ -21,8 +21,9 @@ mod tts;
 #[cfg(test)]
 mod tests;
 
+use provider_response::require_success_response;
 use request::OpenAiChatRequest;
-use response::{OpenAiChatResponse, OpenAiErrorEnvelope};
+use response::OpenAiChatResponse;
 use stream::{OpenAiStreamResponse, SseParser, StreamState, update_finish_reason};
 use transcription::{OpenAiTranscriptionRequest, OpenAiTranscriptionResponse};
 use tts::{
@@ -473,73 +474,4 @@ impl TtsModel for OpenAiTtsModel {
             }
         }
     }
-}
-
-async fn require_success_response(
-    response: reqwest::Response,
-) -> Result<reqwest::Response, XlaiError> {
-    if response.status().is_success() {
-        return Ok(response);
-    }
-
-    let status = response.status();
-    let request_id = response
-        .headers()
-        .get("x-request-id")
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_owned);
-    let body = response
-        .text()
-        .await
-        .unwrap_or_else(|error| format!("<failed to read provider error body: {error}>"));
-
-    Err(XlaiError::new(
-        ErrorKind::Provider,
-        format_provider_error_message(status, request_id.as_deref(), &body),
-    ))
-}
-
-fn format_provider_error_message(
-    status: StatusCode,
-    request_id: Option<&str>,
-    body: &str,
-) -> String {
-    let body = body.trim();
-
-    let mut message = format!("openai-compatible request failed with {status}");
-    if let Some(request_id) = request_id {
-        message.push_str(&format!(" (request_id={request_id})"));
-    }
-
-    if body.is_empty() {
-        return message;
-    }
-
-    if let Ok(envelope) = serde_json::from_str::<OpenAiErrorEnvelope>(body) {
-        message.push_str(": ");
-        message.push_str(&envelope.error.message);
-
-        let mut details = Vec::new();
-        if let Some(kind) = envelope.error.kind.as_deref() {
-            details.push(format!("type={kind}"));
-        }
-        if let Some(code) = envelope.error.code.as_deref() {
-            details.push(format!("code={code}"));
-        }
-        if let Some(param) = envelope.error.param.as_deref() {
-            details.push(format!("param={param}"));
-        }
-
-        if !details.is_empty() {
-            message.push_str(" [");
-            message.push_str(&details.join(", "));
-            message.push(']');
-        }
-
-        return message;
-    }
-
-    message.push_str(": ");
-    message.push_str(body);
-    message
 }

@@ -2783,6 +2783,7 @@ dependencies = [
 name = "xlai-native"
 version = "0.1.0"
 dependencies = [
+ "tokio",
  "xlai-backend-llama-cpp",
  "xlai-backend-openai",
  "xlai-backend-transformersjs",

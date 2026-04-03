@@ -28,9 +28,11 @@ xlai/
 ├── crates/
 │   ├── xlai-backend-llama-cpp/
 │   ├── xlai-backend-openai/
+│   ├── xlai-backend-transformersjs/
 │   ├── xlai-core/
 │   ├── xlai-ffi/
 │   ├── xlai-llama-cpp-sys/
+│   ├── xlai-local-common/
 │   ├── xlai-native/
 │   ├── xlai-runtime/
 │   └── xlai-wasm/
@@ -38,6 +40,8 @@ xlai/
 │   └── xlai/
 └── .github/workflows/
 ```
+
+For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### Crates And Packages
 
@@ -59,6 +63,10 @@ xlai/
   Vite-based TypeScript package published as `@yai-xlai/xlai`, built on top of `xlai-wasm`, with Vitest coverage.
 - `crates/xlai-backend-openai`
   OpenAI-compatible backend implementation using `reqwest`.
+- `crates/xlai-backend-transformersjs`
+  Browser chat backend that delegates generation to a JavaScript adapter (WASM).
+- `crates/xlai-local-common`
+  Internal helpers shared by local inference backends (prompts, tool JSON envelope).
 
 ## Requirements
 
@@ -77,10 +85,6 @@ The workspace uses:
 ```bash
 cargo build --workspace
 ```
-
-On Linux and Windows, the native `llama.cpp` build now enables OpenBLAS by default.
-Install an OpenBLAS development package first, or disable default features for the
-native crates if you need a no-BLAS build.
 
 ### Test
 
@@ -405,7 +409,7 @@ Planned or expected next areas include:
   - [x] [Azure OpenAI API](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference)
 - [x] llama.cpp Backends
   - [x] CPU
-  - [x] BLAS
+  - [x] OpenBLAS
   - [x] Accelerate.framework
   - [x] Metal
   - [x] Vulkan

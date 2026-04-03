@@ -57,9 +57,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libopenblas-dev \
-            pkg-config
+          sudo apt-get install -y libopenblas-dev
 
       - name: Install Windows OpenBLAS prerequisites
         if: runner.os == 'Windows'
@@ -89,6 +87,14 @@ jobs:
 
       - name: Run default workspace tests
         run: cargo test --workspace
+
+      - name: Check Rust documentation
+        env:
+          RUSTDOCFLAGS: '-D warnings'
+        run: cargo doc --workspace --no-deps
+
+      - name: Build native examples
+        run: cargo build -p xlai-native --examples
 
   javascript:
     name: JavaScript
@@ -136,3 +142,6 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Vitest coverage report
+        run: pnpm --filter @yai-xlai/xlai run build:wasm && pnpm --filter @yai-xlai/xlai exec vitest run --coverage
