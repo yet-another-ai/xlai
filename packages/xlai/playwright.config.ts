@@ -42,8 +42,7 @@ const isCI = Boolean(
     }
   ).process?.env?.CI,
 );
-const reuseExistingServer =
-  process.env.PLAYWRIGHT_REUSE_WEB_SERVER === '1';
+const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_WEB_SERVER === '1';
 
 export default defineConfig({
   testDir: './e2e',
