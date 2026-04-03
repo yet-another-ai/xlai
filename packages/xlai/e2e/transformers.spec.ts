@@ -5,12 +5,7 @@ const E2E_MODEL_ID =
 
 test('runs transformers.js constrained generation with a real browser model', async ({
   page,
-  browserName,
 }) => {
-  test.skip(
-    browserName !== 'chromium',
-    'real browser transformers.js inference is validated on Chromium only',
-  );
   test.slow();
   test.setTimeout(180_000);
 

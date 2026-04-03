@@ -5,8 +5,8 @@ test('supports the filesystem API through OPFS', async ({
   browserName,
 }) => {
   test.skip(
-    browserName !== 'chromium',
-    'run OPFS coverage where it is reliable',
+    browserName === 'webkit',
+    'WebKit E2E runs in an ephemeral context where OPFS is not reliable.',
   );
 
   await page.goto('/');

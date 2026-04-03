@@ -42,6 +42,8 @@ const isCI = Boolean(
     }
   ).process?.env?.CI,
 );
+const reuseExistingServer =
+  process.env.PLAYWRIGHT_REUSE_WEB_SERVER === '1';
 
 export default defineConfig({
   testDir: './e2e',
@@ -70,7 +72,8 @@ export default defineConfig({
     command:
       'pnpm run build:wasm && pnpm exec vite --host 127.0.0.1 --port 4173 --strictPort',
     port: 4173,
-    reuseExistingServer: !isCI,
+    // Prefer a fresh Vite server for E2E to avoid stale optimized-deps caches.
+    reuseExistingServer: !isCI && reuseExistingServer,
     timeout: 120_000,
   },
 });
