@@ -1,10 +1,9 @@
 name: Publish QTS Hugging Face release
 
-# Use a dedicated prefix so generic repo tags (e.g. v0.1.0) do not trigger a multi-GB HF export.
 on:
   push:
     tags:
-      - "qts-v*"
+      - "v*"
 
 env:
   CARGO_TERM_COLOR: always

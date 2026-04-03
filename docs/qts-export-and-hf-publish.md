@@ -49,4 +49,4 @@ Use `--skip-export` to package artifacts that are already on disk.
 
 ## CI
 
-Tagged releases use `.github/workflows/hf-release-qts.yml` (repository root). Push a tag matching `qts-v*` (for example `qts-v1.0.0`) so ordinary semver tags on the monorepo do not trigger the export. Configure the `HF_TOKEN` secret on the `publish` environment.
+Tagged releases use `.github/workflows/hf-release-qts.yml` (repository root). Push a tag matching `v*` (for example `v1.0.0`) to run the Hugging Face publish job. Configure the `HF_TOKEN` secret on the `publish` environment.
