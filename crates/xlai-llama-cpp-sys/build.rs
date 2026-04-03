@@ -304,11 +304,10 @@ fn emit_vulkan_search_paths(enable_vulkan: bool, target_os: &str) {
 }
 
 fn resolve_openblas_include_dir() -> Option<PathBuf> {
-    if let Ok(openblas_root) = env::var("OpenBLAS_ROOT") {
-        if let Some(include_dir) = find_openblas_include_dir(&PathBuf::from(openblas_root)) {
+    if let Ok(openblas_root) = env::var("OpenBLAS_ROOT")
+        && let Some(include_dir) = find_openblas_include_dir(&PathBuf::from(openblas_root)) {
             return Some(include_dir);
         }
-    }
 
     let Ok(vcpkg_root) = env::var("VCPKG_INSTALLATION_ROOT") else {
         return None;
