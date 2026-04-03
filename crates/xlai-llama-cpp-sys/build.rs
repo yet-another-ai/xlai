@@ -305,8 +305,7 @@ fn emit_vulkan_search_paths(enable_vulkan: bool, target_os: &str) {
 
 fn resolve_openblas_include_dir() -> Option<PathBuf> {
     if let Ok(openblas_root) = env::var("OpenBLAS_ROOT") {
-        let include_dir = PathBuf::from(openblas_root).join("include");
-        if include_dir.exists() {
+        if let Some(include_dir) = find_openblas_include_dir(&PathBuf::from(openblas_root)) {
             return Some(include_dir);
         }
     }
@@ -318,15 +317,20 @@ fn resolve_openblas_include_dir() -> Option<PathBuf> {
         return None;
     };
 
-    let include_dir = Path::new(&vcpkg_root)
-        .join("installed")
-        .join(vcpkg_triplet)
-        .join("include");
-    if include_dir.exists() {
-        Some(include_dir)
-    } else {
-        None
-    }
+    find_openblas_include_dir(&Path::new(&vcpkg_root).join("installed").join(vcpkg_triplet))
+}
+
+fn find_openblas_include_dir(root: &Path) -> Option<PathBuf> {
+    let candidates = [
+        root.join("include"),
+        root.join("include/openblas"),
+        root.join("include/OpenBLAS"),
+        root.join("include/openblas/include"),
+    ];
+
+    candidates
+        .into_iter()
+        .find(|dir| dir.join("cblas.h").exists())
 }
 
 fn emit_openblas_search_paths() {
