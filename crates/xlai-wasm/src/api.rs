@@ -1,8 +1,12 @@
 //! `wasm_bindgen` exports (one-shot `chat` / `agent` and session constructors).
 
+use futures_util::StreamExt;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
-use xlai_core::ChatContent;
+use xlai_backend_openai::{OpenAiConfig, OpenAiTtsModel};
+use xlai_core::{ChatContent, TtsDeliveryMode, TtsModel, TtsRequest};
+use xlai_core::TtsChunk;
+use xlai_core::TtsResponse;
 
 use crate::agent_session::WasmAgentSession;
 use crate::chat_session::WasmChatSession;
@@ -15,7 +19,10 @@ use crate::factory::{
     parse_transformers_session_options,
 };
 use crate::memory_fs::WasmMemoryFileSystem;
-use crate::types::{WasmAgentRequest, WasmChatRequest, WasmChatSessionOptions};
+use crate::types::{
+    WasmAgentRequest, WasmChatRequest, WasmChatSessionOptions, WasmTtsCallOptions,
+    DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL,
+};
 use crate::wasm_helpers::js_error;
 
 #[wasm_bindgen]

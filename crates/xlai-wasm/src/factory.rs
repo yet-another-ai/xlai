@@ -12,11 +12,9 @@ use xlai_runtime::{FileSystem, MemoryFileSystem, RuntimeBuilder};
 
 use crate::agent_session::WasmAgentSession;
 use crate::chat_session::WasmChatSession;
-use crate::types::{
-    DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL, WasmChatSessionOptions,
-};
 #[cfg(target_arch = "wasm32")]
 use crate::types::WasmTransformersSessionOptions;
+use crate::types::{DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL, WasmChatSessionOptions};
 use crate::wasm_helpers::js_error;
 
 #[cfg(target_arch = "wasm32")]

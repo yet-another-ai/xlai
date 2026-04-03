@@ -770,10 +770,7 @@ pub trait TtsModel: RuntimeBound {
 
     /// Streaming synthesis. Default implementation calls [`Self::synthesize`] once and emits
     /// [`TtsChunk::Started`], one [`TtsChunk::AudioDelta`], then [`TtsChunk::Finished`].
-    fn synthesize_stream(
-        &self,
-        request: TtsRequest,
-    ) -> BoxStream<'_, Result<TtsChunk, XlaiError>> {
+    fn synthesize_stream(&self, request: TtsRequest) -> BoxStream<'_, Result<TtsChunk, XlaiError>> {
         Box::pin(try_stream! {
             let response = self.synthesize(request).await?;
             yield TtsChunk::Started {

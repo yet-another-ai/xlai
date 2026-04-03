@@ -3,8 +3,7 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value, json};
 use xlai_core::{
-    ErrorKind, MediaSource, Metadata, TtsAudioFormat, TtsRequest, TtsResponse,
-    VoiceSpec, XlaiError,
+    ErrorKind, MediaSource, Metadata, TtsAudioFormat, TtsRequest, TtsResponse, VoiceSpec, XlaiError,
 };
 
 use crate::OpenAiConfig;
@@ -163,10 +162,7 @@ pub(crate) fn merge_header_metadata(headers: &reqwest::header::HeaderMap) -> Met
         .get("x-request-id")
         .and_then(|value| value.to_str().ok())
     {
-        meta.insert(
-            "x_request_id".to_owned(),
-            Value::String(id.to_owned()),
-        );
+        meta.insert("x_request_id".to_owned(), Value::String(id.to_owned()));
     }
     meta
 }

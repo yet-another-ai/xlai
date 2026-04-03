@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
+use wasm_bindgen::prelude::wasm_bindgen;
 use xlai_runtime::{
     DirectoryFileSystem, FsPath, MemoryFileSystem, ReadableFileSystem, WritableFileSystem,
 };

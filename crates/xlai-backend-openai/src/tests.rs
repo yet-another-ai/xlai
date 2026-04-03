@@ -3,16 +3,16 @@ use std::collections::BTreeMap;
 use serde_json::json;
 use xlai_core::{
     ChatContent, ChatMessage, ChatRequest, ContentPart, ErrorKind, MediaSource, MessageRole,
-    StructuredOutput, StructuredOutputFormat, TranscriptionRequest, TtsAudioFormat, TtsDeliveryMode,
-    TtsRequest, VoiceReferenceSample, VoiceSpec, XlaiError,
+    StructuredOutput, StructuredOutputFormat, TranscriptionRequest, TtsAudioFormat,
+    TtsDeliveryMode, TtsRequest, VoiceReferenceSample, VoiceSpec, XlaiError,
 };
 
 use crate::OpenAiConfig;
 use crate::request::OpenAiChatRequest;
 use crate::transcription::{OpenAiTranscriptionRequest, OpenAiTranscriptionResponse};
 use crate::tts::{
-    build_speech_json_body, openai_model_supports_speech_sse, parse_speech_sse_data,
-    resolved_tts_model, ParsedSpeechSse,
+    ParsedSpeechSse, build_speech_json_body, openai_model_supports_speech_sse,
+    parse_speech_sse_data, resolved_tts_model,
 };
 
 fn test_config() -> OpenAiConfig {
@@ -549,8 +549,14 @@ fn parse_speech_sse_accepts_audio_and_delta_fields() {
     );
     let done = parse_speech_sse_data(r#"{"type":"speech.audio.done"}"#);
     assert!(done.is_ok(), "{:?}", done.err());
-    assert_eq!(done.unwrap_or(ParsedSpeechSse::Ignored), ParsedSpeechSse::Done);
+    assert_eq!(
+        done.unwrap_or(ParsedSpeechSse::Ignored),
+        ParsedSpeechSse::Done
+    );
     let ign = parse_speech_sse_data(r#"{"type":"other"}"#);
     assert!(ign.is_ok(), "{:?}", ign.err());
-    assert_eq!(ign.unwrap_or(ParsedSpeechSse::Done), ParsedSpeechSse::Ignored);
+    assert_eq!(
+        ign.unwrap_or(ParsedSpeechSse::Done),
+        ParsedSpeechSse::Ignored
+    );
 }

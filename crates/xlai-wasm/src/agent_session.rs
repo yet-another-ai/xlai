@@ -2,8 +2,8 @@
 
 #[cfg(target_arch = "wasm32")]
 use js_sys::Function;
-use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
+use wasm_bindgen::prelude::wasm_bindgen;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::JsFuture;
 use xlai_core::ChatContent;

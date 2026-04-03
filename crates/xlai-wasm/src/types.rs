@@ -2,7 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use xlai_core::{ChatContent, ChatResponse, FinishReason, FsEntry, FsEntryKind, MessageRole, TokenUsage};
+use xlai_core::{
+    ChatContent, ChatResponse, FinishReason, FsEntry, FsEntryKind, MessageRole, TokenUsage,
+    TtsAudioFormat, TtsDeliveryMode, VoiceSpec,
+};
 
 pub(crate) const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 pub(crate) const DEFAULT_OPENAI_MODEL: &str = "gpt-4.1-mini";
@@ -60,6 +63,28 @@ pub(crate) struct WasmChatSessionOptions {
     pub(crate) temperature: Option<f32>,
     #[serde(default)]
     pub(crate) max_output_tokens: Option<u32>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WasmTtsCallOptions {
+    pub(crate) input: String,
+    pub(crate) api_key: String,
+    #[serde(default)]
+    pub(crate) base_url: Option<String>,
+    #[serde(default)]
+    pub(crate) model: Option<String>,
+    #[serde(default)]
+    pub(crate) tts_model: Option<String>,
+    pub(crate) voice: VoiceSpec,
+    #[serde(default)]
+    pub(crate) response_format: Option<TtsAudioFormat>,
+    #[serde(default)]
+    pub(crate) speed: Option<f32>,
+    #[serde(default)]
+    pub(crate) instructions: Option<String>,
+    #[serde(default)]
+    pub(crate) delivery: Option<TtsDeliveryMode>,
 }
 
 impl From<WasmChatRequest> for WasmChatSessionOptions {

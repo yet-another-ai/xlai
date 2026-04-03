@@ -1,7 +1,9 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
 use xlai_backend_openai::OpenAiConfig;
-use xlai_core::{ErrorKind, RuntimeCapability, TtsChunk, TtsDeliveryMode, TtsRequest, VoiceSpec, XlaiError};
+use xlai_core::{
+    ErrorKind, RuntimeCapability, TtsChunk, TtsDeliveryMode, TtsRequest, VoiceSpec, XlaiError,
+};
 use xlai_runtime::RuntimeBuilder;
 
 #[allow(clippy::panic_in_result_fn)]

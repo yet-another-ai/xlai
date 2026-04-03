@@ -2129,7 +2129,8 @@ mod tests {
 
     #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
-    async fn runtime_stream_synthesize_uses_trait_default_for_unary_only_model() -> Result<(), XlaiError> {
+    async fn runtime_stream_synthesize_uses_trait_default_for_unary_only_model()
+    -> Result<(), XlaiError> {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let runtime = RuntimeBuilder::new()
             .with_tts_model(Arc::new(RecordingTtsModel::new(
@@ -2170,7 +2171,9 @@ mod tests {
             "expected Started chunk"
         );
         assert!(
-            chunks.iter().any(|c| matches!(c, TtsChunk::AudioDelta { .. })),
+            chunks
+                .iter()
+                .any(|c| matches!(c, TtsChunk::AudioDelta { .. })),
             "expected at least one AudioDelta"
         );
         assert!(
@@ -2386,17 +2389,11 @@ mod tests {
             "recording-tts-test"
         }
 
-        fn synthesize(
-            &self,
-            request: TtsRequest,
-        ) -> BoxFuture<'_, Result<TtsResponse, XlaiError>> {
+        fn synthesize(&self, request: TtsRequest) -> BoxFuture<'_, Result<TtsResponse, XlaiError>> {
             Box::pin(async move {
                 lock_unpoisoned(&self.requests).push(request);
                 lock_unpoisoned(&self.responses).pop_front().ok_or_else(|| {
-                    XlaiError::new(
-                        xlai_core::ErrorKind::Provider,
-                        "missing tts response",
-                    )
+                    XlaiError::new(xlai_core::ErrorKind::Provider, "missing tts response")
                 })
             })
         }

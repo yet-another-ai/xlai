@@ -34,8 +34,8 @@ pub use api::{
 pub use api::{
     create_agent_session_with_file_system, create_transformers_agent_session,
     create_transformers_agent_session_with_file_system,
-    create_transformers_agent_session_with_memory_file_system,
-    create_transformers_chat_session, create_transformers_chat_session_with_file_system,
+    create_transformers_agent_session_with_memory_file_system, create_transformers_chat_session,
+    create_transformers_chat_session_with_file_system,
     create_transformers_chat_session_with_memory_file_system,
 };
 pub use chat_session::WasmChatSession;

@@ -26,8 +26,9 @@ use response::{OpenAiChatResponse, OpenAiErrorEnvelope};
 use stream::{OpenAiStreamResponse, SseParser, StreamState, update_finish_reason};
 use transcription::{OpenAiTranscriptionRequest, OpenAiTranscriptionResponse};
 use tts::{
-    build_speech_json_body, merge_header_metadata, mime_for_tts_format, openai_model_supports_speech_sse,
-    parse_speech_sse_data, resolved_tts_model, tts_response_from_unary_bytes, ParsedSpeechSse,
+    ParsedSpeechSse, build_speech_json_body, merge_header_metadata, mime_for_tts_format,
+    openai_model_supports_speech_sse, parse_speech_sse_data, resolved_tts_model,
+    tts_response_from_unary_bytes,
 };
 
 #[derive(Clone, Debug)]
@@ -334,7 +335,9 @@ impl TtsModel for OpenAiTtsModel {
                 .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?
                 .to_vec();
 
-            let response_format = request.response_format.unwrap_or(xlai_core::TtsAudioFormat::Mp3);
+            let response_format = request
+                .response_format
+                .unwrap_or(xlai_core::TtsAudioFormat::Mp3);
             let mut tts = tts_response_from_unary_bytes(bytes, response_format, meta);
             if let Some(ct) = content_type {
                 tts.mime_type = ct.clone();
@@ -346,10 +349,7 @@ impl TtsModel for OpenAiTtsModel {
         })
     }
 
-    fn synthesize_stream(
-        &self,
-        request: TtsRequest,
-    ) -> BoxStream<'_, Result<TtsChunk, XlaiError>> {
+    fn synthesize_stream(&self, request: TtsRequest) -> BoxStream<'_, Result<TtsChunk, XlaiError>> {
         match request.delivery {
             TtsDeliveryMode::Unary => Box::pin(try_stream! {
                 let response = self.synthesize(request).await?;
