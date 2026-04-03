@@ -9,6 +9,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+async-stream.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
 serde.workspace = true

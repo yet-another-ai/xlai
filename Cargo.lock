@@ -2745,6 +2745,7 @@ dependencies = [
 name = "xlai-core"
 version = "0.1.0"
 dependencies = [
+ "async-stream",
  "futures-core",
  "futures-util",
  "serde",

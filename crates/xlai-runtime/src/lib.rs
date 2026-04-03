@@ -11,7 +11,7 @@ use futures_util::StreamExt;
 use xlai_core::{
     BoxStream, ChatChunk, ChatModel, ChatRequest, ChatResponse, EmbeddingModel, EmbeddingRequest,
     EmbeddingResponse, ErrorKind, KnowledgeHit, KnowledgeQuery, KnowledgeStore, RuntimeCapability,
-    Skill, SkillId, SkillStore, ToolCall, ToolExecutor, ToolResult, TranscriptionModel,
+    Skill, SkillId, SkillStore, ToolCall, ToolExecutor, ToolResult, TranscriptionModel, TtsModel,
     VectorSearchHit, VectorSearchQuery, VectorStore, XlaiError,
 };
 
@@ -26,7 +26,9 @@ pub use tera::Context as PromptContext;
 pub use xlai_core::{
     ChatBackend, ChatContent, ContentPart, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind,
     FsPath, ImageDetail, MediaSource, ReadableFileSystem, StreamTextDelta, ToolCallExecutionMode,
-    TranscriptionBackend, TranscriptionRequest, TranscriptionResponse, WritableFileSystem,
+    TranscriptionBackend, TranscriptionRequest, TranscriptionResponse, TtsAudioFormat, TtsBackend,
+    TtsChunk, TtsDeliveryMode, TtsRequest, TtsResponse, VoiceReferenceSample, VoiceSpec,
+    WritableFileSystem,
 };
 
 #[derive(Clone, Default)]
@@ -34,6 +36,7 @@ pub struct RuntimeBuilder {
     chat_model: Option<Arc<dyn ChatModel>>,
     embedding_model: Option<Arc<dyn EmbeddingModel>>,
     transcription_model: Option<Arc<dyn TranscriptionModel>>,
+    tts_model: Option<Arc<dyn TtsModel>>,
     tool_executor: Option<Arc<dyn ToolExecutor>>,
     skill_store: Option<Arc<dyn SkillStore>>,
     knowledge_store: Option<Arc<dyn KnowledgeStore>>,
@@ -89,6 +92,21 @@ impl RuntimeBuilder {
     }
 
     #[must_use]
+    pub fn with_tts_model(mut self, tts_model: Arc<dyn TtsModel>) -> Self {
+        self.tts_model = Some(tts_model);
+        self.capabilities.push(RuntimeCapability::Tts);
+        self
+    }
+
+    #[must_use]
+    pub fn with_tts_backend<B>(self, backend: B) -> Self
+    where
+        B: xlai_core::TtsBackend,
+    {
+        self.with_tts_model(Arc::new(backend.into_tts_model()))
+    }
+
+    #[must_use]
     pub fn with_tool_executor(mut self, tool_executor: Arc<dyn ToolExecutor>) -> Self {
         self.tool_executor = Some(tool_executor);
         self.capabilities.push(RuntimeCapability::ToolCalling);
@@ -133,6 +151,7 @@ impl RuntimeBuilder {
             chat_model: self.chat_model,
             embedding_model: self.embedding_model,
             transcription_model: self.transcription_model,
+            tts_model: self.tts_model,
             tool_executor: self.tool_executor,
             skill_store: self.skill_store,
             knowledge_store: self.knowledge_store,
@@ -157,6 +176,7 @@ pub struct XlaiRuntime {
     chat_model: Option<Arc<dyn ChatModel>>,
     embedding_model: Option<Arc<dyn EmbeddingModel>>,
     transcription_model: Option<Arc<dyn TranscriptionModel>>,
+    tts_model: Option<Arc<dyn TtsModel>>,
     tool_executor: Option<Arc<dyn ToolExecutor>>,
     skill_store: Option<Arc<dyn SkillStore>>,
     knowledge_store: Option<Arc<dyn KnowledgeStore>>,
@@ -260,6 +280,42 @@ impl XlaiRuntime {
             .ok_or_else(|| missing_dependency("transcription model"))?;
 
         transcription_model.transcribe(request).await
+    }
+
+    /// Synthesizes speech from text using the configured TTS model.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no TTS model is configured or if the provider request fails.
+    pub async fn synthesize(&self, request: TtsRequest) -> Result<TtsResponse, XlaiError> {
+        let tts_model = self
+            .tts_model
+            .as_ref()
+            .ok_or_else(|| missing_dependency("tts model"))?;
+
+        tts_model.synthesize(request).await
+    }
+
+    /// Streams synthesized speech using the configured TTS model.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no TTS model is configured.
+    pub fn stream_synthesize(
+        &self,
+        request: TtsRequest,
+    ) -> Result<BoxStream<'static, Result<TtsChunk, XlaiError>>, XlaiError> {
+        let tts_model = self
+            .tts_model
+            .clone()
+            .ok_or_else(|| missing_dependency("tts model"))?;
+
+        Ok(Box::pin(try_stream! {
+            let mut stream = tts_model.synthesize_stream(request);
+            while let Some(chunk) = stream.next().await {
+                yield chunk?;
+            }
+        }))
     }
 
     /// Executes a tool call through the configured runtime tool executor.
@@ -452,7 +508,7 @@ mod tests {
         Metadata, RuntimeCapability, Skill, SkillStore, StreamTextDelta, StructuredOutput,
         StructuredOutputFormat, ToolCall, ToolCallExecutionMode, ToolDefinition, ToolParameter,
         ToolParameterType, TranscriptionModel, TranscriptionRequest, TranscriptionResponse,
-        WritableFileSystem, XlaiError,
+        TtsChunk, TtsModel, TtsRequest, TtsResponse, VoiceSpec, WritableFileSystem, XlaiError,
     };
 
     use super::{
@@ -1980,6 +2036,151 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn runtime_synthesize_uses_configured_backend() -> Result<(), XlaiError> {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let runtime = RuntimeBuilder::new()
+            .with_tts_model(Arc::new(RecordingTtsModel::new(
+                requests.clone(),
+                vec![TtsResponse {
+                    audio: MediaSource::InlineData {
+                        mime_type: "audio/mpeg".to_owned(),
+                        data_base64: "AAAA".to_owned(),
+                    },
+                    mime_type: "audio/mpeg".to_owned(),
+                    metadata: empty_metadata(),
+                }],
+            )))
+            .build()?;
+
+        assert!(runtime.has_capability(RuntimeCapability::Tts));
+
+        let response = runtime
+            .synthesize(TtsRequest {
+                model: Some("tts-1".to_owned()),
+                input: "hello".to_owned(),
+                voice: VoiceSpec::Preset {
+                    name: "alloy".to_owned(),
+                },
+                response_format: None,
+                speed: None,
+                instructions: None,
+                delivery: xlai_core::TtsDeliveryMode::Unary,
+                metadata: empty_metadata(),
+            })
+            .await?;
+
+        assert_eq!(response.mime_type, "audio/mpeg");
+        let requests = lock_unpoisoned(&requests);
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].input, "hello");
+
+        Ok(())
+    }
+
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn runtime_synthesize_errors_without_backend() -> Result<(), XlaiError> {
+        let runtime = RuntimeBuilder::new()
+            .with_chat_model(Arc::new(RecordingChatModel::new(
+                Arc::new(Mutex::new(Vec::new())),
+                vec![ChatResponse {
+                    message: assistant_message("unused"),
+                    tool_calls: Vec::new(),
+                    usage: None,
+                    finish_reason: FinishReason::Completed,
+                    metadata: empty_metadata(),
+                }],
+            )))
+            .build()?;
+
+        let error = match runtime
+            .synthesize(TtsRequest {
+                model: None,
+                input: "hi".to_owned(),
+                voice: VoiceSpec::Preset {
+                    name: "alloy".to_owned(),
+                },
+                response_format: None,
+                speed: None,
+                instructions: None,
+                delivery: xlai_core::TtsDeliveryMode::Unary,
+                metadata: empty_metadata(),
+            })
+            .await
+        {
+            Ok(_) => {
+                return Err(XlaiError::new(
+                    xlai_core::ErrorKind::Validation,
+                    "expected missing tts dependency error",
+                ));
+            }
+            Err(error) => error,
+        };
+        assert_eq!(error.kind, xlai_core::ErrorKind::Unsupported);
+        assert!(
+            error.message.contains("tts model"),
+            "expected error message to mention tts model"
+        );
+
+        Ok(())
+    }
+
+    #[allow(clippy::panic_in_result_fn)]
+    #[tokio::test]
+    async fn runtime_stream_synthesize_uses_trait_default_for_unary_only_model() -> Result<(), XlaiError> {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let runtime = RuntimeBuilder::new()
+            .with_tts_model(Arc::new(RecordingTtsModel::new(
+                requests.clone(),
+                vec![TtsResponse {
+                    audio: MediaSource::InlineData {
+                        mime_type: "audio/mpeg".to_owned(),
+                        data_base64: "QkVBVg==".to_owned(),
+                    },
+                    mime_type: "audio/mpeg".to_owned(),
+                    metadata: empty_metadata(),
+                }],
+            )))
+            .build()?;
+
+        let mut stream = runtime
+            .stream_synthesize(TtsRequest {
+                model: None,
+                input: "stream test".to_owned(),
+                voice: VoiceSpec::Preset {
+                    name: "nova".to_owned(),
+                },
+                response_format: None,
+                speed: None,
+                instructions: None,
+                delivery: xlai_core::TtsDeliveryMode::Stream,
+                metadata: empty_metadata(),
+            })?
+            .boxed();
+
+        let mut chunks = Vec::new();
+        while let Some(item) = stream.next().await {
+            chunks.push(item?);
+        }
+
+        assert!(
+            matches!(chunks.first(), Some(TtsChunk::Started { .. })),
+            "expected Started chunk"
+        );
+        assert!(
+            chunks.iter().any(|c| matches!(c, TtsChunk::AudioDelta { .. })),
+            "expected at least one AudioDelta"
+        );
+        assert!(
+            matches!(chunks.last(), Some(TtsChunk::Finished { .. })),
+            "expected Finished chunk"
+        );
+
+        Ok(())
+    }
+
     fn weather_tool_definition() -> ToolDefinition {
         ToolDefinition {
             name: "lookup_weather".to_owned(),
@@ -2163,6 +2364,41 @@ mod tests {
                 .unwrap_or_default();
 
             Box::pin(stream::iter(chunks.into_iter().map(Ok)))
+        }
+    }
+
+    struct RecordingTtsModel {
+        requests: Arc<Mutex<Vec<TtsRequest>>>,
+        responses: Mutex<VecDeque<TtsResponse>>,
+    }
+
+    impl RecordingTtsModel {
+        fn new(requests: Arc<Mutex<Vec<TtsRequest>>>, responses: Vec<TtsResponse>) -> Self {
+            Self {
+                requests,
+                responses: Mutex::new(VecDeque::from(responses)),
+            }
+        }
+    }
+
+    impl TtsModel for RecordingTtsModel {
+        fn provider_name(&self) -> &'static str {
+            "recording-tts-test"
+        }
+
+        fn synthesize(
+            &self,
+            request: TtsRequest,
+        ) -> BoxFuture<'_, Result<TtsResponse, XlaiError>> {
+            Box::pin(async move {
+                lock_unpoisoned(&self.requests).push(request);
+                lock_unpoisoned(&self.responses).pop_front().ok_or_else(|| {
+                    XlaiError::new(
+                        xlai_core::ErrorKind::Provider,
+                        "missing tts response",
+                    )
+                })
+            })
         }
     }
 
