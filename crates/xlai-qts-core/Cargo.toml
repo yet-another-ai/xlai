@@ -38,15 +38,12 @@ thiserror.workspace = true
 rand.workspace = true
 hound.workspace = true
 rustfft.workspace = true
-prost.workspace = true
+serde.workspace = true
+ciborium.workspace = true
 ort.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
-
-[build-dependencies]
-prost-build.workspace = true
-protoc-bin-vendored.workspace = true
 
 [[bench]]
 name = "synthesize"

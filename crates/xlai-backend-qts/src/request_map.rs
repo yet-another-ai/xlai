@@ -50,9 +50,8 @@ pub fn synthesize_request_from_tts(request: &TtsRequest) -> Result<SynthesizeReq
         sr.vocoder_chunk_size = n as usize;
     }
     if let Some(s) = meta_str(&request.metadata, "xlai.qts.talker_kv_mode") {
-        sr.talker_kv_mode = TalkerKvMode::parse(&s).map_err(|e| {
-            XlaiError::new(ErrorKind::Validation, e.to_string())
-        })?;
+        sr.talker_kv_mode = TalkerKvMode::parse(&s)
+            .map_err(|e| XlaiError::new(ErrorKind::Validation, e.to_string()))?;
     }
 
     Ok(sr)
@@ -105,9 +104,7 @@ mod tests {
         let req = TtsRequest {
             model: None,
             input: "hi".to_owned(),
-            voice: VoiceSpec::Clone {
-                references: vec![],
-            },
+            voice: VoiceSpec::Clone { references: vec![] },
             response_format: None,
             speed: None,
             instructions: None,

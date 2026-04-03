@@ -19,7 +19,7 @@ mod synthesis_profile;
 mod voice_clone_prompt;
 
 pub use error::Qwen3TtsError;
-pub use model::{load_and_validate, GgufFile, ModelPaths};
+pub use model::{GgufFile, ModelPaths, load_and_validate};
 pub use pipeline::backend::BackendKind;
 pub use pipeline::speaker_encoder::{SpeakerEncoder, SpeakerEncoderConfig};
 pub use pipeline::tokenizer::{TextTokenizer, TokenizerConfig};
@@ -33,7 +33,7 @@ pub use pipeline::vocoder::{
 };
 pub use synthesis_profile::SynthesisStageTimings;
 pub use voice_clone_prompt::{
-    TensorF32, TensorI32, VoiceClonePromptV2, VOICE_CLONE_PROMPT_V2_SCHEMA_VERSION,
+    TensorF32, TensorI32, VOICE_CLONE_PROMPT_V2_SCHEMA_VERSION, VoiceClonePromptV2,
 };
 
 use std::time::Instant;
@@ -229,9 +229,9 @@ impl Qwen3TtsEngine {
 
     pub fn decode_voice_clone_prompt(
         &self,
-        pb_bytes: &[u8],
+        bytes: &[u8],
     ) -> Result<VoiceClonePromptV2, Qwen3TtsError> {
-        let prompt = VoiceClonePromptV2::from_protobuf_bytes(pb_bytes)?;
+        let prompt = VoiceClonePromptV2::from_cbor_slice(bytes)?;
         self.validate_speaker_embedding(prompt.speaker_embedding())?;
         if let Some((_, codebooks)) = prompt.ref_code_shape() {
             if codebooks != self.transformer.config().n_codebooks as usize {

@@ -75,7 +75,11 @@ pub mod qts_ggml {
                     core::ptr::null(),
                 );
                 assert_eq!(written, q_data.len());
-                core::ptr::copy_nonoverlapping(q_data.as_ptr(), ggml_get_data(q).cast(), q_data.len());
+                core::ptr::copy_nonoverlapping(
+                    q_data.as_ptr(),
+                    ggml_get_data(q).cast(),
+                    q_data.len(),
+                );
 
                 let out = ggml_cast(ctx, q, ggml_type_GGML_TYPE_F32);
                 let gf = ggml_new_graph(ctx);

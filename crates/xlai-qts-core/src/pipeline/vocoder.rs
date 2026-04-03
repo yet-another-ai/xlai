@@ -10,8 +10,8 @@ use ort::ep::ExecutionProvider;
 use ort::memory::{AllocationDevice, AllocatorType, MemoryInfo, MemoryType};
 use ort::session::IoBinding;
 use ort::session::{
-    builder::{GraphOptimizationLevel, SessionBuilder},
     Session,
+    builder::{GraphOptimizationLevel, SessionBuilder},
 };
 use ort::value::Tensor;
 
@@ -349,12 +349,10 @@ fn parse_requested_execution_provider() -> Result<RequestedExecutionProvider, Qw
                     "unsupported QWEN3_TTS_VOCODER_EP={other}; binary was built without the {feature} feature"
                 )))
             }
-            Err(ExecutionProviderParseError::Unknown) => Err(Qwen3TtsError::InvalidInput(
-                format!(
-                    "unsupported QWEN3_TTS_VOCODER_EP={other}; expected auto or one of {}",
-                    VocoderExecutionProvider::expected_values()
-                ),
-            )),
+            Err(ExecutionProviderParseError::Unknown) => Err(Qwen3TtsError::InvalidInput(format!(
+                "unsupported QWEN3_TTS_VOCODER_EP={other}; expected auto or one of {}",
+                VocoderExecutionProvider::expected_values()
+            ))),
         },
     }
 }

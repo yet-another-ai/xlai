@@ -73,7 +73,7 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md).
 - `crates/xlai-qts-core`
   Ported QTS engine; links standalone `ggml` through `xlai-sys` (`qts-ggml`). CPU BLAS follows the same OpenBLAS / Accelerate patterns as the llama stack in `xlai-sys`.
 - `crates/xlai-qts-cli`
-  Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without `--voice-clone-prompt`, `synthesize` uses `xlai-runtime` + `xlai-backend-qts`; with a voice-clone `.pb`, it uses the legacy engine path until phase 2. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
+  Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without `--voice-clone-prompt`, `synthesize` uses `xlai-runtime` + `xlai-backend-qts`; with a voice-clone `.cbor`, it uses the legacy engine path until phase 2. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
 - `crates/xlai-local-common`
   Internal helpers shared by local inference backends (prompts, tool JSON envelope).
 

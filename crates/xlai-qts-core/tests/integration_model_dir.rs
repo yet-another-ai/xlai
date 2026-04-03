@@ -58,7 +58,7 @@ fn integration_synthesize_direct_path_audio() {
 fn integration_voice_clone_prompt_xvector_mode() {
     let dir = require_model_dir();
     let engine = Qwen3TtsEngine::from_model_dir(&dir).expect("load");
-    let prompt = load_fixture_prompt(&engine, "sample1.xvector.voice-clone-prompt.pb");
+    let prompt = load_fixture_prompt(&engine, "sample1.xvector.voice-clone-prompt.cbor");
     assert!(prompt.x_vector_only_mode);
     assert!(!prompt.icl_mode);
     assert!(prompt.ref_code.is_none());
@@ -84,7 +84,7 @@ fn integration_voice_clone_prompt_xvector_mode() {
 fn integration_voice_clone_prompt_icl_mode() {
     let dir = require_model_dir();
     let engine = Qwen3TtsEngine::from_model_dir(&dir).expect("load");
-    let prompt = load_fixture_prompt(&engine, "sample1.icl.voice-clone-prompt.pb");
+    let prompt = load_fixture_prompt(&engine, "sample1.icl.voice-clone-prompt.cbor");
     assert!(!prompt.x_vector_only_mode);
     assert!(prompt.icl_mode);
     assert!(prompt.ref_code.is_some());

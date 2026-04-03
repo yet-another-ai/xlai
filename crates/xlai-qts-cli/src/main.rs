@@ -5,21 +5,21 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use hound::{SampleFormat, WavSpec, WavWriter};
 use serde_json::json;
+use tokio::runtime::Runtime;
 use xlai_backend_qts::{QtsTtsConfig, QtsTtsModel};
 use xlai_core::{MediaSource, Metadata, TtsRequest, TtsResponse, VoiceSpec};
 use xlai_qts_core::{Qwen3TtsEngine, SynthesisStageTimings, VoiceClonePromptV2};
 use xlai_runtime::RuntimeBuilder;
-use tokio::runtime::Runtime;
 
 mod cli_support;
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tui;
 
-use crate::cli_support::{load_engine, parse_value_arg, CommonSynthesisArgs};
+use crate::cli_support::{CommonSynthesisArgs, load_engine, parse_value_arg};
 
 fn main() -> Result<()> {
     let mut args = env::args().skip(1);
@@ -189,7 +189,10 @@ fn load_synthesis_conditioning(
 
 fn tts_request_from_common(common: &CommonSynthesisArgs, text: String) -> TtsRequest {
     let mut metadata = Metadata::default();
-    metadata.insert("xlai.qts.thread_count".to_owned(), json!(common.thread_count));
+    metadata.insert(
+        "xlai.qts.thread_count".to_owned(),
+        json!(common.thread_count),
+    );
     if let Some(frames) = common.max_audio_frames {
         metadata.insert("xlai.qts.max_audio_frames".to_owned(), json!(frames));
     }
@@ -260,6 +263,6 @@ fn write_wav_f32(path: &Path, sample_rate_hz: u32, pcm_f32: &[f32]) -> Result<()
 
 fn print_usage() {
     eprintln!(
-        "usage:\n  cargo run -p xlai-qts-cli -- synthesize --text TEXT --out OUT.wav [--model-dir DIR] [--voice-clone-prompt prompt.pb] ...\n  cargo run -p xlai-qts-cli -- profile ...\n  cargo run -p xlai-qts-cli -- tui ...\n\nWithout --voice-clone-prompt, synthesize uses xlai-runtime + xlai-backend-qts.\nWith --voice-clone-prompt, the legacy engine path is used until phase-2 Rust-native clone.\n\nEnv: QWEN3_TTS_BACKEND / QWEN3_TTS_VOCODER_EP / QWEN3_TTS_TALKER_KV_MODE (see docs)."
+        "usage:\n  cargo run -p xlai-qts-cli -- synthesize --text TEXT --out OUT.wav [--model-dir DIR] [--voice-clone-prompt prompt.cbor] ...\n  cargo run -p xlai-qts-cli -- profile ...\n  cargo run -p xlai-qts-cli -- tui ...\n\nWithout --voice-clone-prompt, synthesize uses xlai-runtime + xlai-backend-qts.\nWith --voice-clone-prompt, the legacy engine path is used until phase-2 Rust-native clone.\n\nEnv: QWEN3_TTS_BACKEND / QWEN3_TTS_VOCODER_EP / QWEN3_TTS_TALKER_KV_MODE (see docs)."
     );
 }

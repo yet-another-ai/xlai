@@ -39,8 +39,7 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
     let openblas_fe = feature_enabled("openblas");
     let enable_linux_windows_blas =
         openblas_fe && matches!(target_os.as_str(), "linux" | "windows");
-    let link_ggml_blas = openblas_fe
-        && (enable_linux_windows_blas || target.contains("apple"));
+    let link_ggml_blas = openblas_fe && (enable_linux_windows_blas || target.contains("apple"));
 
     let ggml_root = env::var("GGML_SRC")
         .map(PathBuf::from)
@@ -114,7 +113,11 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
         cfg.define("GGML_BLAS", "OFF");
         cfg.define(
             "GGML_ACCELERATE",
-            if target.contains("apple") { "ON" } else { "OFF" },
+            if target.contains("apple") {
+                "ON"
+            } else {
+                "OFF"
+            },
         );
     }
 
@@ -464,10 +467,7 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
     let enable_accelerate = target_os == "macos";
     let enable_openblas = feature_set.openblas && matches!(target_os.as_str(), "linux" | "windows");
 
-    println!(
-        "cargo:rerun-if-changed={}",
-        vendor_source_dir.display()
-    );
+    println!("cargo:rerun-if-changed={}", vendor_source_dir.display());
     println!("cargo:rerun-if-changed={}", wrapper_cpp.display());
     println!("cargo:rerun-if-env-changed=CMAKE_GENERATOR");
     println!("cargo:rerun-if-env-changed=CMAKE_PREFIX_PATH");

@@ -1,13 +1,33 @@
 use crate::Qwen3TtsError;
-use prost::Message;
+use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 pub const VOICE_CLONE_PROMPT_V2_SCHEMA_VERSION: u32 = 2;
 
-pub mod proto {
-    include!(concat!(env!("OUT_DIR"), "/qwen3tts.prompt.rs"));
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TensorI32 {
+    pub shape: Vec<u32>,
+    pub values: Vec<i32>,
 }
 
-pub use proto::{TensorF32, TensorI32, VoiceClonePromptV2};
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TensorF32 {
+    pub shape: Vec<u32>,
+    pub values: Vec<f32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VoiceClonePromptV2 {
+    pub schema_version: u32,
+    pub source: String,
+    pub model_id: String,
+    pub speaker_encoder_sample_rate_hz: u32,
+    pub x_vector_only_mode: bool,
+    pub icl_mode: bool,
+    pub ref_text: String,
+    pub ref_code: Option<TensorI32>,
+    pub ref_spk_embedding: Option<TensorF32>,
+}
 
 fn validate_shape(shape: &[u32], values_len: usize, field_name: &str) -> Result<(), Qwen3TtsError> {
     if shape.is_empty() {
@@ -49,17 +69,21 @@ impl TensorF32 {
 }
 
 impl VoiceClonePromptV2 {
-    pub fn from_protobuf_bytes(pb_bytes: &[u8]) -> Result<Self, Qwen3TtsError> {
-        let prompt = Self::decode(pb_bytes).map_err(|err| {
-            Qwen3TtsError::InvalidInput(format!("invalid voice clone prompt protobuf: {err}"))
+    pub fn from_cbor_slice(bytes: &[u8]) -> Result<Self, Qwen3TtsError> {
+        let prompt: Self = ciborium::from_reader(Cursor::new(bytes)).map_err(|err| {
+            Qwen3TtsError::InvalidInput(format!("invalid voice clone prompt CBOR: {err}"))
         })?;
         prompt.validate()?;
         Ok(prompt)
     }
 
-    pub fn to_protobuf_vec(&self) -> Result<Vec<u8>, Qwen3TtsError> {
+    pub fn to_cbor_vec(&self) -> Result<Vec<u8>, Qwen3TtsError> {
         self.validate()?;
-        Ok(self.encode_to_vec())
+        let mut bytes = Vec::new();
+        ciborium::into_writer(self, &mut bytes).map_err(|err| {
+            Qwen3TtsError::InvalidInput(format!("failed to encode voice clone prompt as CBOR: {err}"))
+        })?;
+        Ok(bytes)
     }
 
     pub fn validate(&self) -> Result<(), Qwen3TtsError> {
@@ -159,10 +183,10 @@ impl VoiceClonePromptV2 {
 
 #[cfg(test)]
 mod tests {
-    use super::{TensorF32, TensorI32, VoiceClonePromptV2, VOICE_CLONE_PROMPT_V2_SCHEMA_VERSION};
+    use super::{TensorF32, TensorI32, VOICE_CLONE_PROMPT_V2_SCHEMA_VERSION, VoiceClonePromptV2};
 
     #[test]
-    fn parses_prompt_protobuf() {
+    fn parses_prompt_cbor() {
         let prompt = VoiceClonePromptV2 {
             schema_version: VOICE_CLONE_PROMPT_V2_SCHEMA_VERSION,
             source: "unit-test".into(),
@@ -180,8 +204,8 @@ mod tests {
                 values: vec![0.1, 0.2, 0.3, 0.4],
             }),
         };
-        let pb = prompt.to_protobuf_vec().unwrap();
-        let parsed = VoiceClonePromptV2::from_protobuf_bytes(&pb).unwrap();
+        let bytes = prompt.to_cbor_vec().unwrap();
+        let parsed = VoiceClonePromptV2::from_cbor_slice(&bytes).unwrap();
         assert_eq!(parsed, prompt);
     }
 
@@ -201,10 +225,11 @@ mod tests {
                 values: vec![0.1, 0.2],
             }),
         };
-        let err = prompt.to_protobuf_vec().unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("unsupported voice clone prompt schema_version"));
+        let err = prompt.to_cbor_vec().unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("unsupported voice clone prompt schema_version")
+        );
     }
 
     #[test]
@@ -227,7 +252,7 @@ mod tests {
         assert!(err.to_string().contains("ref_text is required in icl_mode"));
     }
 
-    /// Golden `.pb` files are optional (often gitignored); this covers the same invariants via encode/decode.
+    /// Golden `.cbor` files are optional (often gitignored); this covers the same invariants via encode/decode.
     #[test]
     fn roundtrips_xvector_only_voice_clone_prompt() {
         let prompt = VoiceClonePromptV2 {
@@ -244,8 +269,8 @@ mod tests {
                 values: vec![0.0; 1024],
             }),
         };
-        let pb = prompt.to_protobuf_vec().unwrap();
-        let parsed = VoiceClonePromptV2::from_protobuf_bytes(&pb).unwrap();
+        let bytes = prompt.to_cbor_vec().unwrap();
+        let parsed = VoiceClonePromptV2::from_cbor_slice(&bytes).unwrap();
         assert!(parsed.x_vector_only_mode);
         assert!(!parsed.icl_mode);
         assert_eq!(parsed.ref_text, "");
@@ -276,8 +301,8 @@ mod tests {
                 values: vec![0.0; 1024],
             }),
         };
-        let pb = prompt.to_protobuf_vec().unwrap();
-        let parsed = VoiceClonePromptV2::from_protobuf_bytes(&pb).unwrap();
+        let bytes = prompt.to_cbor_vec().unwrap();
+        let parsed = VoiceClonePromptV2::from_cbor_slice(&bytes).unwrap();
         assert!(!parsed.x_vector_only_mode);
         assert!(parsed.icl_mode);
         assert_eq!(parsed.speaker_embedding_dim(), Some(1024));

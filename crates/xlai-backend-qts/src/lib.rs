@@ -26,7 +26,8 @@ use std::path::PathBuf;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use hound::{SampleFormat, WavSpec, WavWriter};
 use xlai_core::{
-    BoxFuture, ErrorKind, MediaSource, Metadata,     TtsAudioFormat, TtsModel, TtsRequest, TtsResponse, XlaiError,
+    BoxFuture, ErrorKind, MediaSource, Metadata, TtsAudioFormat, TtsModel, TtsRequest, TtsResponse,
+    XlaiError,
 };
 use xlai_qts_core::{ModelPaths, Qwen3TtsEngine, Qwen3TtsError};
 
@@ -111,9 +112,8 @@ impl TtsModel for QtsTtsModel {
             })?;
 
             let result = sync_result?;
-            let wav = pcm_f32_to_wav_bytes(&result.pcm_f32, result.sample_rate_hz).map_err(
-                |message| XlaiError::new(ErrorKind::Provider, message),
-            )?;
+            let wav = pcm_f32_to_wav_bytes(&result.pcm_f32, result.sample_rate_hz)
+                .map_err(|message| XlaiError::new(ErrorKind::Provider, message))?;
 
             Ok(TtsResponse {
                 audio: MediaSource::InlineData {

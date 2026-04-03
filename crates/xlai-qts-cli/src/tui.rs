@@ -10,35 +10,35 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample, Stream, StreamConfig, SupportedStreamConfig};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use xlai_qts_core::{
-    Qwen3TtsEngine, Qwen3TtsError, StreamingSynthesizeResult, SynthesizeRequest, TalkerKvMode,
-    VoiceClonePromptV2, SAMPLE_RATE_HZ,
-};
+use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
-use ratatui::Terminal;
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::{
-    DuplicateHandle, DUPLICATE_SAME_ACCESS, HANDLE, INVALID_HANDLE_VALUE,
+    DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, INVALID_HANDLE_VALUE,
 };
 #[cfg(windows)]
-use windows_sys::Win32::System::Console::{GetStdHandle, SetStdHandle, STD_ERROR_HANDLE};
+use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, SetStdHandle};
 #[cfg(windows)]
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
+use xlai_qts_core::{
+    Qwen3TtsEngine, Qwen3TtsError, SAMPLE_RATE_HZ, StreamingSynthesizeResult, SynthesizeRequest,
+    TalkerKvMode, VoiceClonePromptV2,
+};
 
 use crate::cli_support::{
-    default_model_dir, load_engine, parse_value_arg, value_arg, RuntimeBackendOverrides,
+    RuntimeBackendOverrides, default_model_dir, load_engine, parse_value_arg, value_arg,
 };
 
 const MAX_LOG_LINES: usize = 12;
@@ -300,8 +300,8 @@ impl TuiConfig {
                     config.language_id = language_option_from_name(&value)
                         .ok_or_else(|| {
                             anyhow::anyhow!(
-                            "unsupported value for --language: {value} (expected en, zh, or ja)"
-                        )
+                                "unsupported value for --language: {value} (expected en, zh, or ja)"
+                            )
                         })?
                         .id;
                 }
@@ -854,7 +854,7 @@ fn warmup_engine(
 fn print_tui_usage() {
     eprintln!(
         "qwen3-tts-cli tui — interactive terminal mode with direct cpal playback\n\n\
-         usage:\n  tui [--model-dir DIR] [--voice-clone-prompt prompt.pb] [--threads N] [--frames N] [--temperature F] [--top-k N] [--top-p F] [--repetition-penalty F] [--language en|zh|ja | --language-id N] [--vocoder-threads N] [--chunk-size N] [--talker-kv-mode f16|turboquant] [--backend auto|cpu|metal|vulkan] [--backend-fallback LIST] [--vocoder-ep auto|cpu|acl|armnn|azure|cann|coreml|cuda|directml|migraphx|nnapi|nvrtx|onednn|openvino|qnn|rknpu|tensorrt|tvm|vitis|webgpu|xnnpack] [--vocoder-ep-fallback LIST]\n\n\
+         usage:\n  tui [--model-dir DIR] [--voice-clone-prompt prompt.cbor] [--threads N] [--frames N] [--temperature F] [--top-k N] [--top-p F] [--repetition-penalty F] [--language en|zh|ja | --language-id N] [--vocoder-threads N] [--chunk-size N] [--talker-kv-mode f16|turboquant] [--backend auto|cpu|metal|vulkan] [--backend-fallback LIST] [--vocoder-ep auto|cpu|acl|armnn|azure|cann|coreml|cuda|directml|migraphx|nnapi|nvrtx|onednn|openvino|qnn|rknpu|tensorrt|tvm|vitis|webgpu|xnnpack] [--vocoder-ep-fallback LIST]\n\n\
          CLI flags override environment variables.\n\
          Default transformer auto chain: Apple = metal,vulkan,cpu ; others = vulkan,cpu.\n\
          Default vocoder auto chain: Apple = coreml,cpu ; Windows = cuda,nvrtx,tensorrt,directml,cpu ; Linux/others = cuda,nvrtx,tensorrt,cpu.\n\n\

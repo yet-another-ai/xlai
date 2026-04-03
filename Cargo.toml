@@ -27,6 +27,7 @@ anyhow = "1.0"
 async-stream = "0.3"
 base64 = "0.22"
 bindgen = "0.72"
+ciborium = "0.2"
 cmake = "0.1"
 criterion = "0.8"
 cpal = "0.17"
@@ -42,9 +43,6 @@ libc = "0.2"
 # Pin to the QTS reference version; newer `ort` RCs renamed execution-provider features.
 # QTS stack: use a recent RC compatible with Rust 1.94+ (ort 2.0.0-rc.9 fails to compile on 1.94).
 ort = { version = "2.0.0-rc.12", default-features = true }
-prost = "0.14"
-prost-build = "0.14"
-protoc-bin-vendored = "3"
 rand = "0.10"
 ratatui = "0.30"
 reqwest = { version = "0.13", default-features = false, features = ["json", "multipart", "stream"] }
