@@ -409,7 +409,7 @@ Planned or expected next areas include:
   - [x] [Azure OpenAI API](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference)
 - [x] llama.cpp Backends
   - [x] CPU
-  - [ ] BLAS
+  - [x] OpenBLAS
   - [x] Accelerate.framework
   - [x] Metal
   - [x] Vulkan
