@@ -239,23 +239,24 @@ fn apply_cmake_env_overrides(config: &mut cmake::Config, enable_openblas: bool) 
 }
 
 fn short_cmake_out_dir(feature_set: BackendFeatureSet) -> BuildResult<PathBuf> {
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap_or_default());
-    let target = env::var("TARGET").unwrap_or_else(|_| "unknown-target".to_string());
-    let host = env::var("HOST").unwrap_or_default();
-    let target_dir_ancestor = if target == host { 4 } else { 5 };
-    let target_dir = out_dir
-        .ancestors()
-        .nth(target_dir_ancestor)
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
+    let workspace_root = manifest_dir
+        .parent()
+        .and_then(Path::parent)
         .ok_or_else(|| {
-            io::Error::other(format!("unexpected OUT_DIR layout: {}", out_dir.display()))
+            io::Error::other(format!(
+                "unexpected CARGO_MANIFEST_DIR layout: {}",
+                manifest_dir.display()
+            ))
         })?;
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| "unknown".to_string());
+    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_else(|_| "unknown".to_string());
     let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
 
-    Ok(target_dir
-        .join(".xlai-cmake")
-        .join(target)
-        .join(profile)
-        .join(feature_set.suffix()))
+    Ok(workspace_root.join(".xlcm").join(format!(
+        "{target_arch}-{target_env}-{profile}-{}",
+        feature_set.suffix()
+    )))
 }
 
 fn emit_llama_search_paths(dst: &Path, feature_set: BackendFeatureSet, enable_openblas: bool) {
