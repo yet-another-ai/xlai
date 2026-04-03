@@ -89,7 +89,9 @@ jobs:
         run: cargo test --workspace
 
       - name: Check Rust documentation
-        run: RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: '-D warnings'
+        run: cargo doc --workspace --no-deps
 
       - name: Build native examples
         run: cargo build -p xlai-native --examples
