@@ -125,9 +125,18 @@ impl SseParser {
         self.buffer.push_str(&String::from_utf8_lossy(bytes));
 
         let mut events = Vec::new();
-        while let Some(index) = self.buffer.find("\n\n") {
+        loop {
+            let boundary = self
+                .buffer
+                .find("\r\n\r\n")
+                .map(|i| (i, 4usize))
+                .or_else(|| self.buffer.find("\n\n").map(|i| (i, 2usize)));
+            let Some((index, sep_len)) = boundary else {
+                break;
+            };
+
             let raw_event = self.buffer[..index].to_owned();
-            self.buffer.drain(..index + 2);
+            self.buffer.drain(..index + sep_len);
 
             let data = raw_event
                 .lines()
@@ -185,4 +194,37 @@ struct OpenAiStreamFunctionDelta {
 
 pub(crate) fn update_finish_reason(state: &mut StreamState, reason: Option<&str>) {
     state.finish_reason = finish_reason_from_api(reason);
+}
+
+#[cfg(test)]
+mod sse_parser_tests {
+    use super::SseParser;
+
+    #[test]
+    fn splits_events_on_lf_only_delimiter() {
+        let mut p = SseParser::default();
+        let ev = p.push(b"data: hello\n\n");
+        assert_eq!(ev, vec!["hello".to_owned()]);
+        assert!(p.buffer.is_empty());
+    }
+
+    #[test]
+    fn splits_events_on_crlf_delimiter() {
+        let mut p = SseParser::default();
+        let ev = p.push(b"data: first\r\n\r\ndata: second\r\n\r\n");
+        assert_eq!(ev, vec!["first".to_owned(), "second".to_owned()]);
+        assert!(p.buffer.is_empty());
+    }
+
+    #[test]
+    fn crlf_delimiter_does_not_require_lf_lf_substring() {
+        // Regression: `\r\n\r\n` contains no `\n\n`, so LF-only splitting never fired.
+        let mut p = SseParser::default();
+        let payload = b"data: {\"type\":\"speech.audio.delta\",\"audio\":\"YWI=\"}\r\n\r\n";
+        let ev = p.push(payload);
+        assert_eq!(
+            ev,
+            vec![r#"{"type":"speech.audio.delta","audio":"YWI="}"#.to_owned()]
+        );
+    }
 }
