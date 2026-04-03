@@ -77,6 +77,10 @@ fn main() -> BuildResult<()> {
         .define("GGML_VIRTGPU", "OFF")
         .define("GGML_WEBGPU", "OFF");
 
+    if target_os == "windows" {
+        config.out_dir(short_cmake_out_dir(feature_set)?);
+    }
+
     apply_cmake_env_overrides(&mut config, enable_openblas);
 
     if let Ok(generator) = env::var("CMAKE_GENERATOR") {
@@ -195,6 +199,19 @@ impl BackendFeatureSet {
 
         Ok(feature_set)
     }
+
+    fn suffix(self) -> &'static str {
+        match (self.openblas, self.metal, self.vulkan) {
+            (false, false, false) => "default",
+            (true, false, false) => "openblas",
+            (false, true, false) => "metal",
+            (false, false, true) => "vulkan",
+            (true, true, false) => "openblas-metal",
+            (true, false, true) => "openblas-vulkan",
+            (false, true, true) => "metal-vulkan",
+            (true, true, true) => "openblas-metal-vulkan",
+        }
+    }
 }
 
 fn apply_cmake_env_overrides(config: &mut cmake::Config, enable_openblas: bool) {
@@ -219,6 +236,26 @@ fn apply_cmake_env_overrides(config: &mut cmake::Config, enable_openblas: bool) 
         config.define("BLAS_INCLUDE_DIRS", &include_dir);
         config.define("OpenBLAS_INCLUDE_DIR", include_dir);
     }
+}
+
+fn short_cmake_out_dir(feature_set: BackendFeatureSet) -> BuildResult<PathBuf> {
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap_or_default());
+    let target = env::var("TARGET").unwrap_or_else(|_| "unknown-target".to_string());
+    let host = env::var("HOST").unwrap_or_default();
+    let target_dir_ancestor = if target == host { 4 } else { 5 };
+    let target_dir = out_dir
+        .ancestors()
+        .nth(target_dir_ancestor)
+        .ok_or_else(|| {
+            io::Error::other(format!("unexpected OUT_DIR layout: {}", out_dir.display()))
+        })?;
+    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+
+    Ok(target_dir
+        .join(".xlai-cmake")
+        .join(target)
+        .join(profile)
+        .join(feature_set.suffix()))
 }
 
 fn emit_llama_search_paths(dst: &Path, feature_set: BackendFeatureSet, enable_openblas: bool) {
