@@ -1,8 +1,8 @@
 use serde_json::json;
 
 use crate::{
-    ChatContent, ChatMessage, ContentPart, MediaSource, MessageRole, StructuredOutput,
-    StructuredOutputFormat,
+    ChatContent, ChatMessage, ContentPart, ErrorKind, MediaSource, MessageRole, StructuredOutput,
+    StructuredOutputFormat, XlaiError,
 };
 
 #[test]
@@ -167,4 +167,38 @@ fn structured_output_round_trips_lark_grammar_format() {
         back.format,
         StructuredOutputFormat::LarkGrammar { .. }
     ));
+}
+
+#[test]
+fn xlai_error_deserializes_legacy_json_without_optional_fields() {
+    let v = json!({"kind": "Provider", "message": "bad"});
+    let result: Result<XlaiError, _> = serde_json::from_value(v);
+    assert!(result.is_ok(), "deserialize legacy error JSON");
+    let Ok(e) = result else {
+        return;
+    };
+    assert_eq!(e.kind, ErrorKind::Provider);
+    assert_eq!(e.message, "bad");
+    assert!(e.http_status.is_none());
+    assert!(e.request_id.is_none());
+}
+
+#[test]
+fn xlai_error_round_trips_optional_fields() {
+    let e = XlaiError::new(ErrorKind::Provider, "x")
+        .with_http_status(429)
+        .with_request_id("r1")
+        .with_provider_code("rate_limit")
+        .with_retryable(true);
+    let serialized = serde_json::to_value(&e);
+    assert!(serialized.is_ok(), "serialize");
+    let Ok(v) = serialized else {
+        return;
+    };
+    let deserialized: Result<XlaiError, _> = serde_json::from_value(v);
+    assert!(deserialized.is_ok(), "deserialize");
+    let Ok(back) = deserialized else {
+        return;
+    };
+    assert_eq!(back, e);
 }
