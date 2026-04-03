@@ -11,6 +11,7 @@ export type {
 } from './filesystem';
 export { AgentSession, agent, createAgentSession } from './agent';
 export { ChatSession, chat, createChatSession } from './chat';
+export { tts, ttsStream } from './tts';
 export { packageVersion } from './shared';
 export type {
   AgentOptions,
@@ -29,5 +30,11 @@ export type {
   ToolParameter,
   ToolParameterType,
   ToolResult,
+  TtsAudioFormatWire,
+  TtsChunk,
+  TtsOptions,
+  TtsResponse,
+  VoiceReferenceSample,
+  VoiceSpec,
 } from './types';
 export { initXlai } from './wasm';
