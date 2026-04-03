@@ -4676,6 +4676,8 @@ name = "xlai-core"
 version = "0.1.0"
 dependencies = [
  "async-stream",
+ "base64",
+ "ciborium",
  "futures-core",
  "futures-util",
  "serde",
@@ -4718,7 +4720,6 @@ name = "xlai-qts-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64",
  "cpal",
  "crossterm",
  "hound",
@@ -4744,6 +4745,7 @@ dependencies = [
  "rand 0.10.0",
  "rustfft",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "xlai-sys",
 ]
@@ -4753,6 +4755,7 @@ name = "xlai-runtime"
 version = "0.1.0"
 dependencies = [
  "async-stream",
+ "base64",
  "futures-util",
  "getrandom 0.2.17",
  "gray_matter",

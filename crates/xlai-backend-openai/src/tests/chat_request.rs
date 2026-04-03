@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 use xlai_core::{
     ChatContent, ChatMessage, ChatRequest, ContentPart, ErrorKind, MediaSource, MessageRole,
@@ -101,7 +102,7 @@ fn serializes_inline_audio_as_file_content_part() {
             content: ChatContent::from_parts(vec![ContentPart::Audio {
                 source: MediaSource::InlineData {
                     mime_type: "audio/wav".to_owned(),
-                    data_base64: "UklGRg==".to_owned(),
+                    data: STANDARD.decode("UklGRg==").unwrap(),
                 },
                 mime_type: Some("audio/wav".to_owned()),
             }]),

@@ -19,6 +19,7 @@ tera.workspace = true
 xlai-core = { path = "../xlai-core" }
 
 [dev-dependencies]
+base64.workspace = true
 tokio.workspace = true
 
 [target.wasm32-unknown-unknown.dependencies]

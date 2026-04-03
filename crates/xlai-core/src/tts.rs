@@ -99,7 +99,9 @@ pub enum TtsChunk {
         metadata: Metadata,
     },
     AudioDelta {
-        data_base64: String,
+        /// PCM/container chunk bytes. JSON: base64 string field `data`. CBOR: byte string.
+        #[serde(with = "crate::serde_bytes_format")]
+        data: Vec<u8>,
     },
     Finished {
         response: TtsResponse,
@@ -120,14 +122,14 @@ pub trait TtsModel: RuntimeBound {
                 mime_type: response.mime_type.clone(),
                 metadata: BTreeMap::new(),
             };
-            let data_base64 = match &response.audio {
-                MediaSource::InlineData { data_base64, .. } => data_base64.clone(),
+            let data = match &response.audio {
+                MediaSource::InlineData { data, .. } => data.clone(),
                 MediaSource::Url { .. } => Err(XlaiError::new(
                     ErrorKind::Unsupported,
                     "default TTS stream fallback requires inline audio bytes",
                 ))?,
             };
-            yield TtsChunk::AudioDelta { data_base64 };
+            yield TtsChunk::AudioDelta { data };
             yield TtsChunk::Finished { response };
         })
     }
@@ -137,6 +139,42 @@ pub trait TtsBackend {
     type Model: TtsModel + 'static;
 
     fn into_tts_model(self) -> Self::Model;
+}
+
+impl TtsRequest {
+    /// Encode this request as CBOR (efficient inline audio bytes).
+    pub fn to_cbor_vec(&self) -> Result<Vec<u8>, String> {
+        crate::cbor::to_cbor_vec(self)
+    }
+
+    /// Decode from CBOR bytes.
+    pub fn from_cbor_slice(bytes: &[u8]) -> Result<Self, String> {
+        crate::cbor::from_cbor_slice(bytes)
+    }
+}
+
+impl TtsResponse {
+    /// Encode this response as CBOR.
+    pub fn to_cbor_vec(&self) -> Result<Vec<u8>, String> {
+        crate::cbor::to_cbor_vec(self)
+    }
+
+    /// Decode from CBOR bytes.
+    pub fn from_cbor_slice(bytes: &[u8]) -> Result<Self, String> {
+        crate::cbor::from_cbor_slice(bytes)
+    }
+}
+
+impl TtsChunk {
+    /// Encode this chunk as CBOR.
+    pub fn to_cbor_vec(&self) -> Result<Vec<u8>, String> {
+        crate::cbor::to_cbor_vec(self)
+    }
+
+    /// Decode from CBOR bytes.
+    pub fn from_cbor_slice(bytes: &[u8]) -> Result<Self, String> {
+        crate::cbor::from_cbor_slice(bytes)
+    }
 }
 
 impl<T> TtsBackend for T

@@ -247,7 +247,7 @@ impl SpeakerEncoder {
     }
 }
 
-fn decode_wav_mono(wav_bytes: &[u8]) -> Result<(Vec<f32>, u32), Qwen3TtsError> {
+pub(crate) fn decode_wav_mono(wav_bytes: &[u8]) -> Result<(Vec<f32>, u32), Qwen3TtsError> {
     let mut reader = WavReader::new(Cursor::new(wav_bytes)).map_err(|err| {
         Qwen3TtsError::InvalidInput(format!("reference audio must be a valid WAV file: {err}"))
     })?;

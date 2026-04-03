@@ -16,11 +16,15 @@ mod ggml;
 mod model;
 pub mod pipeline;
 mod synthesis_profile;
+mod voice_clone_builder;
 mod voice_clone_prompt;
 
 pub use error::Qwen3TtsError;
 pub use model::{GgufFile, ModelPaths, load_and_validate};
 pub use pipeline::backend::BackendKind;
+pub use pipeline::reference_codec_encoder::{
+    ReferenceCodecEncoder, ReferenceCodecPreprocessConfig,
+};
 pub use pipeline::speaker_encoder::{SpeakerEncoder, SpeakerEncoderConfig};
 pub use pipeline::tokenizer::{TextTokenizer, TokenizerConfig};
 pub use pipeline::tts_transformer::{
@@ -32,6 +36,9 @@ pub use pipeline::vocoder::{
     Vocoder, VocoderConfig, VocoderExecutionProvider, VocoderGraphTemplate,
 };
 pub use synthesis_profile::SynthesisStageTimings;
+pub use voice_clone_builder::{
+    VoiceCloneMode, build_icl_voice_clone_prompt, build_xvector_voice_clone_prompt,
+};
 pub use voice_clone_prompt::{
     TensorF32, TensorI32, VOICE_CLONE_PROMPT_V2_SCHEMA_VERSION, VoiceClonePromptV2,
 };
@@ -150,6 +157,7 @@ pub struct Qwen3TtsEngine {
     transformer: TtsTransformer,
     vocoder: Vocoder,
     speaker_encoder: SpeakerEncoder,
+    reference_codec: Option<ReferenceCodecEncoder>,
 }
 
 impl Qwen3TtsEngine {
@@ -160,6 +168,14 @@ impl Qwen3TtsEngine {
         let transformer = TtsTransformer::load_from_gguf(&main)?;
         let vocoder = Vocoder::load_from_onnx(&paths.vocoder_onnx)?;
         let speaker_encoder = SpeakerEncoder::new(transformer.config().hidden_size as usize)?;
+        let reference_codec = if paths.reference_codec_exists() {
+            Some(ReferenceCodecEncoder::load_from_onnx(
+                &paths.reference_codec_onnx,
+                None,
+            )?)
+        } else {
+            None
+        };
 
         Ok(Self {
             paths,
@@ -167,6 +183,7 @@ impl Qwen3TtsEngine {
             transformer,
             vocoder,
             speaker_encoder,
+            reference_codec,
         })
     }
 
@@ -206,6 +223,64 @@ impl Qwen3TtsEngine {
     #[must_use]
     pub fn speaker_encoder(&self) -> &SpeakerEncoder {
         &self.speaker_encoder
+    }
+
+    #[must_use]
+    pub fn reference_codec(&self) -> Option<&ReferenceCodecEncoder> {
+        self.reference_codec.as_ref()
+    }
+
+    /// Default `model_id` string embedded in native prompts (for debugging / interchange).
+    pub const DEFAULT_VOICE_CLONE_MODEL_ID: &'static str = "Qwen3-TTS-12Hz-0.6B-Base";
+
+    /// Build a [`VoiceClonePromptV2`] from reference WAV bytes (no Python, no pre-serialized CBOR).
+    ///
+    /// - [`VoiceCloneMode::XVectorOnly`]: uses the handcrafted [`SpeakerEncoder`] only.
+    /// - [`VoiceCloneMode::Icl`]: requires `ref_text` and a loaded [`ReferenceCodecEncoder`]
+    ///   (`qwen3-tts-reference-codec.onnx` + preprocess JSON in the model directory).
+    pub fn create_voice_clone_prompt(
+        &self,
+        ref_wav_bytes: &[u8],
+        ref_text: Option<&str>,
+        mode: VoiceCloneMode,
+    ) -> Result<VoiceClonePromptV2, Qwen3TtsError> {
+        let dim = self.speaker_embedding_size();
+        let n_cb = self.transformer.config().n_codebooks as usize;
+        let model_id = Self::DEFAULT_VOICE_CLONE_MODEL_ID;
+        let prompt = match mode {
+            VoiceCloneMode::XVectorOnly => build_xvector_voice_clone_prompt(
+                self.speaker_encoder(),
+                dim,
+                ref_wav_bytes,
+                model_id,
+            )?,
+            VoiceCloneMode::Icl => {
+                let codec = self.reference_codec.as_ref().ok_or_else(|| {
+                    Qwen3TtsError::InvalidInput(
+                        "ICL voice clone requires qwen3-tts-reference-codec.onnx and \
+                         qwen3-tts-reference-codec-preprocess.json in the model directory (export from Python)"
+                            .into(),
+                    )
+                })?;
+                let text = ref_text.ok_or_else(|| {
+                    Qwen3TtsError::InvalidInput(
+                        "ICL voice clone requires ref_text (transcript of the reference clip)".into(),
+                    )
+                })?;
+                build_icl_voice_clone_prompt(
+                    self.speaker_encoder(),
+                    codec,
+                    dim,
+                    n_cb,
+                    ref_wav_bytes,
+                    text,
+                    model_id,
+                )?
+            }
+        };
+        self.validate_speaker_embedding(prompt.speaker_embedding())?;
+        prompt.validate()?;
+        Ok(prompt)
     }
 
     #[must_use]

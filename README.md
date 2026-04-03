@@ -69,11 +69,11 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md).
 - `crates/xlai-backend-transformersjs`
   Browser chat backend that delegates generation to a JavaScript adapter (WASM).
 - `crates/xlai-backend-qts`
-  Native Qwen3 TTS backend implementing `TtsModel` (WAV output; maps tuning via `TtsRequest` metadata keys `xlai.qts.*`). `VoiceSpec::Clone` is **not** supported yet (phase 2: Rust-native voice conditioning).
+  Native Qwen3 TTS backend implementing `TtsModel` (WAV output; maps tuning via `TtsRequest` metadata keys `xlai.qts.*`). **`VoiceSpec::Clone`** is supported using the first reference sample (inline WAV only): Rust-native x-vector and ICL prompts via `xlai-qts-core`, with optional `xlai.qts.voice_clone_mode` (`xvector` \| `icl`).
 - `crates/xlai-qts-core`
-  Ported QTS engine; links standalone `ggml` through `xlai-sys` (`qts-ggml`). CPU BLAS follows the same OpenBLAS / Accelerate patterns as the llama stack in `xlai-sys`.
+  Ported QTS engine; links standalone `ggml` through `xlai-sys` (`qts-ggml`). CPU BLAS follows the same OpenBLAS / Accelerate patterns as the llama stack in `xlai-sys`. Builds `VoiceClonePromptV2` from raw WAV (`create_voice_clone_prompt`); ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts-export-and-hf-publish.md`).
 - `crates/xlai-qts-cli`
-  Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without `--voice-clone-prompt`, `synthesize` uses `xlai-runtime` + `xlai-backend-qts`; with a voice-clone `.cbor`, it uses the legacy engine path until phase 2. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
+  Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without voice-clone flags, `synthesize` uses `xlai-runtime` + `xlai-backend-qts`. With `--voice-clone-prompt` or `--ref-audio`, it uses the direct engine path. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
 - `crates/xlai-local-common`
   Internal helpers shared by local inference backends (prompts, tool JSON envelope).
 
@@ -391,7 +391,7 @@ CI downloads that fixture with the Hugging Face CLI and caches it between runs.
 
 Ignored QTS integration tests (`xlai-qts-core`, `xlai-backend-qts`) expect a full Qwen3 TTS model directory:
 
-- `QWEN3_TTS_MODEL_DIR` or `XLAI_QTS_MODEL_DIR` pointing at a folder containing the GGUF talker, ONNX vocoder, tokenizer, and `config.json` (see `xlai_qts_core::ModelPaths`).
+- `QWEN3_TTS_MODEL_DIR` or `XLAI_QTS_MODEL_DIR` pointing at a folder containing the GGUF talker, ONNX vocoder (`qwen3-tts-vocoder.onnx`), tokenizer, and `config.json` (see `xlai_qts_core::ModelPaths`). For **ICL** voice clone, also add `qwen3-tts-reference-codec.onnx` and `qwen3-tts-reference-codec-preprocess.json` (export with `uv run export-model-artifacts`; see `docs/qts-export-and-hf-publish.md`).
 
 CI e2e currently **skips** those tests because no Hugging Face download step is wired yet; run them locally after downloading weights.
 

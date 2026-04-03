@@ -27,8 +27,9 @@ pub enum MediaSource {
     },
     InlineData {
         mime_type: String,
-        /// Base64-encoded bytes (no `data:` prefix).
-        data_base64: String,
+        /// Inline bytes. JSON: base64 string field `data`. CBOR: byte string.
+        #[serde(with = "crate::serde_bytes_format")]
+        data: Vec<u8>,
     },
 }
 

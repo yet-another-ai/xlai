@@ -1,6 +1,7 @@
 //! Runtime tests: chat session.
 use std::sync::{Arc, Mutex};
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use xlai_core::{
     ChatContent, ChatMessage, ChatResponse, ContentPart, FinishReason, MediaSource, MessageRole,
@@ -141,7 +142,7 @@ async fn chat_prompt_parts_preserves_audio_user_message_in_request() -> Result<(
     chat.prompt_parts(vec![ContentPart::Audio {
         source: MediaSource::InlineData {
             mime_type: "audio/wav".to_owned(),
-            data_base64: "UklGRg==".to_owned(),
+            data: STANDARD.decode("UklGRg==").unwrap(),
         },
         mime_type: Some("audio/wav".to_owned()),
     }])

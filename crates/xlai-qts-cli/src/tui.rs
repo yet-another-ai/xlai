@@ -34,7 +34,7 @@ use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, SetStd
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use xlai_qts_core::{
     Qwen3TtsEngine, Qwen3TtsError, SAMPLE_RATE_HZ, StreamingSynthesizeResult, SynthesizeRequest,
-    TalkerKvMode, VoiceClonePromptV2,
+    TalkerKvMode, VoiceCloneMode, VoiceClonePromptV2,
 };
 
 use crate::cli_support::{
@@ -226,6 +226,9 @@ pub(crate) fn run(args: Vec<String>) -> Result<()> {
 struct TuiConfig {
     model_dir: PathBuf,
     voice_clone_prompt: Option<PathBuf>,
+    ref_audio: Option<PathBuf>,
+    ref_text: Option<String>,
+    voice_clone_mode: Option<VoiceCloneMode>,
     thread_count: usize,
     max_audio_frames: usize,
     temperature: f32,
@@ -244,6 +247,9 @@ impl TuiConfig {
         let mut config = Self {
             model_dir: default_model_dir()?,
             voice_clone_prompt: None,
+            ref_audio: None,
+            ref_text: None,
+            voice_clone_mode: None,
             thread_count: 4,
             max_audio_frames: 256,
             temperature: 0.9,
@@ -272,6 +278,19 @@ impl TuiConfig {
                         &mut idx,
                         "--voice-clone-prompt",
                     )?));
+                }
+                "--ref-audio" => {
+                    config.ref_audio =
+                        Some(PathBuf::from(value_arg(&args, &mut idx, "--ref-audio")?));
+                }
+                "--ref-text" => {
+                    config.ref_text = Some(value_arg(&args, &mut idx, "--ref-text")?);
+                }
+                "--voice-clone-mode" => {
+                    let raw = value_arg(&args, &mut idx, "--voice-clone-mode")?;
+                    config.voice_clone_mode = Some(VoiceCloneMode::parse(&raw).map_err(|e| {
+                        anyhow::anyhow!("{e}")
+                    })?);
                 }
                 "--threads" => {
                     config.thread_count = parse_value_arg(&args, &mut idx, "--threads")?;
@@ -376,9 +395,31 @@ impl Conditioning {
 }
 
 fn load_conditioning(engine: &Qwen3TtsEngine, config: &TuiConfig) -> Result<Conditioning> {
+    if config.voice_clone_prompt.is_some() && config.ref_audio.is_some() {
+        bail!("use either --voice-clone-prompt or --ref-audio, not both");
+    }
     if let Some(path) = &config.voice_clone_prompt {
         let bytes = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
         let prompt = engine.decode_voice_clone_prompt(&bytes)?;
+        return Ok(Conditioning::VoiceClonePrompt(prompt));
+    }
+    if let Some(path) = &config.ref_audio {
+        let wav = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
+        let mode = config.voice_clone_mode.unwrap_or_else(|| {
+            if config
+                .ref_text
+                .as_ref()
+                .map(|t| !t.trim().is_empty())
+                .unwrap_or(false)
+            {
+                VoiceCloneMode::Icl
+            } else {
+                VoiceCloneMode::XVectorOnly
+            }
+        });
+        let prompt = engine
+            .create_voice_clone_prompt(&wav, config.ref_text.as_deref(), mode)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         return Ok(Conditioning::VoiceClonePrompt(prompt));
     }
     Ok(Conditioning::None)
@@ -854,7 +895,7 @@ fn warmup_engine(
 fn print_tui_usage() {
     eprintln!(
         "qwen3-tts-cli tui — interactive terminal mode with direct cpal playback\n\n\
-         usage:\n  tui [--model-dir DIR] [--voice-clone-prompt prompt.cbor] [--threads N] [--frames N] [--temperature F] [--top-k N] [--top-p F] [--repetition-penalty F] [--language en|zh|ja | --language-id N] [--vocoder-threads N] [--chunk-size N] [--talker-kv-mode f16|turboquant] [--backend auto|cpu|metal|vulkan] [--backend-fallback LIST] [--vocoder-ep auto|cpu|acl|armnn|azure|cann|coreml|cuda|directml|migraphx|nnapi|nvrtx|onednn|openvino|qnn|rknpu|tensorrt|tvm|vitis|webgpu|xnnpack] [--vocoder-ep-fallback LIST]\n\n\
+         usage:\n  tui [--model-dir DIR] [--voice-clone-prompt prompt.cbor | --ref-audio ref.wav [--ref-text STR] [--voice-clone-mode xvector|icl]] [--threads N] [--frames N] [--temperature F] [--top-k N] [--top-p F] [--repetition-penalty F] [--language en|zh|ja | --language-id N] [--vocoder-threads N] [--chunk-size N] [--talker-kv-mode f16|turboquant] [--backend auto|cpu|metal|vulkan] [--backend-fallback LIST] [--vocoder-ep auto|cpu|acl|armnn|azure|cann|coreml|cuda|directml|migraphx|nnapi|nvrtx|onednn|openvino|qnn|rknpu|tensorrt|tvm|vitis|webgpu|xnnpack] [--vocoder-ep-fallback LIST]\n\n\
          CLI flags override environment variables.\n\
          Default transformer auto chain: Apple = metal,vulkan,cpu ; others = vulkan,cpu.\n\
          Default vocoder auto chain: Apple = coreml,cpu ; Windows = cuda,nvrtx,tensorrt,directml,cpu ; Linux/others = cuda,nvrtx,tensorrt,cpu.\n\n\

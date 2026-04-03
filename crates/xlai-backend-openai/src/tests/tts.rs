@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 use xlai_core::{
     ErrorKind, MediaSource, TtsAudioFormat, TtsDeliveryMode, TtsRequest, VoiceReferenceSample,
@@ -96,7 +97,7 @@ fn tts_rejects_clone_voice_spec() {
             references: vec![VoiceReferenceSample {
                 audio: MediaSource::InlineData {
                     mime_type: "audio/wav".to_owned(),
-                    data_base64: "UklGRg==".to_owned(),
+                    data: STANDARD.decode("UklGRg==").unwrap(),
                 },
                 mime_type: None,
                 transcript: None,

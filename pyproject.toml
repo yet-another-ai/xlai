@@ -11,7 +11,6 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = [
     "gguf>=0.18.0",
-    "grpcio-tools",
     "huggingface-hub>=0.36.2",
     "onnx>=1.20.1",
     "onnxscript>=0.6.2",
@@ -19,3 +18,14 @@ dependencies = [
     "safetensors>=0.7.0",
     "tqdm>=4.67.3",
 ]
+
+[project.scripts]
+export-model-artifacts = "scripts.qts.export_model_artifacts:main"
+xlai-qts-hf-release = "scripts.qts.hf_release:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["scripts"]
+
+# Monorepo: ship only packaged Python under `scripts/` in sdists.
+[tool.hatch.build.targets.sdist]
+only-include = ["scripts"]

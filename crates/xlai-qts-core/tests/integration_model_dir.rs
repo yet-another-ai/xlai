@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use xlai_qts_core::{Qwen3TtsEngine, SynthesizeRequest, VoiceClonePromptV2};
+use xlai_qts_core::{Qwen3TtsEngine, SynthesizeRequest, VoiceCloneMode, VoiceClonePromptV2};
 
 fn require_model_dir() -> PathBuf {
     std::env::var("QWEN3_TTS_MODEL_DIR")
@@ -108,4 +108,36 @@ fn integration_voice_clone_prompt_icl_mode() {
     assert_eq!(result.sample_rate_hz, 24_000);
     assert!(result.generated_frames > 0);
     assert!(!result.pcm_f32.is_empty());
+}
+
+#[test]
+#[ignore = "set QWEN3_TTS_MODEL_DIR to run"]
+fn integration_native_xvector_prompt_parity_shape() {
+    let dir = require_model_dir();
+    let engine = Qwen3TtsEngine::from_model_dir(&dir).expect("load");
+    let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("testdata")
+        .join("sample1.xvector.voice-clone-prompt.cbor");
+    if !fixture_path.is_file() {
+        eprintln!("skip: missing fixture {}", fixture_path.display());
+        return;
+    }
+    let golden = load_fixture_prompt(&engine, "sample1.xvector.voice-clone-prompt.cbor");
+    let ref_wav = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("testdata")
+        .join("sample1_ref.wav");
+    if !ref_wav.is_file() {
+        eprintln!("skip: place sample1_ref.wav next to fixtures for full parity");
+        return;
+    }
+    let wav = std::fs::read(&ref_wav).expect("read ref wav");
+    let built = engine
+        .create_voice_clone_prompt(&wav, None, VoiceCloneMode::XVectorOnly)
+        .expect("native xvector prompt");
+    assert_eq!(built.x_vector_only_mode, golden.x_vector_only_mode);
+    assert_eq!(built.icl_mode, golden.icl_mode);
+    assert_eq!(
+        built.speaker_embedding_dim(),
+        golden.speaker_embedding_dim()
+    );
 }

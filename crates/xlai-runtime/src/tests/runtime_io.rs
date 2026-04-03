@@ -1,6 +1,7 @@
 //! Runtime tests: filesystem, transcription, TTS.
 use std::sync::{Arc, Mutex};
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
 use xlai_core::{
     ChatResponse, FinishReason, FsEntryKind, FsPath, MediaSource, RuntimeCapability,
@@ -104,7 +105,7 @@ async fn runtime_transcribe_uses_configured_backend() -> Result<(), XlaiError> {
             model: Some("gpt-4o-mini-transcribe".to_owned()),
             audio: MediaSource::InlineData {
                 mime_type: "audio/wav".to_owned(),
-                data_base64: "UklGRg==".to_owned(),
+                data: STANDARD.decode("UklGRg==").unwrap(),
             },
             mime_type: Some("audio/wav".to_owned()),
             filename: Some("sample.wav".to_owned()),
@@ -144,7 +145,7 @@ async fn runtime_transcribe_errors_without_backend() -> Result<(), XlaiError> {
             model: None,
             audio: MediaSource::InlineData {
                 mime_type: "audio/wav".to_owned(),
-                data_base64: "UklGRg==".to_owned(),
+                data: STANDARD.decode("UklGRg==").unwrap(),
             },
             mime_type: Some("audio/wav".to_owned()),
             filename: None,
@@ -182,7 +183,7 @@ async fn runtime_synthesize_uses_configured_backend() -> Result<(), XlaiError> {
             vec![TtsResponse {
                 audio: MediaSource::InlineData {
                     mime_type: "audio/mpeg".to_owned(),
-                    data_base64: "AAAA".to_owned(),
+                    data: STANDARD.decode("AAAA").unwrap(),
                 },
                 mime_type: "audio/mpeg".to_owned(),
                 metadata: empty_metadata(),
@@ -274,7 +275,7 @@ async fn runtime_stream_synthesize_uses_trait_default_for_unary_only_model() -> 
             vec![TtsResponse {
                 audio: MediaSource::InlineData {
                     mime_type: "audio/mpeg".to_owned(),
-                    data_base64: "QkVBVg==".to_owned(),
+                    data: STANDARD.decode("QkVBVg==").unwrap(),
                 },
                 mime_type: "audio/mpeg".to_owned(),
                 metadata: empty_metadata(),

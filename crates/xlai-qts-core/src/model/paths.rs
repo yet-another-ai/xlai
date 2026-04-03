@@ -7,13 +7,16 @@ pub struct ModelPaths {
     pub main_gguf: PathBuf,
     /// Vocoder artifact exported for ONNX Runtime.
     pub vocoder_onnx: PathBuf,
+    /// Optional speech-tokenizer **encode** graph for ICL `ref_code` (exported from Python).
+    pub reference_codec_onnx: PathBuf,
 }
 
 impl ModelPaths {
-    pub fn new(main_gguf: PathBuf, vocoder_onnx: PathBuf) -> Self {
+    pub fn new(main_gguf: PathBuf, vocoder_onnx: PathBuf, reference_codec_onnx: PathBuf) -> Self {
         Self {
             main_gguf,
             vocoder_onnx,
+            reference_codec_onnx,
         }
     }
 
@@ -32,6 +35,7 @@ impl ModelPaths {
                 ],
             ),
             vocoder_onnx: dir.join("qwen3-tts-vocoder.onnx"),
+            reference_codec_onnx: dir.join("qwen3-tts-reference-codec.onnx"),
         }
     }
 
@@ -41,6 +45,10 @@ impl ModelPaths {
 
     pub fn vocoder_exists(&self) -> bool {
         self.vocoder_onnx.is_file()
+    }
+
+    pub fn reference_codec_exists(&self) -> bool {
+        self.reference_codec_onnx.is_file()
     }
 }
 
@@ -64,6 +72,9 @@ mod tests {
         let p = ModelPaths::from_model_dir("/models");
         assert!(p.main_gguf.ends_with("qwen3-tts-0.6b-f16.gguf"));
         assert!(p.vocoder_onnx.ends_with("qwen3-tts-vocoder.onnx"));
+        assert!(p
+            .reference_codec_onnx
+            .ends_with("qwen3-tts-reference-codec.onnx"));
     }
 
     #[test]

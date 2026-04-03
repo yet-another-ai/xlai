@@ -1,8 +1,8 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
-use xlai_qts_core::{Qwen3TtsEngine, SynthesizeRequest, TalkerKvMode};
+use anyhow::{Context, Result, bail};
+use xlai_qts_core::{Qwen3TtsEngine, SynthesizeRequest, TalkerKvMode, VoiceCloneMode};
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct RuntimeBackendOverrides {
@@ -74,6 +74,9 @@ pub(crate) struct CommonSynthesisArgs {
     pub(crate) text: Option<String>,
     pub(crate) out_path: Option<PathBuf>,
     pub(crate) voice_clone_prompt: Option<PathBuf>,
+    pub(crate) ref_audio: Option<PathBuf>,
+    pub(crate) ref_text: Option<String>,
+    pub(crate) voice_clone_mode: Option<VoiceCloneMode>,
     pub(crate) thread_count: usize,
     pub(crate) max_audio_frames: Option<usize>,
     pub(crate) temperature: f32,
@@ -94,6 +97,9 @@ impl CommonSynthesisArgs {
             text: None,
             out_path: None,
             voice_clone_prompt: None,
+            ref_audio: None,
+            ref_text: None,
+            voice_clone_mode: None,
             thread_count: 4,
             max_audio_frames: None,
             temperature: 0.9,
@@ -128,6 +134,21 @@ impl CommonSynthesisArgs {
             "--voice-clone-prompt" => {
                 self.voice_clone_prompt =
                     Some(PathBuf::from(value_arg(args, idx, "--voice-clone-prompt")?));
+                Ok(true)
+            }
+            "--ref-audio" => {
+                self.ref_audio = Some(PathBuf::from(value_arg(args, idx, "--ref-audio")?));
+                Ok(true)
+            }
+            "--ref-text" => {
+                self.ref_text = Some(value_arg(args, idx, "--ref-text")?);
+                Ok(true)
+            }
+            "--voice-clone-mode" => {
+                let raw = value_arg(args, idx, "--voice-clone-mode")?;
+                self.voice_clone_mode = Some(
+                    VoiceCloneMode::parse(&raw).map_err(|e| anyhow::anyhow!("{e}"))?,
+                );
                 Ok(true)
             }
             "--threads" => {
@@ -176,6 +197,15 @@ impl CommonSynthesisArgs {
     }
 
     pub(crate) fn validate_conditioning(&self) -> Result<()> {
+        if self.voice_clone_prompt.is_some() && self.ref_audio.is_some() {
+            bail!("use either --voice-clone-prompt or --ref-audio, not both");
+        }
+        if self.ref_text.is_some() && self.ref_audio.is_none() {
+            bail!("--ref-text requires --ref-audio");
+        }
+        if self.voice_clone_mode.is_some() && self.ref_audio.is_none() {
+            bail!("--voice-clone-mode requires --ref-audio");
+        }
         Ok(())
     }
 

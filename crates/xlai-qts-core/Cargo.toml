@@ -39,6 +39,7 @@ rand.workspace = true
 hound.workspace = true
 rustfft.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 ciborium.workspace = true
 ort.workspace = true
 

@@ -1,22 +1,89 @@
 //! Map [`xlai_core::TtsRequest`] to [`xlai_qts_core::SynthesizeRequest`].
 
 use serde_json::Value;
-use xlai_core::{ErrorKind, Metadata, TtsRequest, VoiceSpec, XlaiError};
-use xlai_qts_core::{SynthesizeRequest, TalkerKvMode};
+use xlai_core::{ErrorKind, MediaSource, Metadata, TtsRequest, VoiceReferenceSample, VoiceSpec, XlaiError};
+use xlai_qts_core::{SynthesizeRequest, TalkerKvMode, VoiceCloneMode};
+
+/// Parsed voice-clone inputs for QTS (first reference sample only in this release).
+#[derive(Debug, Clone)]
+pub struct QtsVoiceCloneParams {
+    pub ref_wav: Vec<u8>,
+    pub ref_text: Option<String>,
+    pub mode: VoiceCloneMode,
+}
+
+/// Extract inline reference WAV + mode from [`VoiceSpec::Clone`].
+///
+/// # Errors
+///
+/// Returns [`XlaiError`] when references are missing, decoding fails, or mode metadata is invalid.
+pub fn voice_clone_params_from_tts(request: &TtsRequest) -> Result<Option<QtsVoiceCloneParams>, XlaiError> {
+    let VoiceSpec::Clone { references } = &request.voice else {
+        return Ok(None);
+    };
+    if references.is_empty() {
+        return Err(XlaiError::new(
+            ErrorKind::Validation,
+            "voice clone requires at least one VoiceReferenceSample",
+        ));
+    }
+    let sample = &references[0];
+    let ref_wav = voice_reference_wav_bytes(sample)?;
+    let ref_text = sample.transcript.clone();
+    let mode = resolve_voice_clone_mode(&request.metadata, ref_text.as_deref())?;
+    Ok(Some(QtsVoiceCloneParams {
+        ref_wav,
+        ref_text,
+        mode,
+    }))
+}
+
+fn resolve_voice_clone_mode(
+    meta: &Metadata,
+    transcript: Option<&str>,
+) -> Result<VoiceCloneMode, XlaiError> {
+    if let Some(raw) = meta.get("xlai.qts.voice_clone_mode").and_then(json_str) {
+        return VoiceCloneMode::parse(raw).map_err(|e| {
+            XlaiError::new(ErrorKind::Validation, e.to_string())
+        });
+    }
+    let has_text = transcript.map(|t| !t.trim().is_empty()).unwrap_or(false);
+    Ok(if has_text {
+        VoiceCloneMode::Icl
+    } else {
+        VoiceCloneMode::XVectorOnly
+    })
+}
+
+fn voice_reference_wav_bytes(sample: &VoiceReferenceSample) -> Result<Vec<u8>, XlaiError> {
+    if let Some(mt) = &sample.mime_type {
+        let lower = mt.to_ascii_lowercase();
+        if !(lower.contains("wav") || lower.contains("wave")) {
+            return Err(XlaiError::new(
+                ErrorKind::Validation,
+                format!("voice clone reference audio must be WAV (got mime {mt})"),
+            ));
+        }
+    }
+    match &sample.audio {
+        MediaSource::InlineData { data, .. } => Ok(data.clone()),
+        MediaSource::Url { .. } => Err(XlaiError::new(
+            ErrorKind::Unsupported,
+            "voice clone with URL audio references is not supported by xlai-backend-qts",
+        )),
+    }
+}
+
+fn json_str(v: &Value) -> Option<&str> {
+    v.as_str()
+}
 
 /// Build a QTS [`SynthesizeRequest`] from an xlai [`TtsRequest`].
 ///
 /// # Errors
 ///
-/// Returns [`XlaiError`] if voice cloning is requested or required metadata is invalid.
+/// Returns [`XlaiError`] if required metadata is invalid.
 pub fn synthesize_request_from_tts(request: &TtsRequest) -> Result<SynthesizeRequest, XlaiError> {
-    if matches!(request.voice, VoiceSpec::Clone { .. }) {
-        return Err(XlaiError::new(
-            ErrorKind::Unsupported,
-            "voice cloning is not supported by xlai-backend-qts in this release; see phase-2 Rust-native clone plan",
-        ));
-    }
-
     let mut sr = SynthesizeRequest {
         text: request.input.clone(),
         ..SynthesizeRequest::default()
@@ -100,7 +167,7 @@ mod tests {
     use xlai_core::VoiceSpec;
 
     #[test]
-    fn clone_voice_rejected() {
+    fn clone_empty_references_errors() {
         let req = TtsRequest {
             model: None,
             input: "hi".to_owned(),
@@ -112,8 +179,23 @@ mod tests {
             metadata: Metadata::default(),
         };
         assert!(matches!(
-            synthesize_request_from_tts(&req),
-            Err(ref e) if e.kind == ErrorKind::Unsupported
+            voice_clone_params_from_tts(&req),
+            Err(ref e) if e.kind == ErrorKind::Validation
         ));
+    }
+
+    #[test]
+    fn synthesize_request_accepts_clone_voice() {
+        let req = TtsRequest {
+            model: None,
+            input: "hi".to_owned(),
+            voice: VoiceSpec::Clone { references: vec![] },
+            response_format: None,
+            speed: None,
+            instructions: None,
+            delivery: Default::default(),
+            metadata: Metadata::default(),
+        };
+        assert!(synthesize_request_from_tts(&req).is_ok());
     }
 }

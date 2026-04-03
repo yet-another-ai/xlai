@@ -2,8 +2,15 @@
 //!
 //! ## Voice cloning
 //!
-//! [`VoiceSpec::Clone`](xlai_core::VoiceSpec::Clone) is **not** supported in this release.
-//! A Rust-native voice-conditioning implementation is planned as phase 2.
+//! [`VoiceSpec::Clone`](xlai_core::VoiceSpec::Clone) uses the **first**
+//! [`VoiceReferenceSample`](xlai_core::VoiceReferenceSample) only.
+//! Reference audio must be **inline WAV** (`MediaSource::InlineData` with `audio/wav`).
+//!
+//! - Default mode: **ICL** when `VoiceReferenceSample::transcript` is non-empty, otherwise **x-vector only**.
+//! - Override with metadata `xlai.qts.voice_clone_mode`: `icl` or `xvector`.
+//!
+//! ICL requires `qwen3-tts-reference-codec.onnx` + `qwen3-tts-reference-codec-preprocess.json` in the model dir
+//! (export with `uv run export-model-artifacts`; see `docs/qts-export-and-hf-publish.md` in the repo root).
 //!
 //! ## QTS tuning via metadata
 //!
@@ -18,25 +25,26 @@
 //! - `xlai.qts.vocoder_thread_count` (number)
 //! - `xlai.qts.vocoder_chunk_size` (number)
 //! - `xlai.qts.talker_kv_mode` (string: `f16` or `turboquant`)
+//! - `xlai.qts.voice_clone_mode` (string: `icl` or `xvector`)
 
 mod request_map;
 
 use std::path::PathBuf;
 
-use base64::{Engine, engine::general_purpose::STANDARD};
 use hound::{SampleFormat, WavSpec, WavWriter};
 use xlai_core::{
     BoxFuture, ErrorKind, MediaSource, Metadata, TtsAudioFormat, TtsModel, TtsRequest, TtsResponse,
     XlaiError,
 };
-use xlai_qts_core::{ModelPaths, Qwen3TtsEngine, Qwen3TtsError};
+use xlai_qts_core::{ModelPaths, Qwen3TtsEngine, Qwen3TtsError, VoiceCloneMode};
 
-pub use request_map::synthesize_request_from_tts;
+pub use request_map::{QtsVoiceCloneParams, synthesize_request_from_tts, voice_clone_params_from_tts};
 
 /// Configuration for [`QtsTtsModel`].
 #[derive(Clone, Debug)]
 pub struct QtsTtsConfig {
-    /// Directory containing the main GGUF and `qwen3-tts-vocoder.onnx`.
+    /// Directory containing the main GGUF, `qwen3-tts-vocoder.onnx`, and optionally
+    /// `qwen3-tts-reference-codec.onnx` + `qwen3-tts-reference-codec-preprocess.json` for ICL clone.
     pub model_dir: PathBuf,
 }
 
@@ -101,6 +109,30 @@ impl TtsModel for QtsTtsModel {
                 let paths = ModelPaths::from_model_dir(&model_dir);
                 let engine = Qwen3TtsEngine::load(paths).map_err(map_qts_err)?;
                 let req = synthesize_request_from_tts(&inner)?;
+                if let Some(clone) = voice_clone_params_from_tts(&inner)? {
+                    if matches!(clone.mode, VoiceCloneMode::Icl)
+                        && clone
+                            .ref_text
+                            .as_ref()
+                            .map(|t| t.trim().is_empty())
+                            .unwrap_or(true)
+                    {
+                        return Err(XlaiError::new(
+                            ErrorKind::Validation,
+                            "ICL voice clone requires a non-empty transcript on the reference sample (or use xlai.qts.voice_clone_mode=xvector)",
+                        ));
+                    }
+                    let prompt = engine
+                        .create_voice_clone_prompt(
+                            &clone.ref_wav,
+                            clone.ref_text.as_deref(),
+                            clone.mode,
+                        )
+                        .map_err(map_qts_err)?;
+                    return engine
+                        .synthesize_with_voice_clone_prompt(&req, &prompt)
+                        .map_err(map_qts_err);
+                }
                 engine.synthesize(&req).map_err(map_qts_err)
             })
             .await
@@ -118,7 +150,7 @@ impl TtsModel for QtsTtsModel {
             Ok(TtsResponse {
                 audio: MediaSource::InlineData {
                     mime_type: "audio/wav".to_owned(),
-                    data_base64: STANDARD.encode(wav),
+                    data: wav,
                 },
                 mime_type: "audio/wav".to_owned(),
                 metadata: Metadata::default(),
