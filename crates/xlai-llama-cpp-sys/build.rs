@@ -200,17 +200,31 @@ impl BackendFeatureSet {
         Ok(feature_set)
     }
 
-    fn suffix(self) -> &'static str {
-        match (self.openblas, self.metal, self.vulkan) {
-            (false, false, false) => "default",
-            (true, false, false) => "openblas",
-            (false, true, false) => "metal",
-            (false, false, true) => "vulkan",
-            (true, true, false) => "openblas-metal",
-            (true, false, true) => "openblas-vulkan",
-            (false, true, true) => "metal-vulkan",
-            (true, true, true) => "openblas-metal-vulkan",
+    fn enabled_backend_names(self) -> impl Iterator<Item = &'static str> {
+        [
+            self.openblas.then_some("openblas"),
+            self.metal.then_some("metal"),
+            self.vulkan.then_some("vulkan"),
+        ]
+        .into_iter()
+        .flatten()
+    }
+
+    fn suffix(self) -> String {
+        let mut suffix = String::new();
+
+        for backend in self.enabled_backend_names() {
+            if !suffix.is_empty() {
+                suffix.push('-');
+            }
+            suffix.push_str(backend);
         }
+
+        if suffix.is_empty() {
+            suffix.push_str("default");
+        }
+
+        suffix
     }
 }
 
