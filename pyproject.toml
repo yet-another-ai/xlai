@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xlai"
+version = "0.1.0"
+description = "Python helper scripts for xlai."
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+dependencies = [
+    "gguf>=0.18.0",
+    "grpcio-tools",
+    "huggingface-hub>=0.36.2",
+    "onnx>=1.20.1",
+    "onnxscript>=0.6.2",
+    "qwen-tts",
+    "safetensors>=0.7.0",
+    "tqdm>=4.67.3",
+]

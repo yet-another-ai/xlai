@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package qwen3tts.prompt;
+
+message TensorI32 {
+  repeated uint32 shape = 1;
+  repeated sint32 values = 2;
+}
+
+message TensorF32 {
+  repeated uint32 shape = 1;
+  repeated float values = 2;
+}
+
+message VoiceClonePromptV2 {
+  uint32 schema_version = 1;
+  string source = 2;
+  string model_id = 3;
+  uint32 speaker_encoder_sample_rate_hz = 4;
+  bool x_vector_only_mode = 5;
+  bool icl_mode = 6;
+  string ref_text = 7;
+  TensorI32 ref_code = 8;
+  TensorF32 ref_spk_embedding = 9;
+}

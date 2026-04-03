@@ -1,4 +1,7 @@
-[submodule "crates/xlai-llama-cpp-sys/vendor/llama.cpp"]
-	path = crates/xlai-llama-cpp-sys/vendor/llama.cpp
+[submodule "crates/xlai-sys/vendor/llama.cpp"]
+	path = crates/xlai-sys/vendor/llama.cpp
 	url = https://github.com/ggml-org/llama.cpp
 	branch = master
+[submodule "crates/xlai-sys/vendor/ggml"]
+	path = crates/xlai-sys/vendor/ggml
+	url = https://github.com/ggml-org/ggml.git

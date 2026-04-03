@@ -15,7 +15,7 @@ pub mod raw {
         rustdoc::bare_urls
     )]
 
-    include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+    include!(concat!(env!("OUT_DIR"), "/llama_bindings.rs"));
 }
 
 unsafe extern "C" {

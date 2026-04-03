@@ -5,6 +5,8 @@ pub use xlai_backend_openai::{
 pub use xlai_backend_transformersjs::{
     TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
 };
+#[cfg(feature = "qts")]
+pub use xlai_backend_qts::{QtsTtsConfig, QtsTtsModel};
 pub use xlai_core as core;
 pub use xlai_runtime::{
     Agent, Chat, ChatExecutionEvent, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath,

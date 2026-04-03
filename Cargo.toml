@@ -2,14 +2,18 @@
 members = [
     "crates/xlai-backend-llama-cpp",
     "crates/xlai-backend-openai",
+    "crates/xlai-backend-qts",
     "crates/xlai-backend-transformersjs",
-    "crates/xlai-core", "crates/xlai-ffi",
-    "crates/xlai-llama-cpp-sys",
+    "crates/xlai-core",     "crates/xlai-ffi",
     "crates/xlai-local-common",
     "crates/xlai-native",
+    "crates/xlai-qts-cli",
+    "crates/xlai-qts-core",
     "crates/xlai-runtime",
+    "crates/xlai-sys",
     "crates/xlai-wasm",
 ]
+exclude = ["reference/qts", "target/_ortfetch", "target/ortcheck"]
 resolver = "3"
 
 [workspace.package]
@@ -19,25 +23,42 @@ rust-version = "1.94"
 license = "Apache-2.0"
 
 [workspace.dependencies]
+anyhow = "1.0"
 async-stream = "0.3"
 base64 = "0.22"
 bindgen = "0.72"
 cmake = "0.1"
+criterion = "0.8"
+cpal = "0.17"
+crossterm = "0.29"
 futures-core = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 getrandom = "0.2"
 gray_matter = "0.3.2"
+hound = "3.5.1"
 jsonschema = { version = "0.45.0", default-features = false }
 js-sys = "0.3"
+libc = "0.2"
+# Pin to the QTS reference version; newer `ort` RCs renamed execution-provider features.
+# QTS stack: use a recent RC compatible with Rust 1.94+ (ort 2.0.0-rc.9 fails to compile on 1.94).
+ort = { version = "2.0.0-rc.12", default-features = true }
+prost = "0.14"
+prost-build = "0.14"
+protoc-bin-vendored = "3"
+rand = "0.10"
+ratatui = "0.30"
 reqwest = { version = "0.13", default-features = false, features = ["json", "multipart", "stream"] }
+rustfft = "6.4.1"
 rust-embed = "8.11.0"
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 serde_json = "1"
 tera = "1.20.1"
+thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4.67"
+windows-sys = "0.61"
 
 [workspace.lints.rust]
 unconditional_panic = "deny"

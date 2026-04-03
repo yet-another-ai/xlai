@@ -107,6 +107,8 @@ jobs:
           hf download "$LLAMA_CPP_FIXTURE_REPO" "$LLAMA_CPP_FIXTURE_FILE" --repo-type model --local-dir "$(dirname "$LLAMA_CPP_FIXTURE_PATH")"
           test -f "$LLAMA_CPP_FIXTURE_PATH"
 
+      # QTS (`xlai-qts-core`, `xlai-backend-qts`) ignored tests need `QWEN3_TTS_MODEL_DIR` / `XLAI_QTS_MODEL_DIR`
+      # with full GGUF + vocoder ONNX; skip until a CI fixture download is added (see README).
       - name: Run ignored e2e tests
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -115,7 +117,10 @@ jobs:
           OPENAI_TRANSCRIPTION_MODEL: ${{ vars.OPENAI_TRANSCRIPTION_MODEL }}
           OPENAI_TTS_MODEL: ${{ vars.OPENAI_TTS_MODEL }}
           LLAMA_CPP_MODEL: ${{ github.workspace }}/${{ env.LLAMA_CPP_FIXTURE_PATH }}
-        run: cargo test --workspace -- --ignored
+        run: >-
+          cargo test --workspace -- --ignored
+          --skip integration_
+          --skip e2e_synthesize_via_runtime
 
   e2e-javascript:
     name: JavaScript

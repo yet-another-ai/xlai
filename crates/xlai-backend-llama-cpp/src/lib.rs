@@ -7,7 +7,7 @@ use xlai_core::{
     BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
     ChatResponse, ErrorKind, FinishReason, MessageRole, StructuredOutputFormat, XlaiError,
 };
-use xlai_llama_cpp_sys as sys;
+use xlai_sys as sys;
 
 mod prompt;
 mod request;

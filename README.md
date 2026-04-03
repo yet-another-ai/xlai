@@ -28,13 +28,16 @@ xlai/
 ├── crates/
 │   ├── xlai-backend-llama-cpp/
 │   ├── xlai-backend-openai/
+│   ├── xlai-backend-qts/
 │   ├── xlai-backend-transformersjs/
 │   ├── xlai-core/
 │   ├── xlai-ffi/
-│   ├── xlai-llama-cpp-sys/
 │   ├── xlai-local-common/
 │   ├── xlai-native/
+│   ├── xlai-qts-cli/
+│   ├── xlai-qts-core/
 │   ├── xlai-runtime/
+│   ├── xlai-sys/
 │   └── xlai-wasm/
 ├── packages/
 │   └── xlai/
@@ -57,14 +60,20 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md).
   Browser-facing `wasm-bindgen` facade crate for web integration.
 - `crates/xlai-backend-llama-cpp`
   Native `llama.cpp` chat backend for local GGUF inference.
-- `crates/xlai-llama-cpp-sys`
-  Vendored `llama.cpp` submodule plus generated/raw FFI bindings and build integration.
+- `crates/xlai-sys`
+  Vendored native stacks: `llama.cpp` (feature `llama`) and standalone `ggml` for QTS (feature `qts-ggml`). Dependents enable one or both; linking both can duplicate ggml symbols.
 - `packages/xlai`
   Vite-based TypeScript package published as `@yai-xlai/xlai`, built on top of `xlai-wasm`, with Vitest coverage.
 - `crates/xlai-backend-openai`
   OpenAI-compatible backend implementation using `reqwest`.
 - `crates/xlai-backend-transformersjs`
   Browser chat backend that delegates generation to a JavaScript adapter (WASM).
+- `crates/xlai-backend-qts`
+  Native Qwen3 TTS backend implementing `TtsModel` (WAV output; maps tuning via `TtsRequest` metadata keys `xlai.qts.*`). `VoiceSpec::Clone` is **not** supported yet (phase 2: Rust-native voice conditioning).
+- `crates/xlai-qts-core`
+  Ported QTS engine; links standalone `ggml` through `xlai-sys` (`qts-ggml`). CPU BLAS follows the same OpenBLAS / Accelerate patterns as the llama stack in `xlai-sys`.
+- `crates/xlai-qts-cli`
+  Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without `--voice-clone-prompt`, `synthesize` uses `xlai-runtime` + `xlai-backend-qts`; with a voice-clone `.pb`, it uses the legacy engine path until phase 2. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
 - `crates/xlai-local-common`
   Internal helpers shared by local inference backends (prompts, tool JSON envelope).
 
@@ -362,7 +371,7 @@ transcription-capable model such as `gpt-4o-mini-transcribe`.
 
 ### E2E workflow
 
-`.github/workflows/e2e.yml` runs ignored tests with provider credentials.
+`.github/workflows/e2e.yml` runs ignored tests with provider credentials (and skips QTS model-dir tests until a CI fixture download exists).
 
 It is intended to use a protected GitHub Environment such as `e2e`, with maintainer approval and environment secrets.
 
@@ -379,6 +388,14 @@ The ignored native `llama.cpp` smoke test expects:
 
 The repository intentionally ignores downloaded GGUF fixtures under `fixtures/llama.cpp/`.
 CI downloads that fixture with the Hugging Face CLI and caches it between runs.
+
+Ignored QTS integration tests (`xlai-qts-core`, `xlai-backend-qts`) expect a full Qwen3 TTS model directory:
+
+- `QWEN3_TTS_MODEL_DIR` or `XLAI_QTS_MODEL_DIR` pointing at a folder containing the GGUF talker, ONNX vocoder, tokenizer, and `config.json` (see `xlai_qts_core::ModelPaths`).
+
+CI e2e currently **skips** those tests because no Hugging Face download step is wired yet; run them locally after downloading weights.
+
+To build `xlai-native` with the QTS backend available, enable `--features qts` (optional; avoids linking QTS/ggml in default builds).
 
 ## Current Design Notes
 
@@ -420,6 +437,28 @@ Planned or expected next areas include:
 ### ASR API
 
 - [x] [OpenAI](https://developers.openai.com/api/docs/guides/speech-to-text)
+
+## TTS API
+- [x] [OpenAI](https://developers.openai.com/api/docs/guides/text-to-speech)
+- [ ] QTS
+  - Transformer
+    - [x] CPU
+    - [x] OpenBLAS
+    - [x] Accelerate.framework
+    - [x] Metal
+    - [x] Vulkan
+    - [ ] CUDA
+    - [ ] HIP
+    - [ ] OpenVINO
+  - Vocoder
+    - [x] CPU
+    - [x] CoreML
+    - [x] DirectML
+    - [ ] CUDA
+    - [ ] MIGraphX
+    - [ ] OpenVINO
+    - [ ] TensorRT
+    - [ ] TensorRT RTX
 
 ## License
 
