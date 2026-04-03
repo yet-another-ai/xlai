@@ -8,7 +8,8 @@ links = "llama"
 build = "build.rs"
 
 [features]
-default = []
+default = ["openblas"]
+openblas = []
 metal = []
 vulkan = []
 

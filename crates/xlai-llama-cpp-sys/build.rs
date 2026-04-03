@@ -1,5 +1,6 @@
 use std::env;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -8,6 +9,7 @@ type BuildResult<T> = Result<T, Box<dyn Error>>;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct BackendFeatureSet {
+    openblas: bool,
     metal: bool,
     vulkan: bool,
 }
@@ -24,12 +26,19 @@ fn main() -> BuildResult<()> {
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
     let feature_set = BackendFeatureSet::from_cargo_features(&target_os)?;
     let enable_accelerate = target_os == "macos";
+    let enable_openblas = feature_set.openblas && matches!(target_os.as_str(), "linux" | "windows");
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed={}", vendor_source_dir.display());
     println!("cargo:rerun-if-changed={}", wrapper_cpp.display());
     println!("cargo:rerun-if-env-changed=CMAKE_GENERATOR");
+    println!("cargo:rerun-if-env-changed=CMAKE_PREFIX_PATH");
+    println!("cargo:rerun-if-env-changed=CMAKE_TOOLCHAIN_FILE");
+    println!("cargo:rerun-if-env-changed=CARGO_TARGET_DIR");
+    println!("cargo:rerun-if-env-changed=OpenBLAS_ROOT");
     println!("cargo:rerun-if-env-changed=VULKAN_SDK");
+    println!("cargo:rerun-if-env-changed=VCPKG_INSTALLATION_ROOT");
+    println!("cargo:rerun-if-env-changed=VCPKG_TARGET_TRIPLET");
 
     let mut config = cmake::Config::new(&source_dir);
     config
@@ -47,7 +56,11 @@ fn main() -> BuildResult<()> {
         .define("LLAMA_OPENSSL", "OFF")
         .define("LLAMA_LLGUIDANCE", "ON")
         .define("GGML_OPENMP", "OFF")
-        .define("GGML_BLAS", "OFF")
+        .define("GGML_BLAS", if enable_openblas { "ON" } else { "OFF" })
+        .define(
+            "GGML_BLAS_VENDOR",
+            if enable_openblas { "OpenBLAS" } else { "" },
+        )
         .define(
             "GGML_ACCELERATE",
             if enable_accelerate { "ON" } else { "OFF" },
@@ -64,6 +77,12 @@ fn main() -> BuildResult<()> {
         .define("GGML_VIRTGPU", "OFF")
         .define("GGML_WEBGPU", "OFF");
 
+    if target_os == "windows" {
+        config.out_dir(short_cmake_out_dir(feature_set)?);
+    }
+
+    apply_cmake_env_overrides(&mut config, enable_openblas);
+
     if let Ok(generator) = env::var("CMAKE_GENERATOR") {
         config.generator(generator);
     } else if target_os == "windows" {
@@ -71,6 +90,11 @@ fn main() -> BuildResult<()> {
         // nested vulkan-shaders-gen ExternalProject in CI. Prefer Ninja unless
         // the caller explicitly overrides the generator.
         config.generator("Ninja");
+    }
+
+    if target_os == "windows" {
+        config.configure_arg("-Wno-dev");
+        config.build_arg("-v");
     }
 
     let dst = config.build();
@@ -83,20 +107,8 @@ fn main() -> BuildResult<()> {
     );
     generate_bindings(&include_dir, &ggml_include_dir)?;
 
-    emit_search_path_variants(&dst.join("lib"));
-    emit_search_path_variants(&dst.join("lib64"));
-    emit_search_path_variants(&dst.join("build"));
-    emit_search_path_variants(&dst.join("build/common"));
-    emit_search_path_variants(&dst.join("build/src"));
-    emit_search_path_variants(&dst.join("build/ggml/src"));
-    emit_search_path_variants(&dst.join("build/ggml/src/ggml-metal"));
-    emit_search_path_variants(&dst.join("build/ggml/src/ggml-vulkan"));
-    emit_search_path_variants(&dst.join("build/vendor/cpp-httplib"));
-    if let Ok(cargo_target_dir) = env::var("CARGO_TARGET_DIR") {
-        emit_search_path(Path::new(&cargo_target_dir).join("release").as_path());
-    } else {
-        emit_search_path_variants(&dst.join("build/llguidance/source/target/release"));
-    }
+    emit_llama_search_paths(&dst, feature_set, enable_openblas);
+    emit_search_path_variants(&llguidance_output_dir(&dst));
     emit_vulkan_search_paths(feature_set.vulkan, &target_os);
     emit_search_path_variants(&dst.join("build/bin"));
 
@@ -112,6 +124,9 @@ fn main() -> BuildResult<()> {
     ];
     if feature_set.metal {
         libraries.push("ggml-metal");
+    }
+    if enable_openblas {
+        libraries.push("ggml-blas");
     }
     if feature_set.vulkan {
         libraries.push("ggml-vulkan");
@@ -140,11 +155,18 @@ fn main() -> BuildResult<()> {
             println!("cargo:rustc-link-lib=dl");
             println!("cargo:rustc-link-lib=m");
             println!("cargo:rustc-link-lib=pthread");
+            if enable_openblas {
+                println!("cargo:rustc-link-lib=openblas");
+            }
             if feature_set.vulkan {
                 println!("cargo:rustc-link-lib=vulkan");
             }
         }
         "windows" => {
+            if enable_openblas {
+                emit_openblas_search_paths();
+                println!("cargo:rustc-link-lib=openblas");
+            }
             if feature_set.vulkan {
                 let library_name = if target_env == "msvc" {
                     "vulkan-1"
@@ -163,6 +185,7 @@ fn main() -> BuildResult<()> {
 impl BackendFeatureSet {
     fn from_cargo_features(target_os: &str) -> BuildResult<Self> {
         let feature_set = Self {
+            openblas: env::var_os("CARGO_FEATURE_OPENBLAS").is_some(),
             metal: env::var_os("CARGO_FEATURE_METAL").is_some(),
             vulkan: env::var_os("CARGO_FEATURE_VULKAN").is_some(),
         };
@@ -175,6 +198,85 @@ impl BackendFeatureSet {
         }
 
         Ok(feature_set)
+    }
+
+    fn suffix(self) -> &'static str {
+        match (self.openblas, self.metal, self.vulkan) {
+            (false, false, false) => "default",
+            (true, false, false) => "openblas",
+            (false, true, false) => "metal",
+            (false, false, true) => "vulkan",
+            (true, true, false) => "openblas-metal",
+            (true, false, true) => "openblas-vulkan",
+            (false, true, true) => "metal-vulkan",
+            (true, true, true) => "openblas-metal-vulkan",
+        }
+    }
+}
+
+fn apply_cmake_env_overrides(config: &mut cmake::Config, enable_openblas: bool) {
+    if let Ok(toolchain_file) = env::var("CMAKE_TOOLCHAIN_FILE") {
+        config.define("CMAKE_TOOLCHAIN_FILE", toolchain_file);
+    }
+
+    if let Ok(prefix_path) = env::var("CMAKE_PREFIX_PATH") {
+        config.define("CMAKE_PREFIX_PATH", prefix_path);
+    }
+
+    if let Ok(openblas_root) = env::var("OpenBLAS_ROOT") {
+        config.define("OpenBLAS_ROOT", openblas_root);
+    }
+
+    if let Ok(vcpkg_triplet) = env::var("VCPKG_TARGET_TRIPLET") {
+        config.define("VCPKG_TARGET_TRIPLET", vcpkg_triplet);
+    }
+
+    if enable_openblas && let Some(include_dir) = resolve_openblas_include_dir() {
+        let include_dir = include_dir.display().to_string();
+        config.define("BLAS_INCLUDE_DIRS", &include_dir);
+        config.define("OpenBLAS_INCLUDE_DIR", include_dir);
+    }
+}
+
+fn short_cmake_out_dir(feature_set: BackendFeatureSet) -> BuildResult<PathBuf> {
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
+    let workspace_root = manifest_dir
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| {
+            io::Error::other(format!(
+                "unexpected CARGO_MANIFEST_DIR layout: {}",
+                manifest_dir.display()
+            ))
+        })?;
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| "unknown".to_string());
+    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_else(|_| "unknown".to_string());
+    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+
+    Ok(workspace_root.join(".xlcm").join(format!(
+        "{target_arch}-{target_env}-{profile}-{}",
+        feature_set.suffix()
+    )))
+}
+
+fn emit_llama_search_paths(dst: &Path, feature_set: BackendFeatureSet, enable_openblas: bool) {
+    emit_search_path_variants(&dst.join("lib"));
+    emit_search_path_variants(&dst.join("lib64"));
+    emit_search_path_variants(&dst.join("build"));
+    emit_search_path_variants(&dst.join("build/common"));
+    emit_search_path_variants(&dst.join("build/src"));
+    emit_search_path_variants(&dst.join("build/ggml/src"));
+    emit_search_path_variants(&dst.join("build/vendor/cpp-httplib"));
+    let ggml_src_dir = dst.join("build/ggml/src");
+
+    if enable_openblas {
+        emit_search_path_variants(&ggml_src_dir.join("ggml-blas"));
+    }
+    if feature_set.metal {
+        emit_search_path_variants(&ggml_src_dir.join("ggml-metal"));
+    }
+    if feature_set.vulkan {
+        emit_search_path_variants(&ggml_src_dir.join("ggml-vulkan"));
     }
 }
 
@@ -198,6 +300,70 @@ fn emit_vulkan_search_paths(enable_vulkan: bool, target_os: &str) {
             emit_search_path(&vulkan_sdk.join("Lib"));
         }
         _ => {}
+    }
+}
+
+fn resolve_openblas_include_dir() -> Option<PathBuf> {
+    if let Ok(openblas_root) = env::var("OpenBLAS_ROOT")
+        && let Some(include_dir) = find_openblas_include_dir(&PathBuf::from(openblas_root))
+    {
+        return Some(include_dir);
+    }
+
+    let Ok(vcpkg_root) = env::var("VCPKG_INSTALLATION_ROOT") else {
+        return None;
+    };
+    let Ok(vcpkg_triplet) = env::var("VCPKG_TARGET_TRIPLET") else {
+        return None;
+    };
+
+    find_openblas_include_dir(&Path::new(&vcpkg_root).join("installed").join(vcpkg_triplet))
+}
+
+fn find_openblas_include_dir(root: &Path) -> Option<PathBuf> {
+    let candidates = [
+        root.join("include"),
+        root.join("include/openblas"),
+        root.join("include/OpenBLAS"),
+        root.join("include/openblas/include"),
+    ];
+
+    candidates
+        .into_iter()
+        .find(|dir| dir.join("cblas.h").exists())
+}
+
+fn emit_openblas_search_paths() {
+    if let Ok(openblas_root) = env::var("OpenBLAS_ROOT") {
+        let openblas_root = PathBuf::from(openblas_root);
+        emit_search_path_variants(&openblas_root.join("lib"));
+        emit_search_path_variants(&openblas_root.join("lib64"));
+        emit_search_path_variants(&openblas_root.join("bin"));
+    }
+
+    let Ok(vcpkg_root) = env::var("VCPKG_INSTALLATION_ROOT") else {
+        return;
+    };
+    let Ok(vcpkg_triplet) = env::var("VCPKG_TARGET_TRIPLET") else {
+        return;
+    };
+
+    let installed_dir = Path::new(&vcpkg_root).join("installed").join(vcpkg_triplet);
+    emit_search_path_variants(&installed_dir.join("lib"));
+    emit_search_path_variants(&installed_dir.join("bin"));
+}
+
+fn llguidance_output_dir(dst: &Path) -> PathBuf {
+    let target_root = if let Ok(cargo_target_dir) = env::var("CARGO_TARGET_DIR") {
+        PathBuf::from(cargo_target_dir)
+    } else {
+        dst.join("build/llguidance/source/target")
+    };
+
+    if let Ok(target_triple) = env::var("TARGET") {
+        target_root.join(target_triple).join("release")
+    } else {
+        target_root.join("release")
     }
 }
 
@@ -233,6 +399,12 @@ fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<()> {
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let path = entry.path();
+        let file_name = entry.file_name();
+
+        if file_name == OsStr::new(".git") {
+            continue;
+        }
+
         let destination = dst.join(entry.file_name());
         let file_type = entry.file_type()?;
 
@@ -290,7 +462,7 @@ fn patch_llama_common_cmake(path: &Path) -> BuildResult<()> {
     contents = replace_once(
         &contents,
         "    set(LLGUIDANCE_PATH ${LLGUIDANCE_SRC}/target/release)\n    set(LLGUIDANCE_LIB_NAME \"${CMAKE_STATIC_LIBRARY_PREFIX}llguidance${CMAKE_STATIC_LIBRARY_SUFFIX}\")\n",
-        "    set(LLGUIDANCE_LIB_NAME \"${CMAKE_STATIC_LIBRARY_PREFIX}llguidance${CMAKE_STATIC_LIBRARY_SUFFIX}\")\n\n    if (DEFINED ENV{CARGO_TARGET_DIR})\n        set(LLGUIDANCE_PATH $ENV{CARGO_TARGET_DIR}/release)\n    else()\n        set(LLGUIDANCE_PATH ${LLGUIDANCE_SRC}/target/release)\n    endif()\n",
+        "    set(LLGUIDANCE_LIB_NAME \"${CMAKE_STATIC_LIBRARY_PREFIX}llguidance${CMAKE_STATIC_LIBRARY_SUFFIX}\")\n\n    if (DEFINED ENV{CARGO_TARGET_DIR} AND NOT \"$ENV{CARGO_TARGET_DIR}\" STREQUAL \"\")\n        set(LLGUIDANCE_TARGET_DIR $ENV{CARGO_TARGET_DIR})\n    else()\n        set(LLGUIDANCE_TARGET_DIR ${LLGUIDANCE_SRC}/target)\n    endif()\n\n    if (DEFINED ENV{TARGET} AND NOT \"$ENV{TARGET}\" STREQUAL \"\")\n        set(LLGUIDANCE_PATH ${LLGUIDANCE_TARGET_DIR}/$ENV{TARGET}/release)\n        set(LLGUIDANCE_CARGO_TARGET_ARGS --target $ENV{TARGET})\n    else()\n        set(LLGUIDANCE_PATH ${LLGUIDANCE_TARGET_DIR}/release)\n        set(LLGUIDANCE_CARGO_TARGET_ARGS)\n    endif()\n",
         path,
     )?;
 
@@ -304,7 +476,7 @@ fn patch_llama_common_cmake(path: &Path) -> BuildResult<()> {
     contents = replace_once(
         &contents,
         "        BUILD_COMMAND cargo build --release --package llguidance\n",
-        "        BUILD_COMMAND ${CMAKE_COMMAND} -E env --unset=RUSTC --unset=RUSTC_WRAPPER --unset=RUSTC_WORKSPACE_WRAPPER --unset=CLIPPY_ARGS --unset=RUSTFLAGS --unset=CARGO_ENCODED_RUSTFLAGS --unset=CARGO_BUILD_RUSTFLAGS cargo build --release --package llguidance\n",
+        "        BUILD_COMMAND ${CMAKE_COMMAND} -E env --unset=RUSTC --unset=RUSTC_WRAPPER --unset=RUSTC_WORKSPACE_WRAPPER --unset=CLIPPY_ARGS --unset=RUSTFLAGS --unset=CARGO_ENCODED_RUSTFLAGS --unset=CARGO_BUILD_RUSTFLAGS cargo build --release --package llguidance ${LLGUIDANCE_CARGO_TARGET_ARGS}\n",
         path,
     )?;
 
