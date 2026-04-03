@@ -1,9 +1,7 @@
 name: Publish QTS Hugging Face release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -38,7 +36,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: '3.12'
 
       - uses: astral-sh/setup-uv@v7
         with:

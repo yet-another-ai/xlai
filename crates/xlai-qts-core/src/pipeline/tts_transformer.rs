@@ -401,12 +401,12 @@ impl TtsTransformer {
         }
 
         let hidden_size = self.config.hidden_size as usize;
-        if let Some(speaker_embd) = speaker_embd {
-            if speaker_embd.len() != hidden_size {
-                return Err(Qwen3TtsError::InvalidInput(format!(
-                    "speaker embedding must have {hidden_size} elements"
-                )));
-            }
+        if let Some(speaker_embd) = speaker_embd
+            && speaker_embd.len() != hidden_size
+        {
+            return Err(Qwen3TtsError::InvalidInput(format!(
+                "speaker embedding must have {hidden_size} elements"
+            )));
         }
         for &token in ref_codebook_0 {
             if token < 0 || token >= self.config.codec_vocab_size {
@@ -568,12 +568,12 @@ impl TtsTransformer {
         }
 
         let hidden_size = self.config.hidden_size as usize;
-        if let Some(speaker_embd) = speaker_embd {
-            if speaker_embd.len() != hidden_size {
-                return Err(Qwen3TtsError::InvalidInput(format!(
-                    "speaker embedding must have {hidden_size} elements"
-                )));
-            }
+        if let Some(speaker_embd) = speaker_embd
+            && speaker_embd.len() != hidden_size
+        {
+            return Err(Qwen3TtsError::InvalidInput(format!(
+                "speaker embedding must have {hidden_size} elements"
+            )));
         }
         for frame in ref_code_frames {
             self.validate_codebook_frame(frame)?;

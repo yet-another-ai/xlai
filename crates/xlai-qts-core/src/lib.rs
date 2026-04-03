@@ -309,13 +309,13 @@ impl Qwen3TtsEngine {
     ) -> Result<VoiceClonePromptV2, Qwen3TtsError> {
         let prompt = VoiceClonePromptV2::from_cbor_slice(bytes)?;
         self.validate_speaker_embedding(prompt.speaker_embedding())?;
-        if let Some((_, codebooks)) = prompt.ref_code_shape() {
-            if codebooks != self.transformer.config().n_codebooks as usize {
-                return Err(Qwen3TtsError::InvalidInput(format!(
-                    "voice clone prompt ref_code must have {} codebooks per frame",
-                    self.transformer.config().n_codebooks
-                )));
-            }
+        if let Some((_, codebooks)) = prompt.ref_code_shape()
+            && codebooks != self.transformer.config().n_codebooks as usize
+        {
+            return Err(Qwen3TtsError::InvalidInput(format!(
+                "voice clone prompt ref_code must have {} codebooks per frame",
+                self.transformer.config().n_codebooks
+            )));
         }
         Ok(prompt)
     }

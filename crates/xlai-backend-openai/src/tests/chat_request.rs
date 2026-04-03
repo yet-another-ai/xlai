@@ -94,6 +94,11 @@ fn serializes_plain_text_user_message_as_string_content() {
 #[test]
 fn serializes_inline_audio_as_file_content_part() {
     let config = test_config();
+    let decoded = STANDARD.decode("UklGRg==");
+    assert!(decoded.is_ok(), "decode fixture base64");
+    let Ok(audio_bytes) = decoded else {
+        return;
+    };
     let request = ChatRequest {
         model: None,
         system_prompt: None,
@@ -102,7 +107,7 @@ fn serializes_inline_audio_as_file_content_part() {
             content: ChatContent::from_parts(vec![ContentPart::Audio {
                 source: MediaSource::InlineData {
                     mime_type: "audio/wav".to_owned(),
-                    data: STANDARD.decode("UklGRg==").unwrap(),
+                    data: audio_bytes,
                 },
                 mime_type: Some("audio/wav".to_owned()),
             }]),

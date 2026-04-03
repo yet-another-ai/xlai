@@ -8,4 +8,4 @@ This directory is for mostly local fixtures. The root `.gitignore` ignores every
 - **`sample1.icl.voice-clone-prompt.cbor`**: checked-in ICL voice-clone prompt fixture generated from `samples/sample1.wav`.
 - **`sample1_ref.wav`** (optional): same reference clip as the golden prompts; if present, the ignored test `integration_native_xvector_prompt_parity_shape` compares native `create_voice_clone_prompt` metadata to the CBOR fixture.
 
-Integration tests use real checkpoints via `QWEN3_TTS_MODEL_DIR` (see `docs/testing.md`).
+Integration tests use real checkpoints via `XLAI_QTS_MODEL_DIR` (see `docs/testing.md`).

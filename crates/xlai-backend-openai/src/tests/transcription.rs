@@ -11,11 +11,16 @@ use super::common::test_config;
 #[test]
 fn transcription_request_uses_configured_transcription_model_and_decodes_audio() {
     let config = test_config().with_transcription_model("gpt-4o-mini-transcribe");
+    let decoded = STANDARD.decode("UklGRg==");
+    assert!(decoded.is_ok(), "decode fixture base64");
+    let Ok(audio_bytes) = decoded else {
+        return;
+    };
     let request = TranscriptionRequest {
         model: None,
         audio: MediaSource::InlineData {
             mime_type: "audio/wav".to_owned(),
-            data: STANDARD.decode("UklGRg==").unwrap(),
+            data: audio_bytes.clone(),
         },
         mime_type: None,
         filename: Some("sample.wav".to_owned()),
@@ -34,7 +39,7 @@ fn transcription_request_uses_configured_transcription_model_and_decodes_audio()
     assert_eq!(payload.model, "gpt-4o-mini-transcribe");
     assert_eq!(payload.filename, "sample.wav");
     assert_eq!(payload.mime_type, "audio/wav");
-    assert_eq!(payload.audio_bytes, STANDARD.decode("UklGRg==").unwrap());
+    assert_eq!(payload.audio_bytes, audio_bytes);
 }
 
 #[test]

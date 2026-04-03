@@ -40,8 +40,6 @@ hound = "3.5.1"
 jsonschema = { version = "0.45.0", default-features = false }
 js-sys = "0.3"
 libc = "0.2"
-# Pin to the QTS reference version; newer `ort` RCs renamed execution-provider features.
-# QTS stack: use a recent RC compatible with Rust 1.94+ (ort 2.0.0-rc.9 fails to compile on 1.94).
 ort = { version = "2.0.0-rc.12", default-features = true }
 rand = "0.10"
 ratatui = "0.30"

@@ -21,6 +21,7 @@ xlai-core = { path = "../xlai-core" }
 xlai-qts-core = { path = "../xlai-qts-core" }
 
 [dev-dependencies]
+futures-util.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 xlai-runtime = { path = "../xlai-runtime" }
 

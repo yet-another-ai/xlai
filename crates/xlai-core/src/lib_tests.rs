@@ -95,10 +95,15 @@ fn chat_content_round_trips_multimodal_parts() {
 
 #[test]
 fn chat_content_round_trips_audio_parts() {
+    let decoded = STANDARD.decode("UklGRg==");
+    assert!(decoded.is_ok(), "decode fixture base64");
+    let Ok(audio_bytes) = decoded else {
+        return;
+    };
     let c = ChatContent::from_parts(vec![ContentPart::Audio {
         source: MediaSource::InlineData {
             mime_type: "audio/wav".to_owned(),
-            data: STANDARD.decode("UklGRg==").unwrap(),
+            data: audio_bytes,
         },
         mime_type: Some("audio/wav".to_owned()),
     }]);
@@ -210,11 +215,26 @@ fn inline_media_json_serializes_data_as_base64_string() {
         mime_type: "audio/wav".to_owned(),
         data: vec![0, 1, 2, 255],
     };
-    let v = serde_json::to_value(&src).expect("serialize");
-    let obj = v.as_object().expect("object");
+    let serialized = serde_json::to_value(&src);
+    assert!(serialized.is_ok(), "serialize");
+    let Ok(v) = serialized else {
+        return;
+    };
+    let obj = v.as_object();
+    assert!(
+        obj.is_some(),
+        "expected serialized media source to be a JSON object"
+    );
+    let Some(obj) = obj else {
+        return;
+    };
     assert!(obj.contains_key("data"), "JSON should use `data` key");
     assert_eq!(obj["data"], json!(STANDARD.encode([0u8, 1, 2, 255])));
-    let back: MediaSource = serde_json::from_value(v).expect("deserialize");
+    let deserialized: Result<MediaSource, _> = serde_json::from_value(v);
+    assert!(deserialized.is_ok(), "deserialize");
+    let Ok(back) = deserialized else {
+        return;
+    };
     assert_eq!(back, src);
 }
 
@@ -229,15 +249,27 @@ fn tts_response_cbor_roundtrip_smaller_than_json_for_binary() {
         mime_type: "audio/wav".to_owned(),
         metadata: Default::default(),
     };
-    let cbor = response.to_cbor_vec().expect("cbor encode");
-    let json = serde_json::to_vec(&response).expect("json encode");
+    let cbor = response.to_cbor_vec();
+    assert!(cbor.is_ok(), "cbor encode");
+    let Ok(cbor) = cbor else {
+        return;
+    };
+    let json = serde_json::to_vec(&response);
+    assert!(json.is_ok(), "json encode");
+    let Ok(json) = json else {
+        return;
+    };
     assert!(
         cbor.len() < json.len(),
         "CBOR should be smaller than JSON base64 for this payload: cbor={} json={}",
         cbor.len(),
         json.len()
     );
-    let back = TtsResponse::from_cbor_slice(&cbor).expect("cbor decode");
+    let decoded = TtsResponse::from_cbor_slice(&cbor);
+    assert!(decoded.is_ok(), "cbor decode");
+    let Ok(back) = decoded else {
+        return;
+    };
     assert_eq!(back, response);
 }
 
@@ -246,7 +278,15 @@ fn tts_chunk_cbor_roundtrip() {
     let chunk = TtsChunk::AudioDelta {
         data: vec![1, 2, 3],
     };
-    let bytes = chunk.to_cbor_vec().unwrap();
-    let back = TtsChunk::from_cbor_slice(&bytes).unwrap();
+    let encoded = chunk.to_cbor_vec();
+    assert!(encoded.is_ok(), "encode chunk as cbor");
+    let Ok(bytes) = encoded else {
+        return;
+    };
+    let decoded = TtsChunk::from_cbor_slice(&bytes);
+    assert!(decoded.is_ok(), "decode chunk from cbor");
+    let Ok(back) = decoded else {
+        return;
+    };
     assert_eq!(back, chunk);
 }

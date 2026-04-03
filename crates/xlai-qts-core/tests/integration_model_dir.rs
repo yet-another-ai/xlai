@@ -1,7 +1,7 @@
 //! Layer-B style checks: requires real model artifacts on disk.
 //!
 //! ```text
-//! export QWEN3_TTS_MODEL_DIR=/path/to/models   # contains qwen3-tts-0.6b-f16.gguf + qwen3-tts-vocoder.onnx
+//! export XLAI_QTS_MODEL_DIR=/path/to/models   # contains qwen3-tts-0.6b-f16.gguf + qwen3-tts-vocoder.onnx
 //! cargo test -p xlai-qts-core integration_ -- --ignored --nocapture
 //! ```
 
@@ -10,9 +10,9 @@ use std::path::PathBuf;
 use xlai_qts_core::{Qwen3TtsEngine, SynthesizeRequest, VoiceCloneMode, VoiceClonePromptV2};
 
 fn require_model_dir() -> PathBuf {
-    std::env::var("QWEN3_TTS_MODEL_DIR")
+    std::env::var("XLAI_QTS_MODEL_DIR")
         .map(PathBuf::from)
-        .expect("QWEN3_TTS_MODEL_DIR must be set when running ignored integration tests")
+        .expect("XLAI_QTS_MODEL_DIR must be set when running ignored integration tests")
 }
 
 fn load_fixture_prompt(engine: &Qwen3TtsEngine, name: &str) -> VoiceClonePromptV2 {
@@ -28,7 +28,7 @@ fn load_fixture_prompt(engine: &Qwen3TtsEngine, name: &str) -> VoiceClonePromptV
 }
 
 #[test]
-#[ignore = "set QWEN3_TTS_MODEL_DIR to run"]
+#[ignore = "set XLAI_QTS_MODEL_DIR to run"]
 fn integration_loads_models() {
     let dir = require_model_dir();
     let engine = Qwen3TtsEngine::from_model_dir(&dir).expect("load models");
@@ -38,7 +38,7 @@ fn integration_loads_models() {
 }
 
 #[test]
-#[ignore = "set QWEN3_TTS_MODEL_DIR to run"]
+#[ignore = "set XLAI_QTS_MODEL_DIR to run"]
 fn integration_synthesize_direct_path_audio() {
     let dir = require_model_dir();
     let engine = Qwen3TtsEngine::from_model_dir(&dir).expect("load");
@@ -54,7 +54,7 @@ fn integration_synthesize_direct_path_audio() {
 }
 
 #[test]
-#[ignore = "set QWEN3_TTS_MODEL_DIR to run"]
+#[ignore = "set XLAI_QTS_MODEL_DIR to run"]
 fn integration_voice_clone_prompt_xvector_mode() {
     let dir = require_model_dir();
     let engine = Qwen3TtsEngine::from_model_dir(&dir).expect("load");
@@ -80,7 +80,7 @@ fn integration_voice_clone_prompt_xvector_mode() {
 }
 
 #[test]
-#[ignore = "set QWEN3_TTS_MODEL_DIR to run"]
+#[ignore = "set XLAI_QTS_MODEL_DIR to run"]
 fn integration_voice_clone_prompt_icl_mode() {
     let dir = require_model_dir();
     let engine = Qwen3TtsEngine::from_model_dir(&dir).expect("load");
@@ -111,7 +111,7 @@ fn integration_voice_clone_prompt_icl_mode() {
 }
 
 #[test]
-#[ignore = "set QWEN3_TTS_MODEL_DIR to run"]
+#[ignore = "set XLAI_QTS_MODEL_DIR to run"]
 fn integration_native_xvector_prompt_parity_shape() {
     let dir = require_model_dir();
     let engine = Qwen3TtsEngine::from_model_dir(&dir).expect("load");

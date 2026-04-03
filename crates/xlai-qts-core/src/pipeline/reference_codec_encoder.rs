@@ -26,6 +26,10 @@ pub struct ReferenceCodecPreprocessConfig {
     /// RVQ depth (codebooks per frame), e.g. 16 for 12Hz Qwen3-TTS tokenizer.
     #[serde(default = "default_num_quantizers")]
     pub num_quantizers: u32,
+    /// If set, reference codec ONNX was traced at this waveform length after resampling; the
+    /// runtime truncates longer buffers to this size (shorter buffers are rejected).
+    #[serde(default)]
+    pub onnx_trace_audio_len: Option<u32>,
 }
 
 fn default_num_quantizers() -> u32 {
@@ -38,6 +42,7 @@ impl Default for ReferenceCodecPreprocessConfig {
             sampling_rate: 24_000,
             do_normalize: true,
             num_quantizers: 16,
+            onnx_trace_audio_len: None,
         }
     }
 }
@@ -113,6 +118,21 @@ impl ReferenceCodecEncoder {
         let mut input_values = samples;
         if self.preprocess.do_normalize {
             z_normalize(&mut input_values);
+        }
+        if let Some(expected) = self.preprocess.onnx_trace_audio_len {
+            let exp = expected as usize;
+            if input_values.len() < exp {
+                return Err(Qwen3TtsError::InvalidInput(format!(
+                    "reference audio after resampling has {} samples but the exported reference codec ONNX \
+                     was traced at onnx_trace_audio_len={} (see qwen3-tts-reference-codec-preprocess.json); \
+                     use a longer clip or re-export with a smaller trace length",
+                    input_values.len(),
+                    expected
+                )));
+            }
+            if input_values.len() > exp {
+                input_values.truncate(exp);
+            }
         }
         let t = input_values.len();
         let mask = vec![1_i64; t];

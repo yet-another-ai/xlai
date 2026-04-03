@@ -231,11 +231,11 @@ impl TextTokenizer {
 
         for pair in word.windows(2) {
             let key = (pair[0].clone(), pair[1].clone());
-            if let Some(rank) = self.bpe_ranks.get(&key) {
-                if *rank < best_rank {
-                    best_rank = *rank;
-                    best = Some(key);
-                }
+            if let Some(rank) = self.bpe_ranks.get(&key)
+                && *rank < best_rank
+            {
+                best_rank = *rank;
+                best = Some(key);
             }
         }
 

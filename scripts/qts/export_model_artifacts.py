@@ -8,8 +8,9 @@ import json
 import logging
 import re
 import sys
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 import numpy as np
 import onnx
@@ -23,6 +24,65 @@ import gguf
 from scripts.qts.dtype_utils import resolve_dtype
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _transformers_drop_packed_sequence_mask_for_onnx_trace() -> Iterator[None]:
+    """Avoid packed-sequence mask branch in ``create_causal_mask`` during ONNX trace.
+
+    For ``position_ids`` + ``attention_mask is None``, recent transformers always
+    builds ``packed_sequence_mask`` and combines it via vmap; that path hits
+    functorch/dynamo ops that break ``torch.onnx.export(..., dynamo=False)`` (JIT trace).
+    Single-sequence reference audio (batch 1) does not need that branch.
+    """
+    import transformers.masking_utils as masking_utils
+
+    real_preprocess: Callable[..., Any] = masking_utils._preprocess_mask_arguments
+
+    def _preprocess_drop_packed(*args: Any, **kwargs: Any) -> Any:
+        early_exit, attention_mask, _packed, kv_length, kv_offset = real_preprocess(
+            *args, **kwargs
+        )
+        return early_exit, attention_mask, None, kv_length, kv_offset
+
+    masking_utils._preprocess_mask_arguments = _preprocess_drop_packed
+    try:
+        yield
+    finally:
+        masking_utils._preprocess_mask_arguments = real_preprocess
+
+
+@contextmanager
+def _patch_torch_cdist_p2_for_onnx_trace() -> Iterator[None]:
+    """Replace ``torch.cdist(..., p=2)`` with a broadcast formulation for ONNX trace.
+
+    Mimi / RVQ codebooks call ``torch.cdist`` in ``modeling_mimi``; the TorchScript ONNX
+    symbolic for ``cdist`` can assert on dynamic shapes. Elementwise squared distance +
+    ``sqrt`` lowers cleanly to standard ONNX ops.
+    """
+    real_cdist = torch.cdist
+
+    def cdist_p2_onnx(
+        x1: torch.Tensor,
+        x2: torch.Tensor,
+        p: float = 2,
+        compute_mode: str = "use_mm_for_euclid_dist_if_necessary",
+    ) -> torch.Tensor:
+        if p != 2:
+            return real_cdist(x1, x2, p, compute_mode)
+        # x1: (..., N, D), x2: (..., M, D) -> (..., N, M)
+        return torch.sqrt(
+            torch.clamp(
+                ((x1.unsqueeze(-2) - x2.unsqueeze(-3)) ** 2).sum(dim=-1),
+                min=0.0,
+            )
+        )
+
+    torch.cdist = cdist_p2_onnx  # type: ignore[method-assign]
+    try:
+        yield
+    finally:
+        torch.cdist = real_cdist  # type: ignore[method-assign]
 
 
 def _qwen3_tts_tokenizer_cls():  # lazy: importing qwen_tts pulls torch/transformers
@@ -352,16 +412,34 @@ class VocoderOnnxWrapper(torch.nn.Module):
 
 
 class ReferenceCodecEncodeOnnxWrapper(torch.nn.Module):
-    """ONNX-exportable slice of `Qwen3TTSTokenizerV2Model.encode` (batch size 1)."""
+    """ONNX-exportable slice of `Qwen3TTSTokenizerV2Model.encode` (batch size 1).
+
+    Calls `model.encoder.encode` directly and applies the same length trim as the Python
+    `encode` implementation: keep the first ``ceil(sum(padding_mask) / encode_downsample_rate)``
+    code frames (see ``code[..., :-(-mask.sum() // d)]`` in ``modeling_qwen3_tts_tokenizer_v2``).
+    This avoids list comprehensions / dynamic iteration that confuse the TorchScript exporter.
+    """
 
     def __init__(self, model: torch.nn.Module):
         super().__init__()
         self.model = model
+        self._num_quantizers = int(model.encoder_valid_num_quantizers)
+        self._encode_downsample = int(model.encode_downsample_rate)
 
     def forward(self, input_values: torch.Tensor, padding_mask: torch.Tensor) -> torch.Tensor:
-        enc = self.model.encode(input_values, padding_mask, return_dict=True)
-        # `audio_codes` is a list of (T, Q) int64 tensors — take the first (and only) batch item.
-        return enc.audio_codes[0].to(torch.int64)
+        enc = self.model.encoder.encode(
+            input_values.unsqueeze(1),
+            return_dict=True,
+        )
+        # (1, Q, T_code)
+        codes = enc.audio_codes[:, : self._num_quantizers, :]
+        code = codes[0]
+        # Scalar int64; match Python floor-division sign rule for the trim length.
+        # Align with `codes[0]`: only batch index 0 (Rust and this export use batch == 1).
+        length = padding_mask[0].sum()
+        n_frames = -((-length) // self._encode_downsample)
+        code = code[..., :n_frames]
+        return code.transpose(0, 1).to(torch.int64)
 
 
 def parse_args() -> argparse.Namespace:
@@ -410,6 +488,15 @@ def parse_args() -> argparse.Namespace:
         "--local-files-only",
         action="store_true",
         help="Do not download from Hugging Face; require all files to already exist locally.",
+    )
+    parser.add_argument(
+        "--skip-reference-codec",
+        action="store_true",
+        help=(
+            "Skip qwen3-tts-reference-codec.onnx and preprocess JSON (GGUF + vocoder only). "
+            "Use when ONNX export fails on your PyTorch/transformers stack; ICL voice clone "
+            "needs the reference codec artifacts from a machine where export succeeds."
+        ),
     )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging.")
     return parser.parse_args()
@@ -580,6 +667,7 @@ def export_vocoder_onnx(
         export_params=True,
         opset_version=opset,
         do_constant_folding=True,
+        dynamo=False,
         input_names=["audio_codes"],
         output_names=["audio_values", "audio_lengths"],
         dynamic_axes={
@@ -640,6 +728,7 @@ def write_reference_codec_preprocess_json(
     output_path: Path,
     num_quantizers: int,
     encode_downsample_rate: int,
+    onnx_trace_audio_len: int,
 ) -> None:
     src = speech_tokenizer_dir / "preprocessor_config.json"
     if not src.exists():
@@ -647,6 +736,9 @@ def write_reference_codec_preprocess_json(
     data = json.loads(src.read_text(encoding="utf-8"))
     data["num_quantizers"] = int(num_quantizers)
     data["encode_downsample_rate"] = int(encode_downsample_rate)
+    # TorchScript ONNX trace is specialized to this `input_values` time dimension; ORT
+    # inference must use the same length after resampling (see Rust `ReferenceCodecEncoder`).
+    data["onnx_trace_audio_len"] = int(onnx_trace_audio_len)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     logger.info("Wrote reference codec preprocess JSON: %s", output_path)
@@ -677,36 +769,40 @@ def export_reference_codec_onnx(
     num_quantizers = int(model.encoder_valid_num_quantizers)
     encode_downsample_rate = int(model.get_encode_downsample_rate())
     input_sr = int(model.get_input_sample_rate())
+    # Must match the ONNX trace example; ORT is not shape-general for this graph.
+    trace_audio_len = max(400, input_sr // 2)
 
     write_reference_codec_preprocess_json(
         speech_tokenizer_dir=speech_tokenizer_dir,
         output_path=preprocess_json_path,
         num_quantizers=num_quantizers,
         encode_downsample_rate=encode_downsample_rate,
+        onnx_trace_audio_len=trace_audio_len,
     )
 
     wrapper = ReferenceCodecEncodeOnnxWrapper(model).cpu().eval()
-    # ~0.5s of zeros matches feature-extractor length scale; dynamic axes cover real audio.
-    half_sec = max(400, input_sr // 2)
+    half_sec = trace_audio_len
     dummy_iv = torch.zeros((1, half_sec), dtype=torch.float32)
     dummy_mask = torch.ones((1, half_sec), dtype=torch.int64)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.onnx.export(
-        wrapper,
-        (dummy_iv, dummy_mask),
-        str(output_path),
-        export_params=True,
-        opset_version=opset,
-        do_constant_folding=True,
-        input_names=["input_values", "padding_mask"],
-        output_names=["audio_codes"],
-        dynamic_axes={
-            "input_values": {0: "batch", 1: "audio_len"},
-            "padding_mask": {0: "batch", 1: "audio_len"},
-            "audio_codes": {0: "code_frames"},
-        },
-    )
+    with _transformers_drop_packed_sequence_mask_for_onnx_trace(), _patch_torch_cdist_p2_for_onnx_trace():
+        torch.onnx.export(
+            wrapper,
+            (dummy_iv, dummy_mask),
+            str(output_path),
+            export_params=True,
+            opset_version=opset,
+            do_constant_folding=True,
+            dynamo=False,
+            input_names=["input_values", "padding_mask"],
+            output_names=["audio_codes"],
+            dynamic_axes={
+                "input_values": {0: "batch", 1: "audio_len"},
+                "padding_mask": {0: "batch", 1: "audio_len"},
+                "audio_codes": {0: "code_frames", 1: "num_quantizers"},
+            },
+        )
     add_reference_codec_onnx_metadata(
         output_path,
         source_model=source_model,
@@ -749,7 +845,10 @@ def main() -> None:
     logger.info("Resolved model dir: %s", model_dir)
     logger.info("Main GGUF types: %s", ", ".join(main_types))
     logger.info("Vocoder ONNX output: %s", vocoder_out)
-    logger.info("Reference codec ONNX output: %s", ref_codec_out)
+    if args.skip_reference_codec:
+        logger.info("Reference codec export: skipped (--skip-reference-codec)")
+    else:
+        logger.info("Reference codec ONNX output: %s", ref_codec_out)
 
     gguf_outputs: list[Path] = []
     for main_type in main_types:
@@ -784,7 +883,10 @@ def main() -> None:
         )
 
     speech_tok_dir = model_dir / "speech_tokenizer"
-    if ref_codec_out.exists():
+    ref_onnx_out: Path | None
+    if args.skip_reference_codec:
+        ref_onnx_out = None
+    elif ref_codec_out.exists():
         logger.info("Reusing existing reference codec ONNX: %s", ref_codec_out)
         normalize_onnx_to_single_file(ref_codec_out)
         ref_onnx_out = ref_codec_out
@@ -796,11 +898,13 @@ def main() -> None:
                 attn_implementation="eager",
             )
             m = tokenizer.model
+            isr = int(m.get_input_sample_rate())
             write_reference_codec_preprocess_json(
                 speech_tokenizer_dir=speech_tok_dir,
                 output_path=ref_preprocess_out,
                 num_quantizers=int(m.encoder_valid_num_quantizers),
                 encode_downsample_rate=int(m.get_encode_downsample_rate()),
+                onnx_trace_audio_len=max(400, isr // 2),
             )
     else:
         ref_onnx_out = export_reference_codec_onnx(
@@ -812,10 +916,15 @@ def main() -> None:
             opset=args.ref_codec_opset,
         )
 
+    if ref_onnx_out is not None:
+        ref_summary = (
+            f"reference_codec_onnx={ref_onnx_out} reference_codec_preprocess={ref_preprocess_out}"
+        )
+    else:
+        ref_summary = "reference_codec_onnx=skipped reference_codec_preprocess=skipped"
     print(
         f"exported artifacts: main_ggufs={','.join(str(path) for path in gguf_outputs)} "
-        f"vocoder_onnx={onnx_out} reference_codec_onnx={ref_onnx_out} "
-        f"reference_codec_preprocess={ref_preprocess_out} main_types={','.join(main_types)}"
+        f"vocoder_onnx={onnx_out} {ref_summary} main_types={','.join(main_types)}"
     )
 
 

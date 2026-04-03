@@ -391,7 +391,7 @@ CI downloads that fixture with the Hugging Face CLI and caches it between runs.
 
 Ignored QTS integration tests (`xlai-qts-core`, `xlai-backend-qts`) expect a full Qwen3 TTS model directory:
 
-- `QWEN3_TTS_MODEL_DIR` or `XLAI_QTS_MODEL_DIR` pointing at a folder containing the GGUF talker, ONNX vocoder (`qwen3-tts-vocoder.onnx`), tokenizer, and `config.json` (see `xlai_qts_core::ModelPaths`). For **ICL** voice clone, also add `qwen3-tts-reference-codec.onnx` and `qwen3-tts-reference-codec-preprocess.json` (export with `uv run export-model-artifacts`; see `docs/qts-export-and-hf-publish.md`).
+- `XLAI_QTS_MODEL_DIR` pointing at a folder containing the GGUF talker, ONNX vocoder (`qwen3-tts-vocoder.onnx`), tokenizer, and `config.json` (see `xlai_qts_core::ModelPaths`). For **ICL** voice clone, also add `qwen3-tts-reference-codec.onnx` and `qwen3-tts-reference-codec-psreprocess.json` (export with `uv run export-model-artifacts`; see `docs/qts-export-and-hf-publish.md`).
 
 CI e2e currently **skips** those tests because no Hugging Face download step is wired yet; run them locally after downloading weights.
 
@@ -439,6 +439,7 @@ Planned or expected next areas include:
 - [x] [OpenAI](https://developers.openai.com/api/docs/guides/speech-to-text)
 
 ## TTS API
+
 - [x] [OpenAI](https://developers.openai.com/api/docs/guides/text-to-speech)
 - [ ] QTS
   - Transformer

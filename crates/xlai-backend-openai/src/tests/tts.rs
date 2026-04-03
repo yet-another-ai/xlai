@@ -90,6 +90,11 @@ fn tts_json_body_maps_provider_ref_voice_to_id_object() {
 #[test]
 fn tts_rejects_clone_voice_spec() {
     let config = test_config();
+    let decoded = STANDARD.decode("UklGRg==");
+    assert!(decoded.is_ok(), "decode fixture base64");
+    let Ok(audio_bytes) = decoded else {
+        return;
+    };
     let request = TtsRequest {
         model: None,
         input: "Hi".to_owned(),
@@ -97,7 +102,7 @@ fn tts_rejects_clone_voice_spec() {
             references: vec![VoiceReferenceSample {
                 audio: MediaSource::InlineData {
                     mime_type: "audio/wav".to_owned(),
-                    data: STANDARD.decode("UklGRg==").unwrap(),
+                    data: audio_bytes,
                 },
                 mime_type: None,
                 transcript: None,
