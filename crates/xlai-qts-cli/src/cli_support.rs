@@ -146,9 +146,8 @@ impl CommonSynthesisArgs {
             }
             "--voice-clone-mode" => {
                 let raw = value_arg(args, idx, "--voice-clone-mode")?;
-                self.voice_clone_mode = Some(
-                    VoiceCloneMode::parse(&raw).map_err(|e| anyhow::anyhow!("{e}"))?,
-                );
+                self.voice_clone_mode =
+                    Some(VoiceCloneMode::parse(&raw).map_err(|e| anyhow::anyhow!("{e}"))?);
                 Ok(true)
             }
             "--threads" => {

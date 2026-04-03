@@ -1,9 +1,11 @@
 //! Build [`VoiceClonePromptV2`](crate::VoiceClonePromptV2) from raw reference WAV bytes (Rust-native).
 
+use crate::Qwen3TtsError;
 use crate::pipeline::reference_codec_encoder::ReferenceCodecEncoder;
 use crate::pipeline::speaker_encoder::SpeakerEncoderConfig;
-use crate::voice_clone_prompt::{TensorF32, TensorI32, VOICE_CLONE_PROMPT_V2_SCHEMA_VERSION, VoiceClonePromptV2};
-use crate::Qwen3TtsError;
+use crate::voice_clone_prompt::{
+    TensorF32, TensorI32, VOICE_CLONE_PROMPT_V2_SCHEMA_VERSION, VoiceClonePromptV2,
+};
 
 /// How reference audio conditions synthesis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

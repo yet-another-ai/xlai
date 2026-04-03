@@ -38,7 +38,9 @@ use xlai_core::{
 };
 use xlai_qts_core::{ModelPaths, Qwen3TtsEngine, Qwen3TtsError, VoiceCloneMode};
 
-pub use request_map::{QtsVoiceCloneParams, synthesize_request_from_tts, voice_clone_params_from_tts};
+pub use request_map::{
+    QtsVoiceCloneParams, synthesize_request_from_tts, voice_clone_params_from_tts,
+};
 
 /// Configuration for [`QtsTtsModel`].
 #[derive(Clone, Debug)]

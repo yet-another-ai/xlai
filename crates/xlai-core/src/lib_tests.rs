@@ -243,7 +243,9 @@ fn tts_response_cbor_roundtrip_smaller_than_json_for_binary() {
 
 #[test]
 fn tts_chunk_cbor_roundtrip() {
-    let chunk = TtsChunk::AudioDelta { data: vec![1, 2, 3] };
+    let chunk = TtsChunk::AudioDelta {
+        data: vec![1, 2, 3],
+    };
     let bytes = chunk.to_cbor_vec().unwrap();
     let back = TtsChunk::from_cbor_slice(&bytes).unwrap();
     assert_eq!(back, chunk);

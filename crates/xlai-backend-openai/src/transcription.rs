@@ -34,10 +34,7 @@ impl OpenAiTranscriptionRequest {
         } = request;
 
         let (source_mime_type, audio_bytes) = match audio {
-            MediaSource::InlineData {
-                mime_type,
-                data,
-            } => (mime_type, data),
+            MediaSource::InlineData { mime_type, data } => (mime_type, data),
             MediaSource::Url { .. } => {
                 return Err(XlaiError::new(
                     ErrorKind::Unsupported,

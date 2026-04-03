@@ -72,9 +72,10 @@ mod tests {
         let p = ModelPaths::from_model_dir("/models");
         assert!(p.main_gguf.ends_with("qwen3-tts-0.6b-f16.gguf"));
         assert!(p.vocoder_onnx.ends_with("qwen3-tts-vocoder.onnx"));
-        assert!(p
-            .reference_codec_onnx
-            .ends_with("qwen3-tts-reference-codec.onnx"));
+        assert!(
+            p.reference_codec_onnx
+                .ends_with("qwen3-tts-reference-codec.onnx")
+        );
     }
 
     #[test]

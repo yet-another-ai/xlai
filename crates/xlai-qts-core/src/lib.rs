@@ -264,7 +264,8 @@ impl Qwen3TtsEngine {
                 })?;
                 let text = ref_text.ok_or_else(|| {
                     Qwen3TtsError::InvalidInput(
-                        "ICL voice clone requires ref_text (transcript of the reference clip)".into(),
+                        "ICL voice clone requires ref_text (transcript of the reference clip)"
+                            .into(),
                     )
                 })?;
                 build_icl_voice_clone_prompt(

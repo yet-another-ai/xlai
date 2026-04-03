@@ -1,7 +1,9 @@
 //! Map [`xlai_core::TtsRequest`] to [`xlai_qts_core::SynthesizeRequest`].
 
 use serde_json::Value;
-use xlai_core::{ErrorKind, MediaSource, Metadata, TtsRequest, VoiceReferenceSample, VoiceSpec, XlaiError};
+use xlai_core::{
+    ErrorKind, MediaSource, Metadata, TtsRequest, VoiceReferenceSample, VoiceSpec, XlaiError,
+};
 use xlai_qts_core::{SynthesizeRequest, TalkerKvMode, VoiceCloneMode};
 
 /// Parsed voice-clone inputs for QTS (first reference sample only in this release).
@@ -17,7 +19,9 @@ pub struct QtsVoiceCloneParams {
 /// # Errors
 ///
 /// Returns [`XlaiError`] when references are missing, decoding fails, or mode metadata is invalid.
-pub fn voice_clone_params_from_tts(request: &TtsRequest) -> Result<Option<QtsVoiceCloneParams>, XlaiError> {
+pub fn voice_clone_params_from_tts(
+    request: &TtsRequest,
+) -> Result<Option<QtsVoiceCloneParams>, XlaiError> {
     let VoiceSpec::Clone { references } = &request.voice else {
         return Ok(None);
     };
@@ -43,9 +47,8 @@ fn resolve_voice_clone_mode(
     transcript: Option<&str>,
 ) -> Result<VoiceCloneMode, XlaiError> {
     if let Some(raw) = meta.get("xlai.qts.voice_clone_mode").and_then(json_str) {
-        return VoiceCloneMode::parse(raw).map_err(|e| {
-            XlaiError::new(ErrorKind::Validation, e.to_string())
-        });
+        return VoiceCloneMode::parse(raw)
+            .map_err(|e| XlaiError::new(ErrorKind::Validation, e.to_string()));
     }
     let has_text = transcript.map(|t| !t.trim().is_empty()).unwrap_or(false);
     Ok(if has_text {

@@ -3,8 +3,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use ort::session::builder::GraphOptimizationLevel;
 use ort::session::Session;
+use ort::session::builder::GraphOptimizationLevel;
 use ort::value::Tensor;
 use serde::Deserialize;
 
@@ -62,12 +62,9 @@ impl ReferenceCodecEncoder {
             return Err(Qwen3TtsError::ModelFile(onnx_path));
         }
 
-        let json_path = preprocess_json
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| {
-                onnx_path
-                    .with_file_name("qwen3-tts-reference-codec-preprocess.json")
-            });
+        let json_path = preprocess_json.map(Path::to_path_buf).unwrap_or_else(|| {
+            onnx_path.with_file_name("qwen3-tts-reference-codec-preprocess.json")
+        });
         let preprocess: ReferenceCodecPreprocessConfig = if json_path.is_file() {
             let raw = std::fs::read_to_string(&json_path).map_err(|e| {
                 Qwen3TtsError::InvalidInput(format!(
@@ -123,10 +120,9 @@ impl ReferenceCodecEncoder {
         let input_iv = Tensor::from_array(([1usize, t], input_values)).map_err(ort_err)?;
         let input_mask = Tensor::from_array(([1usize, t], mask.clone())).map_err(ort_err)?;
 
-        let mut session = self
-            .session
-            .lock()
-            .map_err(|_| Qwen3TtsError::InvalidInput("reference codec session lock poisoned".into()))?;
+        let mut session = self.session.lock().map_err(|_| {
+            Qwen3TtsError::InvalidInput("reference codec session lock poisoned".into())
+        })?;
         let in_names = session.inputs();
         if in_names.len() < 2 {
             return Err(Qwen3TtsError::InvalidOnnx(self.model_path.clone()));
@@ -196,7 +192,11 @@ fn z_normalize(samples: &mut [f32]) {
 }
 
 // Expose linear resample for reference codec (speaker_encoder keeps its own copy private).
-pub(crate) fn resample_linear_internal(samples: &[f32], input_rate: u32, output_rate: u32) -> Vec<f32> {
+pub(crate) fn resample_linear_internal(
+    samples: &[f32],
+    input_rate: u32,
+    output_rate: u32,
+) -> Vec<f32> {
     if input_rate == output_rate || samples.len() < 2 {
         return samples.to_vec();
     }

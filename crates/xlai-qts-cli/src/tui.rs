@@ -288,9 +288,8 @@ impl TuiConfig {
                 }
                 "--voice-clone-mode" => {
                     let raw = value_arg(&args, &mut idx, "--voice-clone-mode")?;
-                    config.voice_clone_mode = Some(VoiceCloneMode::parse(&raw).map_err(|e| {
-                        anyhow::anyhow!("{e}")
-                    })?);
+                    config.voice_clone_mode =
+                        Some(VoiceCloneMode::parse(&raw).map_err(|e| anyhow::anyhow!("{e}"))?);
                 }
                 "--threads" => {
                     config.thread_count = parse_value_arg(&args, &mut idx, "--threads")?;

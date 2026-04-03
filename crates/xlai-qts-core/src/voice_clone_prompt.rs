@@ -81,7 +81,9 @@ impl VoiceClonePromptV2 {
         self.validate()?;
         let mut bytes = Vec::new();
         ciborium::into_writer(self, &mut bytes).map_err(|err| {
-            Qwen3TtsError::InvalidInput(format!("failed to encode voice clone prompt as CBOR: {err}"))
+            Qwen3TtsError::InvalidInput(format!(
+                "failed to encode voice clone prompt as CBOR: {err}"
+            ))
         })?;
         Ok(bytes)
     }
