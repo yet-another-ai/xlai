@@ -13,6 +13,8 @@ env:
   SCCACHE_GHA_ENABLED: 'true'
   RUSTC_WRAPPER: sccache
   CARGO_INCREMENTAL: '0'
+  VCPKG_ROOT: C:\vcpkg
+  VCPKG_OPENBLAS_TRIPLET: x64-windows-static-md
 
 jobs:
   unit-rust:
