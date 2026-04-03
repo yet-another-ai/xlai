@@ -28,7 +28,8 @@ mod js_file_system;
 pub use agent_session::WasmAgentSession;
 pub use api::{
     agent, chat, create_agent_session, create_agent_session_with_memory_file_system,
-    create_chat_session, create_chat_session_with_memory_file_system, package_version,
+    create_chat_session, create_chat_session_with_memory_file_system, package_version, tts,
+    tts_stream,
 };
 #[cfg(target_arch = "wasm32")]
 pub use api::{

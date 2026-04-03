@@ -1,12 +1,10 @@
 //! `wasm_bindgen` exports (one-shot `chat` / `agent` and session constructors).
 
 use futures_util::StreamExt;
-use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
+use wasm_bindgen::prelude::wasm_bindgen;
 use xlai_backend_openai::{OpenAiConfig, OpenAiTtsModel};
-use xlai_core::{ChatContent, TtsDeliveryMode, TtsModel, TtsRequest};
-use xlai_core::TtsChunk;
-use xlai_core::TtsResponse;
+use xlai_core::{ChatContent, TtsChunk, TtsDeliveryMode, TtsModel, TtsRequest};
 
 use crate::agent_session::WasmAgentSession;
 use crate::chat_session::WasmChatSession;
@@ -20,8 +18,8 @@ use crate::factory::{
 };
 use crate::memory_fs::WasmMemoryFileSystem;
 use crate::types::{
-    WasmAgentRequest, WasmChatRequest, WasmChatSessionOptions, WasmTtsCallOptions,
-    DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL,
+    DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL, WasmAgentRequest, WasmChatRequest,
+    WasmChatSessionOptions, WasmTtsCallOptions,
 };
 use crate::wasm_helpers::js_error;
 
@@ -198,4 +196,57 @@ pub fn create_transformers_agent_session_with_file_system(
         options,
         Some(js_file_system_arc(file_system)),
     )
+}
+
+fn openai_tts_model(opts: &WasmTtsCallOptions) -> OpenAiTtsModel {
+    let mut config = OpenAiConfig::new(
+        opts.base_url
+            .clone()
+            .unwrap_or_else(|| DEFAULT_OPENAI_BASE_URL.to_owned()),
+        opts.api_key.clone(),
+        opts.model
+            .clone()
+            .unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_owned()),
+    );
+    if let Some(ref m) = opts.tts_model {
+        config = config.with_tts_model(m.clone());
+    }
+    OpenAiTtsModel::new(config)
+}
+
+fn tts_request_from_opts(opts: &WasmTtsCallOptions, delivery: TtsDeliveryMode) -> TtsRequest {
+    TtsRequest {
+        model: None,
+        input: opts.input.clone(),
+        voice: opts.voice.clone(),
+        response_format: opts.response_format,
+        speed: opts.speed,
+        instructions: opts.instructions.clone(),
+        delivery,
+        metadata: Default::default(),
+    }
+}
+
+#[wasm_bindgen]
+pub async fn tts(options: JsValue) -> Result<JsValue, JsValue> {
+    let opts: WasmTtsCallOptions = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
+    let delivery = opts.delivery.unwrap_or(TtsDeliveryMode::Unary);
+    let model = openai_tts_model(&opts);
+    let request = tts_request_from_opts(&opts, delivery);
+    let response = model.synthesize(request).await.map_err(js_error)?;
+    serde_wasm_bindgen::to_value(&response).map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = ttsStream)]
+pub async fn tts_stream(options: JsValue) -> Result<JsValue, JsValue> {
+    let opts: WasmTtsCallOptions = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
+    let delivery = opts.delivery.unwrap_or(TtsDeliveryMode::Stream);
+    let model = openai_tts_model(&opts);
+    let request = tts_request_from_opts(&opts, delivery);
+    let mut chunks = Vec::<TtsChunk>::new();
+    let mut stream = model.synthesize_stream(request);
+    while let Some(item) = stream.next().await {
+        chunks.push(item.map_err(js_error)?);
+    }
+    serde_wasm_bindgen::to_value(&chunks).map_err(js_error)
 }
