@@ -69,6 +69,56 @@ export async function packageVersion(): Promise<string> {
   return getWasmModule().package_version();
 }
 
+export function normalizeInlineData<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeInlineData(entry)) as T;
+  }
+
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+
+  const objectValue = value as Record<string, unknown>;
+  const normalized = Object.fromEntries(
+    Object.entries(objectValue).map(([key, entry]) => [
+      key,
+      normalizeInlineData(entry),
+    ]),
+  );
+
+  if (normalized.kind === 'inline_data') {
+    const data =
+      typeof normalized.data === 'string'
+        ? normalized.data
+        : typeof normalized.data_base64 === 'string'
+          ? normalized.data_base64
+          : undefined;
+
+    if (data !== undefined) {
+      normalized.data = data;
+    }
+
+    delete normalized.data_base64;
+  }
+
+  if (normalized.type === 'audio_delta') {
+    const data =
+      typeof normalized.data === 'string'
+        ? normalized.data
+        : typeof normalized.data_base64 === 'string'
+          ? normalized.data_base64
+          : undefined;
+
+    if (data !== undefined) {
+      normalized.data = data;
+    }
+
+    delete normalized.data_base64;
+  }
+
+  return normalized as T;
+}
+
 function requireApiKey(apiKey?: string): string {
   const resolvedApiKey = apiKey ?? envValue('OPENAI_API_KEY');
   if (resolvedApiKey === undefined || resolvedApiKey.trim() === '') {
@@ -83,7 +133,7 @@ export function resolveRequestOptions(
 ): ResolvedRequestOptions {
   return {
     prompt: options.prompt ?? '',
-    content: options.content,
+    content: normalizeInlineData(options.content),
     apiKey: requireApiKey(options.apiKey),
     systemPrompt: options.systemPrompt,
     baseUrl: options.baseUrl ?? envValue('OPENAI_BASE_URL'),
@@ -182,16 +232,18 @@ export abstract class ToolSession {
   }
 
   async prompt(content: string): Promise<ChatResponse> {
-    return this.inner.prompt(content);
+    return normalizeInlineData(await this.inner.prompt(content));
   }
 
   async promptContent(content: ChatContent): Promise<ChatResponse> {
     if (this.inner.promptWithContent !== undefined) {
-      return this.inner.promptWithContent(content);
+      return normalizeInlineData(
+        await this.inner.promptWithContent(normalizeInlineData(content)),
+      );
     }
 
     if (typeof content === 'string') {
-      return this.inner.prompt(content);
+      return normalizeInlineData(await this.inner.prompt(content));
     }
 
     throw new Error(

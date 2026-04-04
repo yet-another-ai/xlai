@@ -7,11 +7,21 @@ export type MediaSource =
       kind: 'url';
       url: string;
     }
-  | {
+  | ({
       kind: 'inline_data';
       mime_type: string;
-      data_base64: string;
-    };
+    } & (
+      | {
+          data: string;
+          /** @deprecated Use `data`; retained for request compatibility. */
+          data_base64?: string;
+        }
+      | {
+          /** @deprecated Use `data`; retained for request compatibility. */
+          data_base64: string;
+          data?: string;
+        }
+    ));
 
 export type ContentPart =
   | {
@@ -172,5 +182,18 @@ export interface TtsResponse {
 /** Matches `xlai_core::TtsChunk` JSON (`type` tag, snake_case). */
 export type TtsChunk =
   | { type: 'started'; mime_type: string; metadata?: Record<string, unknown> }
-  | { type: 'audio_delta'; data_base64: string }
+  | ({
+      type: 'audio_delta';
+    } & (
+      | {
+          data: string;
+          /** @deprecated Use `data`; retained for request compatibility. */
+          data_base64?: string;
+        }
+      | {
+          /** @deprecated Use `data`; retained for request compatibility. */
+          data_base64: string;
+          data?: string;
+        }
+    ))
   | { type: 'finished'; response: TtsResponse };

@@ -2,6 +2,7 @@ import type { ChatOptions, ChatResponse, ChatSessionOptions } from './types';
 import {
   ToolSession,
   createToolSession,
+  normalizeInlineData,
   resolveRequestOptions,
   type WasmChatFunction,
   type WasmCreateSessionFunction,
@@ -67,5 +68,7 @@ export async function createChatSession(
 
 export async function chat(options: ChatOptions): Promise<ChatResponse> {
   await initXlai();
-  return wasmChatFunction()(resolveRequestOptions(options));
+  return normalizeInlineData(
+    await wasmChatFunction()(resolveRequestOptions(options)),
+  );
 }

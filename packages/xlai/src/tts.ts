@@ -1,4 +1,5 @@
 import type { TtsChunk, TtsOptions, TtsResponse } from './types';
+import { normalizeInlineData } from './shared';
 import { envValue, getWasmModule, initXlai } from './wasm';
 
 function requireApiKey(apiKey?: string): string {
@@ -56,7 +57,9 @@ export async function tts(options: TtsOptions): Promise<TtsResponse> {
   const wasm = getWasmModule() as ReturnType<typeof getWasmModule> & {
     tts: (o: unknown) => Promise<TtsResponse>;
   };
-  return wasm.tts(toWasmTtsPayload(options));
+  return normalizeInlineData(
+    await wasm.tts(normalizeInlineData(toWasmTtsPayload(options))),
+  );
 }
 
 export async function ttsStream(options: TtsOptions): Promise<TtsChunk[]> {
@@ -64,5 +67,7 @@ export async function ttsStream(options: TtsOptions): Promise<TtsChunk[]> {
   const wasm = getWasmModule() as ReturnType<typeof getWasmModule> & {
     ttsStream: (o: unknown) => Promise<TtsChunk[]>;
   };
-  return wasm.ttsStream(toWasmTtsPayload(options));
+  return normalizeInlineData(
+    await wasm.ttsStream(normalizeInlineData(toWasmTtsPayload(options))),
+  );
 }
