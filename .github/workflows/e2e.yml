@@ -136,11 +136,11 @@ jobs:
       - name: Download QTS test fixture
         shell: bash
         run: |
-          mkdir -p "$(dirname "$QTS_FIXTURE_PATH")"
-          hf download "$QTS_FIXTURE_REPO" qwen3-tts-0.6b-q8_0.gguf --repo-type model --local-dir "$(dirname "$QTS_FIXTURE_PATH")"
-          hf download "$QTS_FIXTURE_REPO" qwen3-tts-vocoder.onnx --repo-type model --local-dir "$(dirname "$QTS_FIXTURE_PATH")"
-          hf download "$QTS_FIXTURE_REPO" qwen3-tts-reference-codec.onnx --repo-type model --local-dir "$(dirname "$QTS_FIXTURE_PATH")"
-          hf download "$QTS_FIXTURE_REPO" qwen3-tts-reference-codec-preprocess.json --repo-type model --local-dir "$(dirname "$QTS_FIXTURE_PATH")"
+          mkdir -p "$QTS_FIXTURE_PATH"
+          hf download "$QTS_FIXTURE_REPO" qwen3-tts-0.6b-q8_0.gguf --repo-type model --local-dir "$QTS_FIXTURE_PATH"
+          hf download "$QTS_FIXTURE_REPO" qwen3-tts-vocoder.onnx --repo-type model --local-dir "$QTS_FIXTURE_PATH"
+          hf download "$QTS_FIXTURE_REPO" qwen3-tts-reference-codec.onnx --repo-type model --local-dir "$QTS_FIXTURE_PATH"
+          hf download "$QTS_FIXTURE_REPO" qwen3-tts-reference-codec-preprocess.json --repo-type model --local-dir "$QTS_FIXTURE_PATH"
           test -f "$QTS_FIXTURE_PATH/qwen3-tts-0.6b-q8_0.gguf"
           test -f "$QTS_FIXTURE_PATH/qwen3-tts-vocoder.onnx"
           test -f "$QTS_FIXTURE_PATH/qwen3-tts-reference-codec.onnx"
