@@ -332,7 +332,10 @@ fn executable_in_path(name: &str) -> bool {
     };
     for dir in env::split_paths(&path_var) {
         let candidate = dir.join(name);
-        if fs::metadata(&candidate).map(|m| m.is_file()).unwrap_or(false) {
+        if fs::metadata(&candidate)
+            .map(|m| m.is_file())
+            .unwrap_or(false)
+        {
             return true;
         }
         #[cfg(windows)]

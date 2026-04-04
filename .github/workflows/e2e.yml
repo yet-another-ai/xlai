@@ -27,7 +27,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
-        working-directory: ${{ runner.os == 'Windows' && 'C:\\w' || github.workspace }}
+        working-directory: ${{ matrix.runner == 'windows-latest' && 'C:\\w' || '.' }}
     environment:
       name: e2e
       deployment: false

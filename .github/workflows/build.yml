@@ -24,7 +24,7 @@ jobs:
     defaults:
       run:
         # MSBuild/ggml-vulkan nested paths exceed MAX_PATH under the default D:\a\...\workspace.
-        working-directory: ${{ runner.os == 'Windows' && 'C:\\w' || github.workspace }}
+        working-directory: ${{ matrix.runner == 'windows-latest' && 'C:\\w' || '.' }}
     strategy:
       fail-fast: false
       matrix:
