@@ -4,7 +4,8 @@ members = [
     "crates/xlai-backend-openai",
     "crates/xlai-backend-qts",
     "crates/xlai-backend-transformersjs",
-    "crates/xlai-core",     "crates/xlai-ffi",
+    "crates/xlai-core",
+    "crates/xlai-ffi",
     "crates/xlai-local-common",
     "crates/xlai-native",
     "crates/xlai-qts-cli",
@@ -69,5 +70,3 @@ panic_in_result_fn = "deny"
 
 [profile.release]
 debug = "line-tables-only"
-lto = true
-codegen-units = 1
