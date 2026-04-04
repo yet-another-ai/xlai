@@ -61,14 +61,15 @@ jobs:
           path: ${{ env.VCPKG_ROOT }}
           key: vcpkg-openblas-${{ runner.os }}-${{ env.VCPKG_OPENBLAS_TRIPLET }}-v1
 
-      - name: Install Linux OpenBLAS prerequisites
+      - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             libopenblas-dev \
+            libasound2-dev
 
-      - name: Install Windows OpenBLAS prerequisites
+      - name: Install Windows prerequisites
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -87,6 +88,11 @@ jobs:
 
           Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake"
           Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_TARGET_TRIPLET=$env:VCPKG_OPENBLAS_TRIPLET"
+
+      - name: Install macOS prerequisites
+        if: runner.os == 'macOS'
+        run: |
+          brew install shaderc
 
       - name: Setup Python
         uses: actions/setup-python@v6

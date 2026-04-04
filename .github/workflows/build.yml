@@ -39,12 +39,6 @@ jobs:
             artifact_path: |
               target/x86_64-pc-windows-msvc/release/xlai_ffi.dll
               target/x86_64-pc-windows-msvc/release/xlai_ffi.lib
-          - name: macos-x86_64
-            runner: macos-latest
-            target: x86_64-apple-darwin
-            feature_set: metal,vulkan
-            cargo_features: xlai-ffi/metal,xlai-ffi/vulkan
-            artifact_path: target/x86_64-apple-darwin/release/libxlai_ffi.dylib
           - name: macos-arm64
             runner: macos-latest
             target: aarch64-apple-darwin
@@ -76,11 +70,11 @@ jobs:
           path: ${{ env.VCPKG_ROOT }}
           key: vcpkg-openblas-${{ runner.os }}-${{ env.VCPKG_OPENBLAS_TRIPLET }}-v1
 
-      - name: Install Linux OpenBLAS prerequisites
+      - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libopenblas-dev
+          sudo apt-get install -y libopenblas-dev libasound2-dev
 
       - name: Install Windows OpenBLAS prerequisites
         if: runner.os == 'Windows'
@@ -102,19 +96,18 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake"
           Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_TARGET_TRIPLET=$env:VCPKG_OPENBLAS_TRIPLET"
 
-      - name: Install Linux Vulkan prerequisites
-        if: runner.os == 'Linux' && contains(matrix.feature_set, 'vulkan')
+      - name: Install Linux prerequisites
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y glslc
+          sudo apt-get install -y glslc libvulkan-dev
 
-      - name: Install macOS Vulkan prerequisites
-        if: runner.os == 'macOS' && contains(matrix.feature_set, 'vulkan')
+      - name: Install macOS prerequisites
+        if: runner.os == 'macOS'
         run: |
           brew install shaderc
 
       - name: Install Vulkan SDK
-        if: contains(matrix.feature_set, 'vulkan')
         uses: jakoch/install-vulkan-sdk-action@v1
         with:
           vulkan_version: latest
