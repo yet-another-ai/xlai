@@ -2,8 +2,7 @@ use xlai_backend_openai::OpenAiConfig;
 use xlai_core::{ErrorKind, MediaSource, RuntimeCapability, TranscriptionRequest, XlaiError};
 use xlai_runtime::RuntimeBuilder;
 
-const SAMPLE_WAV_BYTES: &[u8] =
-    include_bytes!("../../../fixtures/audio/transcription-sample.wav");
+const SAMPLE_WAV_BYTES: &[u8] = include_bytes!("../../../fixtures/audio/transcription-sample.wav");
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
