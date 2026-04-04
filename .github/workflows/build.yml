@@ -67,6 +67,7 @@ jobs:
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
           robocopy $src $dest /E /XD target /R:2 /W:2 /NFL /NDL /NJH /NJS /np
           if ($LASTEXITCODE -ge 8) { exit $LASTEXITCODE }
+          $global:LASTEXITCODE = 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
