@@ -358,33 +358,53 @@ fn parse_requested_execution_provider() -> Result<RequestedExecutionProvider, Qw
 }
 
 fn default_auto_execution_provider_order() -> Vec<VocoderExecutionProvider> {
-    let mut order = Vec::new();
-
-    #[cfg(target_vendor = "apple")]
-    {
-        #[cfg(feature = "coreml")]
+    let coreml = {
+        #[cfg(all(target_vendor = "apple", feature = "coreml"))]
         {
-            order.push(VocoderExecutionProvider::CoreMl);
+            vec![VocoderExecutionProvider::CoreMl]
         }
-    }
-
-    #[cfg(all(not(target_vendor = "apple"), feature = "cuda"))]
-    {
-        order.push(VocoderExecutionProvider::Cuda);
-    }
-
-    #[cfg(all(not(target_vendor = "apple"), feature = "tensorrt"))]
-    {
-        order.push(VocoderExecutionProvider::TensorRt);
-    }
-
-    #[cfg(all(target_os = "windows", feature = "directml"))]
-    {
-        order.push(VocoderExecutionProvider::DirectMl);
-    }
-
-    order.push(VocoderExecutionProvider::Cpu);
-    order
+        #[cfg(not(all(target_vendor = "apple", feature = "coreml")))]
+        {
+            vec![]
+        }
+    };
+    let cuda = {
+        #[cfg(all(not(target_vendor = "apple"), feature = "cuda"))]
+        {
+            vec![VocoderExecutionProvider::Cuda]
+        }
+        #[cfg(not(all(not(target_vendor = "apple"), feature = "cuda")))]
+        {
+            vec![]
+        }
+    };
+    let tensorrt = {
+        #[cfg(all(not(target_vendor = "apple"), feature = "tensorrt"))]
+        {
+            vec![VocoderExecutionProvider::TensorRt]
+        }
+        #[cfg(not(all(not(target_vendor = "apple"), feature = "tensorrt")))]
+        {
+            vec![]
+        }
+    };
+    let directml = {
+        #[cfg(all(target_os = "windows", feature = "directml"))]
+        {
+            vec![VocoderExecutionProvider::DirectMl]
+        }
+        #[cfg(not(all(target_os = "windows", feature = "directml")))]
+        {
+            vec![]
+        }
+    };
+    coreml
+        .into_iter()
+        .chain(cuda)
+        .chain(tensorrt)
+        .chain(directml)
+        .chain(std::iter::once(VocoderExecutionProvider::Cpu))
+        .collect()
 }
 
 fn parse_auto_execution_provider_order() -> Result<Vec<VocoderExecutionProvider>, Qwen3TtsError> {
