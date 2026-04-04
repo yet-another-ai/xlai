@@ -63,9 +63,12 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
     validate_features(&target);
 
     if feature_enabled("vulkan") {
-        println!(
-            "cargo:warning=ggml-sys: Vulkan builds require a Vulkan SDK/loader and `glslc` (for example `libvulkan-dev` and `glslc` on Linux)"
-        );
+        println!("cargo:rerun-if-env-changed=PATH");
+        if !executable_in_path("glslc") {
+            println!(
+                "cargo:warning=ggml-sys: Vulkan builds require a Vulkan SDK/loader and `glslc` (for example `libvulkan-dev` and `glslc` on Linux)"
+            );
+        }
     }
 
     let mut cfg = cmake::Config::new(&ggml_root);
@@ -321,6 +324,29 @@ fn emit_search_path_variants(path: &Path) {
     for config in ["Release", "RelWithDebInfo", "Debug", "MinSizeRel"] {
         emit_search_path(&path.join(config));
     }
+}
+
+fn executable_in_path(name: &str) -> bool {
+    let Some(path_var) = env::var_os("PATH") else {
+        return false;
+    };
+    for dir in env::split_paths(&path_var) {
+        let candidate = dir.join(name);
+        if fs::metadata(&candidate).map(|m| m.is_file()).unwrap_or(false) {
+            return true;
+        }
+        #[cfg(windows)]
+        {
+            let candidate_exe = dir.join(format!("{name}.exe"));
+            if fs::metadata(&candidate_exe)
+                .map(|m| m.is_file())
+                .unwrap_or(false)
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn feature_enabled(name: &str) -> bool {

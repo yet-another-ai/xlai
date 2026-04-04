@@ -25,6 +25,9 @@ jobs:
   e2e-rust:
     name: Rust - ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: ${{ runner.os == 'Windows' && 'C:\\w' || github.workspace }}
     environment:
       name: e2e
       deployment: false
@@ -45,6 +48,18 @@ jobs:
         with:
           submodules: true
 
+      - name: Mirror checkout to short path (Windows)
+        if: runner.os == 'Windows'
+        working-directory: ${{ github.workspace }}
+        shell: pwsh
+        run: |
+          $src = $env:GITHUB_WORKSPACE
+          $dest = 'C:\w'
+          if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          robocopy $src $dest /E /XD target /R:2 /W:2 /NFL /NDL /NJH /NJS /np
+          if ($LASTEXITCODE -ge 8) { exit $LASTEXITCODE }
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -53,6 +68,8 @@ jobs:
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ runner.os == 'Windows' && 'C:/w -> target' || '' }}
 
       - name: Cache Windows vcpkg OpenBLAS
         if: runner.os == 'Windows'
@@ -105,7 +122,7 @@ jobs:
       - name: Cache llama.cpp test fixture
         uses: actions/cache@v5
         with:
-          path: fixtures/llama.cpp
+          path: ${{ runner.os == 'Windows' && 'C:/w/fixtures/llama.cpp' || 'fixtures/llama.cpp' }}
           key: llama-cpp-fixture-${{ env.LLAMA_CPP_FIXTURE_FILE }}-v1
 
       - name: Download llama.cpp test fixture
@@ -135,8 +152,8 @@ jobs:
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           OPENAI_TRANSCRIPTION_MODEL: ${{ vars.OPENAI_TRANSCRIPTION_MODEL }}
           OPENAI_TTS_MODEL: ${{ vars.OPENAI_TTS_MODEL }}
-          LLAMA_CPP_MODEL: ${{ github.workspace }}/${{ env.LLAMA_CPP_FIXTURE_PATH }}
-          XLAI_QTS_MODEL_DIR: ${{ github.workspace }}/${{ env.QTS_FIXTURE_PATH }}
+          LLAMA_CPP_MODEL: ${{ runner.os == 'Windows' && format('C:/w/{0}', env.LLAMA_CPP_FIXTURE_PATH) || format('{0}/{1}', github.workspace, env.LLAMA_CPP_FIXTURE_PATH) }}
+          XLAI_QTS_MODEL_DIR: ${{ runner.os == 'Windows' && format('C:/w/{0}', env.QTS_FIXTURE_PATH) || format('{0}/{1}', github.workspace, env.QTS_FIXTURE_PATH) }}
         run: >-
           cargo test --workspace -- --ignored
 

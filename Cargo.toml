@@ -69,6 +69,5 @@ panic_in_result_fn = "deny"
 
 [profile.release]
 debug = "line-tables-only"
-# Fat LTO requires LLVM bitcode in every object; prebuilt native deps (e.g. ort) break that on Linux.
-lto = "thin"
+lto = true
 codegen-units = 1

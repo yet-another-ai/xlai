@@ -40,11 +40,20 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Short Cargo target dir (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\t | Out-Null
+          Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_DIR=C:\t"
+
       - name: Run sccache
         uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          target-dir: ${{ runner.os == 'Windows' && 'C:\\t' || '' }}
 
       - name: Cache Windows vcpkg OpenBLAS
         if: runner.os == 'Windows'
