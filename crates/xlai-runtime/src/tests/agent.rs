@@ -1,8 +1,13 @@
 //! Runtime tests: agent and MCP.
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use futures_util::StreamExt;
 use serde_json::json;
-use xlai_core::{ChatResponse, FinishReason, ToolCall, XlaiError};
+use xlai_core::{
+    ChatContent, ChatMessage, ChatResponse, ErrorKind, FinishReason, MessageRole, ToolCall,
+    XlaiError,
+};
 
 use super::common::*;
 use crate::RuntimeBuilder;
@@ -357,5 +362,324 @@ async fn agent_register_tool_shorthand_routes_through_mcp_registry() -> Result<(
         Some("weather for Paris: sunny")
     );
 
+    Ok(())
+}
+
+fn user_message(text: &str) -> ChatMessage {
+    ChatMessage {
+        role: MessageRole::User,
+        content: ChatContent::text(text),
+        tool_name: None,
+        tool_call_id: None,
+        metadata: empty_metadata(),
+    }
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_context_compressor_runs_once_per_stream_round() -> Result<(), XlaiError> {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![
+            ChatResponse {
+                message: assistant_message(""),
+                tool_calls: vec![ToolCall {
+                    id: "t1".to_owned(),
+                    tool_name: "lookup_weather".to_owned(),
+                    arguments: json!({ "city": "Paris" }),
+                }],
+                usage: None,
+                finish_reason: FinishReason::ToolCalls,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("done"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
+        ],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let calls_cb = Arc::clone(&calls);
+    let mut agent = runtime
+        .agent_session()?
+        .with_context_compressor(move |msgs, est| {
+            let calls_cb = Arc::clone(&calls_cb);
+            async move {
+                calls_cb.fetch_add(1, Ordering::SeqCst);
+                assert!(
+                    est.is_some(),
+                    "expected a best-effort token estimate for non-empty context"
+                );
+                Ok(msgs)
+            }
+        });
+    agent.register_tool(weather_tool_definition(), |arguments| async move {
+        Ok(xlai_core::ToolResult {
+            tool_name: "lookup_weather".to_owned(),
+            content: format!(
+                "weather for {}: ok",
+                arguments["city"].as_str().unwrap_or("?")
+            ),
+            is_error: false,
+            metadata: empty_metadata(),
+        })
+    });
+
+    agent_stream_prompt_final_response(&agent, "What's the weather in Paris?").await?;
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_context_compressor_sees_growing_history() -> Result<(), XlaiError> {
+    let lens = Arc::new(Mutex::new(Vec::new()));
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![
+            ChatResponse {
+                message: assistant_message(""),
+                tool_calls: vec![ToolCall {
+                    id: "t1".to_owned(),
+                    tool_name: "lookup_weather".to_owned(),
+                    arguments: json!({ "city": "Paris" }),
+                }],
+                usage: None,
+                finish_reason: FinishReason::ToolCalls,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("ok"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
+        ],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let lens_cb = Arc::clone(&lens);
+    let mut agent = runtime
+        .agent_session()?
+        .with_context_compressor(move |msgs, _est| {
+            let lens_cb = Arc::clone(&lens_cb);
+            async move {
+                lock_unpoisoned(&lens_cb).push(msgs.len());
+                Ok(msgs)
+            }
+        });
+    agent.register_tool(weather_tool_definition(), |arguments| async move {
+        Ok(xlai_core::ToolResult {
+            tool_name: "lookup_weather".to_owned(),
+            content: format!("weather for {}", arguments["city"].as_str().unwrap_or("?")),
+            is_error: false,
+            metadata: empty_metadata(),
+        })
+    });
+
+    agent_stream_prompt_final_response(&agent, "Paris weather?").await?;
+    let seen = lock_unpoisoned(&lens);
+    assert_eq!(&*seen, &vec![1_usize, 3]);
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_context_compressor_rewritten_messages_reach_model() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![
+            ChatResponse {
+                message: assistant_message(""),
+                tool_calls: vec![ToolCall {
+                    id: "t1".to_owned(),
+                    tool_name: "lookup_weather".to_owned(),
+                    arguments: json!({ "city": "Paris" }),
+                }],
+                usage: None,
+                finish_reason: FinishReason::ToolCalls,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("final"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
+        ],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let mut agent = runtime
+        .agent_session()?
+        .with_context_compressor(|mut msgs, _est| async move {
+            // Only forward the first user turn to the model; internal history still grows.
+            let idx = msgs
+                .iter()
+                .position(|m| m.role == MessageRole::User)
+                .ok_or_else(|| {
+                    XlaiError::new(
+                        ErrorKind::Provider,
+                        "context compressor test: missing user message",
+                    )
+                })?;
+            let u = msgs.remove(idx);
+            Ok(vec![u])
+        });
+    agent.register_tool(weather_tool_definition(), |_arguments| async move {
+        Ok(xlai_core::ToolResult {
+            tool_name: "lookup_weather".to_owned(),
+            content: "tool ok".to_owned(),
+            is_error: false,
+            metadata: empty_metadata(),
+        })
+    });
+
+    agent_stream_prompt_final_response(&agent, "Paris?").await?;
+    let reqs = lock_unpoisoned(&requests);
+    assert_eq!(reqs.len(), 2);
+    assert_eq!(reqs[0].messages.len(), 1);
+    assert_eq!(reqs[0].messages[0].role, MessageRole::User);
+    assert_eq!(reqs[1].messages.len(), 1);
+    assert_eq!(reqs[1].messages[0].role, MessageRole::User);
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_context_compressor_not_invoked_on_unary_prompt() -> Result<(), XlaiError> {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![ChatResponse {
+            message: assistant_message("hi"),
+            tool_calls: Vec::new(),
+            usage: None,
+            finish_reason: FinishReason::Completed,
+            metadata: empty_metadata(),
+        }],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let calls_cb = Arc::clone(&calls);
+    let agent = runtime
+        .agent_session()?
+        .with_context_compressor(move |_msgs, _est| {
+            let calls_cb = Arc::clone(&calls_cb);
+            async move {
+                calls_cb.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![user_message("x")])
+            }
+        });
+
+    agent.prompt("hello").await?;
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_context_compressor_error_propagates_from_stream() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(requests.clone(), vec![]));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let agent = runtime
+        .agent_session()?
+        .with_context_compressor(|_msgs, _est| async {
+            Err(XlaiError::new(ErrorKind::Provider, "compressor failed"))
+        });
+
+    let mut stream = agent.stream_prompt("x");
+    let Some(first) = stream.next().await else {
+        return Err(XlaiError::new(
+            ErrorKind::Provider,
+            "expected stream to yield compressor error",
+        ));
+    };
+    match first {
+        Err(e) => {
+            assert_eq!(e.kind, ErrorKind::Provider);
+            assert!(e.message.contains("compressor failed"));
+        }
+        Ok(_) => {
+            return Err(XlaiError::new(
+                ErrorKind::Provider,
+                "expected compressor error, got event",
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_context_compressor_empty_output_errors_stream() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(requests.clone(), vec![]));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let agent = runtime
+        .agent_session()?
+        .with_context_compressor(|_msgs, _est| async { Ok(Vec::new()) });
+
+    let mut stream = agent.stream_prompt("x");
+    let Some(first) = stream.next().await else {
+        return Err(XlaiError::new(
+            ErrorKind::Provider,
+            "expected stream to yield error for empty compressor output",
+        ));
+    };
+    match first {
+        Err(e) => assert_eq!(e.kind, ErrorKind::Provider),
+        Ok(_) => {
+            return Err(XlaiError::new(
+                ErrorKind::Provider,
+                "expected error for empty compressor output",
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_context_compressor_skipped_when_agent_loop_disabled() -> Result<(), XlaiError> {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let chunks = vec![xlai_core::ChatChunk::Finished(ChatResponse {
+        message: assistant_message("one shot"),
+        tool_calls: Vec::new(),
+        usage: None,
+        finish_reason: FinishReason::Completed,
+        metadata: empty_metadata(),
+    })];
+    let model = Arc::new(StreamingChatModel::new(vec![chunks]));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let calls_cb = Arc::clone(&calls);
+    let agent = runtime
+        .agent_session()?
+        .with_agent_loop_enabled(false)
+        .with_context_compressor(move |_msgs, _est| {
+            let calls_cb = Arc::clone(&calls_cb);
+            async move {
+                calls_cb.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![user_message("should not run")])
+            }
+        });
+
+    let _ = agent_stream_prompt_final_response(&agent, "x").await?;
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
     Ok(())
 }

@@ -36,6 +36,16 @@ pub(crate) fn tool_js_value_error(error: JsValue) -> XlaiError {
 }
 
 #[cfg(target_arch = "wasm32")]
+pub(crate) fn provider_js_value_error(error: JsValue) -> XlaiError {
+    XlaiError::new(
+        ErrorKind::Provider,
+        error
+            .as_string()
+            .unwrap_or_else(|| format!("javascript callback failed: {error:?}")),
+    )
+}
+
+#[cfg(target_arch = "wasm32")]
 pub(crate) fn file_system_js_error(error: impl ToString) -> XlaiError {
     XlaiError::new(xlai_core::ErrorKind::FileSystem, error.to_string())
 }

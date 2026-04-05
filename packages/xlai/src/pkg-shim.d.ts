@@ -19,6 +19,11 @@ declare module '../pkg/xlai_wasm.js' {
     ) => void;
     prompt: (content: string) => Promise<unknown>;
     promptWithContent?: (content: ChatContent) => Promise<unknown>;
+    registerContextCompressor?: (
+      callback: (messages: unknown, estimatedInputTokens: unknown) => unknown,
+    ) => void;
+    streamPrompt?: (content: string) => Promise<unknown>;
+    streamPromptWithContent?: (content: ChatContent) => Promise<unknown>;
   };
 
   export default init;

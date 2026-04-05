@@ -22,10 +22,14 @@ export {
 export type { QtsBrowserCapabilities, QtsTtsOptions } from './qts';
 export { packageVersion } from './shared';
 export type {
+  AgentContextCompressor,
   AgentOptions,
   AgentSessionOptions,
+  ChatExecutionEvent,
   ChatFinishReason,
   ChatContent,
+  ChatMessage,
+  ChatMessageRole,
   ChatOptions,
   ChatResponse,
   ChatSessionOptions,
