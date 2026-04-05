@@ -1,0 +1,117 @@
+//! Bridges standalone QTS ggml log callbacks into [`tracing`].
+
+use std::borrow::Cow;
+use std::ffi::{CStr, c_char, c_void};
+use std::sync::{Mutex, Once};
+
+use crate::ggml::sys;
+
+struct LogState {
+    buf: String,
+    pending_start_level: Option<sys::ggml_log_level>,
+}
+
+impl LogState {
+    const fn new() -> Self {
+        Self {
+            buf: String::new(),
+            pending_start_level: None,
+        }
+    }
+}
+
+static LOG_STATE: Mutex<LogState> = Mutex::new(LogState::new());
+static INSTALL: Once = Once::new();
+
+/// Installs `ggml_log_set` once per process so native ggml messages go through `tracing`.
+pub(crate) fn ensure_installed() {
+    INSTALL.call_once(|| {
+        // SAFETY: ggml documents a process-wide log callback; null user data.
+        unsafe {
+            sys::ggml_log_set(Some(ggml_tracing_log_callback), std::ptr::null_mut());
+        }
+    });
+}
+
+unsafe extern "C" fn ggml_tracing_log_callback(
+    level: sys::ggml_log_level,
+    text: *const c_char,
+    _user_data: *mut c_void,
+) {
+    let text: Cow<'_, str> = if text.is_null() {
+        Cow::Borrowed("")
+    } else {
+        unsafe { CStr::from_ptr(text).to_string_lossy() }
+    };
+    on_native_fragment(level, text.as_ref());
+}
+
+fn on_native_fragment(level: sys::ggml_log_level, text: &str) {
+    let Ok(mut st) = LOG_STATE.lock() else {
+        return;
+    };
+
+    if level == sys::ggml_log_level_GGML_LOG_LEVEL_CONT {
+        st.buf.push_str(text);
+        return;
+    }
+
+    if !st.buf.is_empty() {
+        let emit_level = st.pending_start_level.unwrap_or(level);
+        let drained = std::mem::take(&mut st.buf);
+        st.pending_start_level = None;
+        emit_full_message(emit_level, &drained);
+    }
+
+    st.pending_start_level = Some(level);
+    st.buf.push_str(text);
+
+    while let Some(pos) = st.buf.find('\n') {
+        let line = st.buf[..pos].to_string();
+        st.buf.drain(..=pos);
+        let lvl = st.pending_start_level.unwrap_or(level);
+        if !line.is_empty() {
+            emit_line(lvl, line.trim_end_matches('\r'));
+        }
+    }
+}
+
+fn emit_full_message(level: sys::ggml_log_level, message: &str) {
+    let trimmed = message.trim_end_matches(['\n', '\r']);
+    if trimmed.is_empty() {
+        return;
+    }
+    for line in trimmed.split('\n') {
+        let line = line.trim_end_matches('\r');
+        if !line.is_empty() {
+            emit_line(level, line);
+        }
+    }
+}
+
+fn emit_line(level: sys::ggml_log_level, message: &str) {
+    if message.is_empty() {
+        return;
+    }
+    const TARGET: &str = "xlai::native::ggml";
+    match level {
+        sys::ggml_log_level_GGML_LOG_LEVEL_ERROR => {
+            tracing::error!(target: TARGET, "{message}");
+        }
+        sys::ggml_log_level_GGML_LOG_LEVEL_WARN => {
+            tracing::warn!(target: TARGET, "{message}");
+        }
+        sys::ggml_log_level_GGML_LOG_LEVEL_INFO | sys::ggml_log_level_GGML_LOG_LEVEL_NONE => {
+            tracing::info!(target: TARGET, "{message}");
+        }
+        sys::ggml_log_level_GGML_LOG_LEVEL_DEBUG => {
+            tracing::debug!(target: TARGET, "{message}");
+        }
+        sys::ggml_log_level_GGML_LOG_LEVEL_CONT => {
+            tracing::debug!(target: TARGET, "{message}");
+        }
+        _ => {
+            tracing::debug!(target: TARGET, "{message}");
+        }
+    }
+}

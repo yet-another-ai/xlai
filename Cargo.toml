@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/xlai-observability",
     "crates/xlai-backend-llama-cpp",
     "crates/xlai-backend-openai",
     "crates/xlai-backend-qts",
@@ -53,6 +54,13 @@ serde_json = "1"
 tera = "1.20.1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "env-filter",
+    "fmt",
+    "registry",
+    "std",
+] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4.67"
 windows-sys = "0.61"

@@ -18,6 +18,9 @@ pub mod raw {
     include!(concat!(env!("OUT_DIR"), "/llama_bindings.rs"));
 }
 
+#[path = "llama_log_bridge.rs"]
+mod llama_log_bridge;
+
 unsafe extern "C" {
     fn xlai_llama_sampler_init_llguidance(
         vocab: *const raw::llama_vocab,
@@ -877,6 +880,7 @@ pub fn supports_gpu_offload() -> bool {
 fn ensure_backend_initialized() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
+        llama_log_bridge::install();
         // SAFETY: llama.cpp documents this as a one-time process-level init.
         unsafe { raw::llama_backend_init() };
     });

@@ -40,18 +40,11 @@ anyhow.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 xlai-backend-qts = { path = "../xlai-backend-qts" }
 xlai-core = { path = "../xlai-core" }
+xlai-observability = { path = "../xlai-observability" }
 xlai-qts-core = { path = "../xlai-qts-core" }
 xlai-runtime = { path = "../xlai-runtime" }
 hound.workspace = true
 cpal.workspace = true
 crossterm.workspace = true
-libc.workspace = true
 ratatui.workspace = true
 serde_json.workspace = true
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = [
-    "Win32_Foundation",
-    "Win32_System_Console",
-    "Win32_System_Threading",
-] }

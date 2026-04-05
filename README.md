@@ -438,7 +438,7 @@ Planned or expected next areas include:
 
 - [x] [OpenAI](https://developers.openai.com/api/docs/guides/speech-to-text)
 
-## TTS API
+### TTS API
 
 - [x] [OpenAI](https://developers.openai.com/api/docs/guides/text-to-speech)
 - [ ] QTS
@@ -451,15 +451,7 @@ Planned or expected next areas include:
     - [ ] CUDA
     - [ ] HIP
     - [ ] OpenVINO
-  - Vocoder
-    - [x] CPU
-    - [x] CoreML
-    - [x] DirectML
-    - [ ] CUDA
-    - [ ] MIGraphX
-    - [ ] OpenVINO
-    - [ ] TensorRT
-    - [ ] TensorRT RTX
+  - Vocoder (ORT default EPs)
 
 ## License
 

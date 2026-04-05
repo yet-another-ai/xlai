@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use async_stream::try_stream;
 use tokio::sync::mpsc;
+use tracing::{Span, info_span};
 use xlai_core::{
     BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
     ChatResponse, ErrorKind, FinishReason, MessageRole, StructuredOutputFormat, XlaiError,
@@ -188,6 +189,13 @@ impl LlamaCppChatModel {
     where
         F: FnMut(ChatChunk) -> Result<(), XlaiError>,
     {
+        let _generation_span = info_span!(
+            "llama_cpp.generate",
+            provider = "llama.cpp",
+            model = %self.config.resolved_model_name(),
+        )
+        .entered();
+
         validate_prepared_for_llama(&prepared, &self.config)?;
 
         let loaded = self.load_model()?;
@@ -430,22 +438,29 @@ impl ChatModel for LlamaCppChatModel {
     fn generate(&self, request: ChatRequest) -> BoxFuture<'_, Result<ChatResponse, XlaiError>> {
         let model = self.clone();
         Box::pin(async move {
+            let parent = Span::current();
             let prepared = prepared_from_core_request(&model.config, request)?;
-            tokio::task::spawn_blocking(move || model.run_generation(prepared, |_| Ok(())))
-                .await
-                .map_err(map_join_error)?
+            tokio::task::spawn_blocking(move || {
+                let _enter = parent.enter();
+                model.run_generation(prepared, |_| Ok(()))
+            })
+            .await
+            .map_err(map_join_error)?
         })
     }
 
     fn generate_stream(&self, request: ChatRequest) -> BoxStream<'_, Result<ChatChunk, XlaiError>> {
         let model = self.clone();
         Box::pin(try_stream! {
+            let parent = Span::current();
             let prepared = prepared_from_core_request(&model.config, request)?;
             let (sender, mut receiver) = mpsc::unbounded_channel();
 
             tokio::spawn(async move {
                 let sender_for_generation = sender.clone();
+                let parent_blocking = parent.clone();
                 let outcome = tokio::task::spawn_blocking(move || {
+                    let _enter = parent_blocking.enter();
                     model.run_generation(prepared, |chunk| {
                         sender_for_generation.send(Ok(chunk)).map_err(|_| {
                             XlaiError::new(
@@ -476,6 +491,14 @@ impl ChatModel for LlamaCppChatModel {
 }
 
 fn load_model(config: &LlamaCppConfig) -> Result<LoadedModel, XlaiError> {
+    let _load_span = info_span!(
+        "llama_cpp.load_model",
+        provider = "llama.cpp",
+        path = %config.model_path.display(),
+        model = %config.resolved_model_name(),
+    )
+    .entered();
+
     let model = sys::Model::load_from_file(
         &config.model_path,
         &sys::ModelParams {

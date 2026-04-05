@@ -33,6 +33,7 @@ vitis = ["ort/vitis"]
 xnnpack = ["ort/xnnpack"]
 
 [dependencies]
+tracing.workspace = true
 xlai-sys = { path = "../xlai-sys", default-features = false, features = ["qts-ggml"] }
 thiserror.workspace = true
 rand.workspace = true
@@ -45,6 +46,7 @@ ort.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
+xlai-observability = { path = "../xlai-observability" }
 
 [[bench]]
 name = "synthesize"
