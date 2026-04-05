@@ -1,4 +1,6 @@
 //! Qwen3 TTS (GGUF + GGML) — native inference library.
+//!
+//! Enable feature `browser-manifest` to access [`browser`] (shared manifest types with WASM tooling).
 #![allow(clippy::expect_used)]
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::panic)]
@@ -12,6 +14,10 @@
 pub const SAMPLE_RATE_HZ: u32 = 24_000;
 
 mod error;
+#[cfg(feature = "browser-manifest")]
+pub mod browser {
+    pub use xlai_qts_browser::*;
+}
 mod ggml;
 mod model;
 pub mod pipeline;

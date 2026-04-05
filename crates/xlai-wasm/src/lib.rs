@@ -31,6 +31,11 @@ pub use api::{
     create_chat_session, create_chat_session_with_memory_file_system, package_version, tts,
     tts_stream,
 };
+#[cfg(feature = "qts")]
+pub use api::{
+    qts_browser_tts, qts_browser_tts_capabilities, qts_browser_tts_stream,
+    validate_qts_model_manifest,
+};
 #[cfg(target_arch = "wasm32")]
 pub use api::{
     create_agent_session_with_file_system, create_transformers_agent_session,

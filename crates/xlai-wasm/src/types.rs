@@ -87,6 +87,21 @@ pub(crate) struct WasmTtsCallOptions {
     pub(crate) delivery: Option<TtsDeliveryMode>,
 }
 
+/// Local QTS TTS call options (no OpenAI `apiKey`; see `docs/qts-wasm-browser-runtime.md`).
+#[cfg(feature = "qts")]
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WasmQtsTtsCallOptions {
+    pub(crate) input: String,
+    pub(crate) voice: VoiceSpec,
+    #[serde(default)]
+    pub(crate) response_format: Option<TtsAudioFormat>,
+    #[serde(default)]
+    pub(crate) delivery: Option<TtsDeliveryMode>,
+    #[serde(default)]
+    pub(crate) manifest: Option<xlai_qts_browser::QtsModelManifest>,
+}
+
 impl From<WasmChatRequest> for WasmChatSessionOptions {
     fn from(value: WasmChatRequest) -> Self {
         Self {
