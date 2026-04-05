@@ -4,13 +4,14 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Browser/wasm chat backend delegating generation to JavaScript @huggingface/transformers + llguidance"
 
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-xlai-core = { path = "../xlai-core" }
-xlai-local-common = { path = "../xlai-local-common" }
+xlai-core.workspace = true
+xlai-local-common.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { workspace = true, features = ["js"] }

@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Markdown-templated chat runtime built on xlai-core"
 
 [lints]
 workspace = true
@@ -16,7 +18,7 @@ rust-embed.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tera.workspace = true
-xlai-core = { path = "../xlai-core" }
+xlai-core.workspace = true
 
 [dev-dependencies]
 base64.workspace = true

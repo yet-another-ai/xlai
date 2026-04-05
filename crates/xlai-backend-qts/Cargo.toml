@@ -18,13 +18,13 @@ base64.workspace = true
 hound.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync"] }
-xlai-core = { path = "../xlai-core" }
-xlai-qts-core = { path = "../xlai-qts-core" }
+xlai-core.workspace = true
+xlai-qts-core.workspace = true
 
 [dev-dependencies]
 futures-util.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-xlai-runtime = { path = "../xlai-runtime" }
+xlai-runtime.workspace = true
 
 [lints]
 workspace = true

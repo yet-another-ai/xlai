@@ -25,6 +25,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.94"
 license = "Apache-2.0"
+repository = "https://github.com/yetanother.ai/xlai"
 
 [workspace.dependencies]
 anyhow = "1.0"
@@ -66,6 +67,23 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4.67"
 windows-sys = "0.61"
+
+# Path + version for workspace members that are published to crates.io (see docs/publishing.md).
+xlai-core = { path = "crates/xlai-core", version = "0.1.0" }
+xlai-runtime = { path = "crates/xlai-runtime", version = "0.1.0" }
+xlai-local-common = { path = "crates/xlai-local-common", version = "0.1.0" }
+xlai-backend-openai = { path = "crates/xlai-backend-openai", version = "0.1.0" }
+xlai-backend-transformersjs = { path = "crates/xlai-backend-transformersjs", version = "0.1.0" }
+xlai-backend-llama-cpp = { path = "crates/xlai-backend-llama-cpp", version = "0.1.0" }
+xlai-backend-qts = { path = "crates/xlai-backend-qts", version = "0.1.0" }
+xlai-backend-qts-wasm = { path = "crates/xlai-backend-qts-wasm", version = "0.1.0" }
+xlai-ffi = { path = "crates/xlai-ffi", version = "0.1.0" }
+xlai-native = { path = "crates/xlai-native", version = "0.1.0" }
+xlai-observability = { path = "crates/xlai-observability", version = "0.1.0" }
+xlai-qts-browser = { path = "crates/xlai-qts-browser", version = "0.1.0" }
+xlai-qts-core = { path = "crates/xlai-qts-core", version = "0.1.0" }
+xlai-sys = { path = "crates/xlai-sys", version = "0.1.0" }
+xlai-wasm = { path = "crates/xlai-wasm", version = "0.1.0" }
 
 [workspace.lints.rust]
 unconditional_panic = "deny"

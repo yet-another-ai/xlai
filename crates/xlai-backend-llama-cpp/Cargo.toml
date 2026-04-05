@@ -16,13 +16,13 @@ async-stream.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-xlai-core = { path = "../xlai-core" }
-xlai-local-common = { path = "../xlai-local-common" }
-xlai-sys = { path = "../xlai-sys", default-features = false, features = ["llama"] }
+xlai-core.workspace = true
+xlai-local-common.workspace = true
+xlai-sys = { workspace = true, features = ["llama"] }
 
 [dev-dependencies]
 tokio.workspace = true
-xlai-runtime = { path = "../xlai-runtime" }
+xlai-runtime.workspace = true
 
 [lints]
 workspace = true

@@ -38,11 +38,11 @@ xnnpack = ["xlai-qts-core/xnnpack"]
 [dependencies]
 anyhow.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-xlai-backend-qts = { path = "../xlai-backend-qts" }
-xlai-core = { path = "../xlai-core" }
-xlai-observability = { path = "../xlai-observability" }
-xlai-qts-core = { path = "../xlai-qts-core" }
-xlai-runtime = { path = "../xlai-runtime" }
+xlai-backend-qts.workspace = true
+xlai-core.workspace = true
+xlai-observability.workspace = true
+xlai-qts-core.workspace = true
+xlai-runtime.workspace = true
 hound.workspace = true
 cpal.workspace = true
 crossterm.workspace = true

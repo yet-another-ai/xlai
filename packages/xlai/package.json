@@ -35,6 +35,9 @@
     "dist",
     "pkg"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build:wasm": "node ./scripts/build-wasm.mjs",
     "dev": "pnpm run build:wasm && vite",

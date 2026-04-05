@@ -11,8 +11,8 @@ publish = false
 serde.workspace = true
 serde_json.workspace = true
 futures-util.workspace = true
-xlai-core = { path = "../xlai-core" }
-xlai-qts-browser = { path = "../xlai-qts-browser" }
+xlai-core.workspace = true
+xlai-qts-browser.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

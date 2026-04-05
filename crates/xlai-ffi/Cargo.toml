@@ -15,7 +15,7 @@ vulkan = ["xlai-native/vulkan"]
 crate-type = ["cdylib"]
 
 [dependencies]
-xlai-native = { path = "../xlai-native" }
+xlai-native.workspace = true
 
 [lints]
 workspace = true

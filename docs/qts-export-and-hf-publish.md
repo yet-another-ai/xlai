@@ -49,4 +49,6 @@ Use `--skip-export` to package artifacts that are already on disk.
 
 ## CI
 
-Tagged releases use `.github/workflows/hf-release-qts.yml` (repository root). Push a tag matching `v*` (for example `v1.0.0`) to run the Hugging Face publish job. Configure the `HF_TOKEN` secret on the `publish` environment.
+The Hugging Face model packaging job is **manual only**: run [`.github/workflows/hf-release-qts.yml`](../.github/workflows/hf-release-qts.yml) from the Actions tab (**workflow_dispatch**). Configure the `HF_TOKEN` secret on the `publish` environment.
+
+Pushing a `v*` tag does **not** trigger that workflow; it **does** run [`.github/workflows/build.yml`](../.github/workflows/build.yml) (artifacts) and [`.github/workflows/publish.yml`](../.github/workflows/publish.yml) (crates.io + npm) if you use those release paths. See [`docs/publishing.md`](publishing.md) for registry releases.

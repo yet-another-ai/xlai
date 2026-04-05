@@ -419,6 +419,15 @@ transcription-capable model such as `gpt-4o-mini-transcribe`.
 - `cargo test --workspace`
 - `pnpm --filter @yai-xlai/xlai test`
 
+### Publish workflow
+
+`.github/workflows/publish.yml` runs **crates.io** and **npm** checks:
+
+- On **pull requests** and pushes to **`main`**: `cargo publish --dry-run` for the [publishable Rust crate subset](docs/publishing.md) (in dependency order) and `npm publish --dry-run` for `@yai-xlai/xlai` after a full package build.
+- On pushes to tags matching **`v*`**: real `cargo publish` and `npm publish` using secrets on the GitHub **`publish`** environment (`CRATES_IO_TOKEN`, `NPM_TOKEN`).
+
+See [`docs/publishing.md`](docs/publishing.md) for ordering, version bumps, and crates that are not on crates.io yet.
+
 ### E2E workflow
 
 `.github/workflows/e2e.yml` runs ignored tests with provider credentials (and skips QTS model-dir tests until a CI fixture download exists).

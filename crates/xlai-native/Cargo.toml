@@ -27,12 +27,12 @@ workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-xlai-observability = { path = "../xlai-observability" }
+xlai-observability.workspace = true
 
 [dependencies]
-xlai-backend-llama-cpp = { path = "../xlai-backend-llama-cpp" }
-xlai-backend-openai = { path = "../xlai-backend-openai" }
-xlai-backend-qts = { path = "../xlai-backend-qts", optional = true }
-xlai-backend-transformersjs = { path = "../xlai-backend-transformersjs" }
-xlai-core = { path = "../xlai-core" }
-xlai-runtime = { path = "../xlai-runtime" }
+xlai-backend-llama-cpp.workspace = true
+xlai-backend-openai.workspace = true
+xlai-backend-qts = { workspace = true, optional = true }
+xlai-backend-transformersjs.workspace = true
+xlai-core.workspace = true
+xlai-runtime.workspace = true
