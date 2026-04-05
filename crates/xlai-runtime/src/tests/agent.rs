@@ -219,7 +219,8 @@ async fn agent_mcp_registry_executes_registered_tool_calls() -> Result<(), XlaiE
             })
         });
 
-    let response = agent_stream_prompt_final_response(&agent, "What's the weather in Paris?").await?;
+    let response =
+        agent_stream_prompt_final_response(&agent, "What's the weather in Paris?").await?;
     assert_eq!(
         response.message.content.as_single_text(),
         Some("Paris is sunny.")
@@ -331,7 +332,8 @@ async fn agent_register_tool_shorthand_routes_through_mcp_registry() -> Result<(
     assert_eq!(mcp_tools.len(), 1);
     assert_eq!(mcp_tools[0].name, "lookup_weather");
 
-    let response = agent_stream_prompt_final_response(&agent, "What's the weather in Paris?").await?;
+    let response =
+        agent_stream_prompt_final_response(&agent, "What's the weather in Paris?").await?;
     assert_eq!(
         response.message.content.as_single_text(),
         Some("Paris is sunny.")

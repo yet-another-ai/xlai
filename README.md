@@ -239,7 +239,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut agent = runtime
         .agent_session()?
         .with_system_prompt("Use tools when helpful.");
-    // Optional: `.with_agent_loop_enabled(false)` so streaming skips the multi-round agent loop.
+    // Agent loop (streaming only, on by default):
+    // - `.with_agent_loop_enabled(false)` — one model turn per stream, no tool callbacks.
+    // - `.with_max_tool_round_trips(n)` — cap rounds when the loop is on (default 8).
 
     agent.register_tool(
         ToolDefinition {
@@ -264,8 +266,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     );
 
-    // Unary `prompt` / `execute` perform one model call (no automatic tool loop).
-    // Use `stream_prompt` when you want the agent to run tools and call the model again.
+    // Unary `prompt` / `execute` / `prompt_*` = one model call (no agent loop, no tool callbacks).
+    // Use `stream_prompt` / `stream` / `stream_*` for the multi-round agent loop (default on).
     let mut stream = agent.stream_prompt("What's the weather in Paris?");
     let mut response = None;
     while let Some(item) = stream.next().await {
@@ -322,30 +324,39 @@ Current behavior:
 
 - tools are registered per chat or agent session
 - tool calls are exposed to the model through the runtime request
-- **`Chat`** performs one model call per `prompt` / `execute` / `stream`; it does not run a multi-round tool loop or execute tool callbacks automatically—you get the model’s response (including any `tool_calls`) and can drive the next step yourself
-- **`Agent`** unary `prompt` / `execute` / `prompt_*` also perform **one** model call (no automatic tool execution), so a long multi-round loop cannot block the caller without streaming progress. The multi-round agent loop runs only on **`stream` / `stream_prompt` / `stream_*`** when `agent_loop_enabled` is true (default): after each streamed model response with tool calls, tools run, results are appended, and the model is called again until there are no tool calls or the round-trip limit is hit
+- **`Chat`** performs one model call per `prompt` / `execute` / `stream`; it does not execute tool callbacks or run multiple model rounds—you get the model’s response (including any `tool_calls`) and can drive the next step yourself
+- **`Agent`**
+  - **Unary** `prompt` / `execute` / `prompt_parts` / `prompt_content`: exactly **one** model call; registered tools are **not** run by the runtime (same “no silent multi-minute loop” guarantee as chat).
+  - **Streaming** `stream` / `stream_prompt` / `stream_prompt_content` / `stream_prompt_parts`: by default the **agent loop** is **on** (`with_agent_loop_enabled` defaults to enabled). After each assistant turn that finishes with tool calls, tools run and another model turn starts until there are no tool calls or **`Agent::with_max_tool_round_trips`** (default `8`) is exceeded. Call **`with_agent_loop_enabled(false)`** to get a single model turn per stream with no tool callbacks.
 - when tools run (on **`Agent`**), local session tools are used before falling back to a runtime-level tool executor
 - each tool’s `ToolDefinition::execution_mode` controls how its calls interact with other calls in the same model turn
 - if any invoked tool in a turn is `Sequential`, all tool calls in that turn run sequentially in model order (no overlap)
 - otherwise, tool calls in a turn run concurrently
 
-### Agent tool loop
+### Agent loop
 
-On **streaming** agent APIs only, sessions run multiple model rounds until the last response has no tool calls (capped by `Agent::with_max_tool_round_trips`, default 8). Unary calls stay single-round so they never sit silent for many minutes while tools and follow-up model turns run.
+| Surface          | Control                                                           | Effect                                                                                                                                                                                              |
+| ---------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Rust `Agent`** | `with_agent_loop_enabled(bool)`                                   | When `true` (default), streaming APIs run the multi-round loop; when `false`, each stream is one model turn only (no tool execution). Unary methods ignore this—always one model call.              |
+| **Rust `Agent`** | `with_max_tool_round_trips(usize)`                                | Maximum model↔tool rounds per stream when the loop is on (default `8`).                                                                                                                             |
+| **TypeScript**   | `agentLoop?: boolean` on `AgentOptions` and `AgentSessionOptions` | Same semantics as Rust: affects **streaming** agent paths in WASM when supported; unary `agent()` / `prompt` stay one model call. `false` disables the loop; omit or `true` keeps default behavior. |
+| **WASM JSON**    | `agentLoop` on session/request options                            | Forwarded into the Rust agent builder (maps to `with_agent_loop_enabled`).                                                                                                                          |
 
-- **Rust:** `Agent::with_agent_loop_enabled(false)` turns off that loop on `stream` / `stream_prompt` / `stream_*` (one model turn per stream, no tool callbacks). Unary `prompt` / `execute` are always single model calls regardless. `Chat` never runs an agent-style tool loop.
-- **TypeScript / WASM:** `createChatSession` / `chat()` match Rust `Chat` (one model call per unary call). `agentLoop` applies when using **streaming** agent APIs where the binding supports the multi-round loop; unary `agent()` / `prompt` remain one model call. Pass `agentLoop: false` to disable the loop on those streaming paths.
+`Chat` never runs this loop. Unary agent calls never block on long multi-round tool execution without you choosing a streaming API.
 
 ## Streaming
 
 The runtime supports streamed chat output through `ChatChunk` and `ChatExecutionEvent`.
+
+- **`Chat`**: each `stream` / `stream_prompt` / `stream_*` call performs **one** model run; events are deltas and a final `ChatChunk::Finished` for that turn.
+- **`Agent`**: streaming uses the same chunk types, but when **`with_agent_loop_enabled(true)`** (default) the stream may include multiple model rounds. Between rounds you may see **`ChatExecutionEvent::ToolCall`** and **`ToolResult`** events after a finished assistant message that contained tool calls.
 
 Streaming currently includes:
 
 - message start events
 - content delta events
 - tool call delta events
-- final response events
+- final response events (per model turn; agent streams may emit several before the stream ends)
 
 ## Testing Model
 

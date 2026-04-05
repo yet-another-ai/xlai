@@ -290,6 +290,7 @@ describe('xlai agent api', () => {
           createAgentSession: (options: unknown) => {
             registerTool: () => void;
             prompt: () => Promise<unknown>;
+            promptWithContent?: () => Promise<unknown>;
           };
         },
         'createAgentSession',

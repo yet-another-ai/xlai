@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use futures_util::{stream, StreamExt};
+use futures_util::{StreamExt, stream};
 use xlai_core::{
     BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
     ChatResponse, FsPath, MessageRole, Metadata, Skill, SkillStore, ToolCallExecutionMode,

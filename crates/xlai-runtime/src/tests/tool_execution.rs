@@ -423,8 +423,7 @@ async fn agent_runs_mixed_tool_batch_sequentially_in_model_order() -> Result<(),
         });
     }
 
-    let response =
-        agent_stream_prompt_final_response(&agent, "Build my Paris schedule.").await?;
+    let response = agent_stream_prompt_final_response(&agent, "Build my Paris schedule.").await?;
     assert_eq!(
         response.message.content.as_single_text(),
         Some("Paris schedule assembled.")

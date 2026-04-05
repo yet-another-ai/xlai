@@ -162,21 +162,21 @@ export function resolveAgentRequestOptions(
 export function resolveSessionOptions(
   options: Omit<ChatSessionOptions | AgentSessionOptions, 'fileSystem'>,
 ): ResolvedSessionOptions {
-  const agentLoop =
-    'agentLoop' in options && options.agentLoop !== undefined
-      ? { agentLoop: options.agentLoop }
-      : {};
-
-  return {
+  const base: ResolvedSessionOptions = {
     apiKey: requireApiKey(options.apiKey),
     systemPrompt: options.systemPrompt,
     baseUrl: options.baseUrl ?? envValue('OPENAI_BASE_URL'),
     model: options.model ?? envValue('OPENAI_MODEL'),
     temperature: options.temperature,
     maxOutputTokens: options.maxOutputTokens,
-    ...agentLoop,
     ...(options.qts !== undefined ? { qts: options.qts } : {}),
   };
+
+  if ('agentLoop' in options && typeof options.agentLoop === 'boolean') {
+    return { ...base, agentLoop: options.agentLoop };
+  }
+
+  return base;
 }
 
 function toolParameterKindToWasm(

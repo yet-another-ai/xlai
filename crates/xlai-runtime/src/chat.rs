@@ -320,7 +320,6 @@ impl Chat {
             max_output_tokens: self.max_output_tokens,
         }
     }
-
 }
 
 fn tool_result_message(call: &ToolCall, result: &ToolResult) -> ChatMessage {
