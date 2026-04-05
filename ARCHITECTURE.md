@@ -11,9 +11,13 @@ This document summarizes crate boundaries and data flow. The **stable public con
 | `xlai-backend-openai` | OpenAI-compatible HTTP client (chat, transcription, TTS). |
 | `xlai-backend-llama-cpp` | Local GGUF inference via llama.cpp; maps `xlai-core` requests into local prompt/tool formats. |
 | `xlai-backend-transformersjs` | Browser-side chat via a JS adapter (WASM only). |
+| `xlai-backend-qts` | Native Qwen3 TTS: maps `TtsRequest` to `xlai-qts-core` (`TtsModel`); `VoiceSpec::Clone` (inline WAV) builds native `VoiceClonePromptV2` (x-vector / ICL). |
+| `xlai-qts-core` | Qwen3 TTS engine (GGUF + GGML talker, ONNX vocoder, optional ONNX reference-codec encoder for ICL `ref_code`, tokenizer, streaming). |
+| `scripts/qts` (root `pyproject.toml`) | Python export: `uv run export-model-artifacts`, `uv run xlai-qts-hf-release` — see `docs/qts-export-and-hf-publish.md`. |
+| `xlai-sys` | Vendored `llama.cpp` and/or standalone `ggml` (CMake + bindgen); enable `llama` and/or `qts-ggml`. |
+| `xlai-qts-cli` | `synthesize` / `profile` / `tui` binary (`xlai-qts`) for local TTS workflows. |
 | `xlai-local-common` | **Internal** helpers shared by local inference backends (prompt shapes, tool JSON schema). Not a public SDK surface; keep mappings thin and tested per backend. |
-| `xlai-llama-cpp-sys` | Low-level FFI and build integration for vendored llama.cpp. |
-| `xlai-native` | Native Rust facade: re-exports runtime, backends, and core for applications. |
+| `xlai-native` | Native Rust facade: re-exports runtime, backends, and core for applications. Enable optional `qts` feature for `QtsTtsModel` re-exports (avoids linking QTS/ggml unless needed). |
 | `xlai-wasm` | `wasm-bindgen` entry points and JS-facing session factories. |
 | `xlai-ffi` | C ABI facade for future native interop. |
 

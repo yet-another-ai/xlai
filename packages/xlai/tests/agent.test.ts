@@ -112,7 +112,7 @@ describe('xlai agent api', () => {
             source: {
               kind: 'inline_data',
               mime_type: 'audio/mpeg',
-              data_base64: 'SUQzBA==',
+              data: 'SUQzBA==',
             },
             mime_type: 'audio/mpeg',
           },

@@ -40,11 +40,20 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Short Cargo target dir (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\t | Out-Null
+          Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_DIR=C:\t"
+
       - name: Run sccache
         uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          target-dir: ${{ runner.os == 'Windows' && 'C:\\t' || '' }}
 
       - name: Cache Windows vcpkg OpenBLAS
         if: runner.os == 'Windows'
@@ -53,13 +62,13 @@ jobs:
           path: ${{ env.VCPKG_ROOT }}
           key: vcpkg-openblas-${{ runner.os }}-${{ env.VCPKG_OPENBLAS_TRIPLET }}-v1
 
-      - name: Install Linux OpenBLAS prerequisites
+      - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libopenblas-dev
+          sudo apt-get install -y libopenblas-dev libasound2-dev
 
-      - name: Install Windows OpenBLAS prerequisites
+      - name: Install Windows prerequisites
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -78,6 +87,11 @@ jobs:
 
           Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake"
           Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_TARGET_TRIPLET=$env:VCPKG_OPENBLAS_TRIPLET"
+
+      - name: Install macOS prerequisites
+        if: runner.os == 'macOS'
+        run: |
+          brew install shaderc
 
       - name: Check formatting
         run: cargo fmt --all -- --check

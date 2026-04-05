@@ -1,10 +1,11 @@
 //! Runtime tests: chat session.
 use std::sync::{Arc, Mutex};
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use xlai_core::{
-    ChatContent, ChatMessage, ChatResponse, ContentPart, FinishReason, MediaSource, MessageRole,
-    StructuredOutput, StructuredOutputFormat, ToolCall, XlaiError,
+    ChatContent, ChatMessage, ChatResponse, ContentPart, ErrorKind, FinishReason, MediaSource,
+    MessageRole, StructuredOutput, StructuredOutputFormat, ToolCall, XlaiError,
 };
 
 use super::common::*;
@@ -138,10 +139,13 @@ async fn chat_prompt_parts_preserves_audio_user_message_in_request() -> Result<(
 
     let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
     let chat = runtime.chat_session();
+    let decoded = STANDARD
+        .decode("UklGRg==")
+        .map_err(|error| XlaiError::new(ErrorKind::Validation, error.to_string()))?;
     chat.prompt_parts(vec![ContentPart::Audio {
         source: MediaSource::InlineData {
             mime_type: "audio/wav".to_owned(),
-            data_base64: "UklGRg==".to_owned(),
+            data: decoded,
         },
         mime_type: Some("audio/wav".to_owned()),
     }])

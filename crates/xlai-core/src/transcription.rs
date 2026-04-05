@@ -45,6 +45,30 @@ pub trait TranscriptionBackend {
     fn into_transcription_model(self) -> Self::Model;
 }
 
+impl TranscriptionRequest {
+    /// Encode this request as CBOR.
+    pub fn to_cbor_vec(&self) -> Result<Vec<u8>, String> {
+        crate::cbor::to_cbor_vec(self)
+    }
+
+    /// Decode from CBOR bytes.
+    pub fn from_cbor_slice(bytes: &[u8]) -> Result<Self, String> {
+        crate::cbor::from_cbor_slice(bytes)
+    }
+}
+
+impl TranscriptionResponse {
+    /// Encode this response as CBOR.
+    pub fn to_cbor_vec(&self) -> Result<Vec<u8>, String> {
+        crate::cbor::to_cbor_vec(self)
+    }
+
+    /// Decode from CBOR bytes.
+    pub fn from_cbor_slice(bytes: &[u8]) -> Result<Self, String> {
+        crate::cbor::from_cbor_slice(bytes)
+    }
+}
+
 impl<T> TranscriptionBackend for T
 where
     T: TranscriptionModel + 'static,

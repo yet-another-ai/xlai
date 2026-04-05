@@ -1,6 +1,5 @@
 //! OpenAI-compatible `POST /audio/speech` mapping.
 
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value, json};
 use xlai_core::{
     ErrorKind, MediaSource, Metadata, TtsAudioFormat, TtsRequest, TtsResponse, VoiceSpec, XlaiError,
@@ -111,7 +110,7 @@ pub(crate) fn tts_response_from_unary_bytes(
     TtsResponse {
         audio: MediaSource::InlineData {
             mime_type: mime.to_owned(),
-            data_base64: STANDARD.encode(bytes),
+            data: bytes,
         },
         mime_type: mime.to_owned(),
         metadata: extra_metadata,

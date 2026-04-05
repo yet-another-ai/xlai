@@ -21,6 +21,10 @@ jobs:
   native:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        # MSBuild/ggml-vulkan nested paths exceed MAX_PATH under the default D:\a\...\workspace.
+        working-directory: ${{ matrix.runner == 'windows-latest' && 'C:\\w' || '.' }}
     strategy:
       fail-fast: false
       matrix:
@@ -37,14 +41,8 @@ jobs:
             feature_set: vulkan
             cargo_features: xlai-ffi/vulkan
             artifact_path: |
-              target/x86_64-pc-windows-msvc/release/xlai_ffi.dll
-              target/x86_64-pc-windows-msvc/release/xlai_ffi.lib
-          - name: macos-x86_64
-            runner: macos-latest
-            target: x86_64-apple-darwin
-            feature_set: metal,vulkan
-            cargo_features: xlai-ffi/metal,xlai-ffi/vulkan
-            artifact_path: target/x86_64-apple-darwin/release/libxlai_ffi.dylib
+              C:/w/target/x86_64-pc-windows-msvc/release/xlai_ffi.dll
+              C:/w/target/x86_64-pc-windows-msvc/release/xlai_ffi.lib
           - name: macos-arm64
             runner: macos-latest
             target: aarch64-apple-darwin
@@ -58,6 +56,19 @@ jobs:
         with:
           submodules: true
 
+      - name: Mirror checkout to short path (Windows)
+        if: runner.os == 'Windows'
+        working-directory: ${{ github.workspace }}
+        shell: pwsh
+        run: |
+          $src = $env:GITHUB_WORKSPACE
+          $dest = 'C:\w'
+          if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          robocopy $src $dest /E /XD target /R:2 /W:2 /NFL /NDL /NJH /NJS /np
+          if ($LASTEXITCODE -ge 8) { exit $LASTEXITCODE }
+          $global:LASTEXITCODE = 0
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -68,6 +79,8 @@ jobs:
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ runner.os == 'Windows' && 'C:/w -> target' || '' }}
 
       - name: Cache Windows vcpkg OpenBLAS
         if: runner.os == 'Windows'
@@ -76,11 +89,11 @@ jobs:
           path: ${{ env.VCPKG_ROOT }}
           key: vcpkg-openblas-${{ runner.os }}-${{ env.VCPKG_OPENBLAS_TRIPLET }}-v1
 
-      - name: Install Linux OpenBLAS prerequisites
+      - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libopenblas-dev
+          sudo apt-get install -y libopenblas-dev libasound2-dev
 
       - name: Install Windows OpenBLAS prerequisites
         if: runner.os == 'Windows'
@@ -102,19 +115,18 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake"
           Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_TARGET_TRIPLET=$env:VCPKG_OPENBLAS_TRIPLET"
 
-      - name: Install Linux Vulkan prerequisites
-        if: runner.os == 'Linux' && contains(matrix.feature_set, 'vulkan')
+      - name: Install Linux prerequisites
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y glslc
+          sudo apt-get install -y glslc libvulkan-dev
 
-      - name: Install macOS Vulkan prerequisites
-        if: runner.os == 'macOS' && contains(matrix.feature_set, 'vulkan')
+      - name: Install macOS prerequisites
+        if: runner.os == 'macOS'
         run: |
           brew install shaderc
 
       - name: Install Vulkan SDK
-        if: contains(matrix.feature_set, 'vulkan')
         uses: jakoch/install-vulkan-sdk-action@v1
         with:
           vulkan_version: latest

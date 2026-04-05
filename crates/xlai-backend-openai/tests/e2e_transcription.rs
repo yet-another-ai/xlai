@@ -1,9 +1,8 @@
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use xlai_backend_openai::OpenAiConfig;
 use xlai_core::{ErrorKind, MediaSource, RuntimeCapability, TranscriptionRequest, XlaiError};
 use xlai_runtime::RuntimeBuilder;
 
-const SAMPLE_WAV_BYTES: &[u8] = include_bytes!("fixtures/transcription-sample.wav");
+const SAMPLE_WAV_BYTES: &[u8] = include_bytes!("../../../fixtures/audio/transcription-sample.wav");
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
@@ -18,7 +17,7 @@ async fn openai_transcription_smoke_test() -> Result<(), XlaiError> {
             model: None,
             audio: MediaSource::InlineData {
                 mime_type: "audio/wav".to_owned(),
-                data_base64: sample_wav_base64(),
+                data: SAMPLE_WAV_BYTES.to_vec(),
             },
             mime_type: Some("audio/wav".to_owned()),
             filename: Some("transcription-sample.wav".to_owned()),
@@ -55,7 +54,7 @@ async fn openai_transcription_runtime_reports_capability() -> Result<(), XlaiErr
             model: None,
             audio: MediaSource::InlineData {
                 mime_type: "audio/wav".to_owned(),
-                data_base64: sample_wav_base64(),
+                data: SAMPLE_WAV_BYTES.to_vec(),
             },
             mime_type: Some("audio/wav".to_owned()),
             filename: Some("transcription-sample.wav".to_owned()),
@@ -87,10 +86,6 @@ fn build_transcription_runtime() -> Result<xlai_runtime::XlaiRuntime, XlaiError>
                 .with_transcription_model(transcription_model),
         )
         .build()
-}
-
-fn sample_wav_base64() -> String {
-    STANDARD.encode(SAMPLE_WAV_BYTES)
 }
 
 fn require_env(name: &str) -> Result<String, XlaiError> {

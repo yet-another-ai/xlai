@@ -122,7 +122,7 @@ describe('xlai chat api', () => {
             source: {
               kind: 'inline_data',
               mime_type: 'audio/wav',
-              data_base64: 'UklGRg==',
+              data: 'UklGRg==',
             },
             mime_type: 'audio/wav',
           },

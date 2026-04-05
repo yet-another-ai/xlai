@@ -1,5 +1,6 @@
 //! Core types and traits for xlai.
 
+pub mod cbor;
 mod chat;
 mod content;
 mod embeddings;
@@ -8,6 +9,7 @@ mod filesystem;
 mod knowledge;
 mod metadata;
 mod runtime;
+mod serde_bytes_format;
 mod transcription;
 mod tts;
 

@@ -1,4 +1,3 @@
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
 use xlai_backend_openai::OpenAiConfig;
 use xlai_core::{
@@ -29,22 +28,15 @@ async fn openai_tts_unary_smoke_test() -> Result<(), XlaiError> {
         })
         .await?;
 
-    let xlai_core::MediaSource::InlineData { data_base64, .. } = response.audio else {
+    let xlai_core::MediaSource::InlineData { data, .. } = response.audio else {
         return Err(XlaiError::new(
             ErrorKind::Provider,
             "expected inline audio from unary TTS",
         ));
     };
 
-    let decoded = STANDARD.decode(data_base64.trim()).map_err(|error| {
-        XlaiError::new(
-            ErrorKind::Provider,
-            format!("tts response must be valid base64: {error}"),
-        )
-    })?;
-
     assert!(
-        decoded.len() > 16,
+        data.len() > 16,
         "unary TTS should return non-trivial audio bytes",
     );
 
@@ -80,27 +72,21 @@ async fn openai_tts_stream_smoke_test() -> Result<(), XlaiError> {
     while let Some(item) = stream.next().await {
         match item? {
             TtsChunk::Started { .. } => {}
-            TtsChunk::AudioDelta { data_base64 } => {
-                if !data_base64.is_empty() {
+            TtsChunk::AudioDelta { data } => {
+                if !data.is_empty() {
                     saw_delta = true;
                 }
             }
             TtsChunk::Finished { response } => {
                 finished = true;
-                let xlai_core::MediaSource::InlineData { data_base64, .. } = response.audio else {
+                let xlai_core::MediaSource::InlineData { data, .. } = response.audio else {
                     return Err(XlaiError::new(
                         ErrorKind::Provider,
                         "expected inline audio in finished TTS chunk",
                     ));
                 };
-                let decoded = STANDARD.decode(data_base64.trim()).map_err(|error| {
-                    XlaiError::new(
-                        ErrorKind::Provider,
-                        format!("assembled TTS must be valid base64: {error}"),
-                    )
-                })?;
                 assert!(
-                    decoded.len() > 16,
+                    data.len() > 16,
                     "streamed TTS should assemble non-trivial audio",
                 );
             }

@@ -1,0 +1,47 @@
+[package]
+name = "xlai-sys"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Unified native builds: vendored llama.cpp and standalone ggml (QTS)."
+links = "xlai_sys"
+build = "build.rs"
+publish = false
+
+[lib]
+name = "xlai_sys"
+
+[features]
+default = []
+# At least one of `llama` or `qts-ggml` must be enabled by dependents.
+llama = []
+qts-ggml = []
+# Shared backend toggles (both stacks honor these where applicable).
+openblas = []
+metal = []
+vulkan = []
+# Standalone ggml (QTS) extras — forwarded to CMake when `qts-ggml` is on.
+native = []
+cuda = []
+hip = []
+blas = []
+musa = []
+opencl = []
+rpc = []
+sycl = []
+webgpu = []
+openvino = []
+hexagon = []
+cann = []
+zendnn = []
+zdnn = []
+virtgpu = []
+
+[build-dependencies]
+bindgen.workspace = true
+cmake.workspace = true
+cc = "1.2.58"
+
+[lints]
+workspace = true

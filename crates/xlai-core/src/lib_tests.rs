@@ -1,8 +1,9 @@
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 
 use crate::{
     ChatContent, ChatMessage, ContentPart, ErrorKind, MediaSource, MessageRole, StructuredOutput,
-    StructuredOutputFormat, XlaiError,
+    StructuredOutputFormat, TtsChunk, TtsResponse, XlaiError,
 };
 
 #[test]
@@ -94,10 +95,15 @@ fn chat_content_round_trips_multimodal_parts() {
 
 #[test]
 fn chat_content_round_trips_audio_parts() {
+    let decoded = STANDARD.decode("UklGRg==");
+    assert!(decoded.is_ok(), "decode fixture base64");
+    let Ok(audio_bytes) = decoded else {
+        return;
+    };
     let c = ChatContent::from_parts(vec![ContentPart::Audio {
         source: MediaSource::InlineData {
             mime_type: "audio/wav".to_owned(),
-            data_base64: "UklGRg==".to_owned(),
+            data: audio_bytes,
         },
         mime_type: Some("audio/wav".to_owned()),
     }]);
@@ -201,4 +207,86 @@ fn xlai_error_round_trips_optional_fields() {
         return;
     };
     assert_eq!(back, e);
+}
+
+#[test]
+fn inline_media_json_serializes_data_as_base64_string() {
+    let src = MediaSource::InlineData {
+        mime_type: "audio/wav".to_owned(),
+        data: vec![0, 1, 2, 255],
+    };
+    let serialized = serde_json::to_value(&src);
+    assert!(serialized.is_ok(), "serialize");
+    let Ok(v) = serialized else {
+        return;
+    };
+    let obj = v.as_object();
+    assert!(
+        obj.is_some(),
+        "expected serialized media source to be a JSON object"
+    );
+    let Some(obj) = obj else {
+        return;
+    };
+    assert!(obj.contains_key("data"), "JSON should use `data` key");
+    assert_eq!(obj["data"], json!(STANDARD.encode([0u8, 1, 2, 255])));
+    let deserialized: Result<MediaSource, _> = serde_json::from_value(v);
+    assert!(deserialized.is_ok(), "deserialize");
+    let Ok(back) = deserialized else {
+        return;
+    };
+    assert_eq!(back, src);
+}
+
+#[test]
+fn tts_response_cbor_roundtrip_smaller_than_json_for_binary() {
+    let pcm: Vec<u8> = (0u8..=200).collect();
+    let response = TtsResponse {
+        audio: MediaSource::InlineData {
+            mime_type: "audio/wav".to_owned(),
+            data: pcm.clone(),
+        },
+        mime_type: "audio/wav".to_owned(),
+        metadata: Default::default(),
+    };
+    let cbor = response.to_cbor_vec();
+    assert!(cbor.is_ok(), "cbor encode");
+    let Ok(cbor) = cbor else {
+        return;
+    };
+    let json = serde_json::to_vec(&response);
+    assert!(json.is_ok(), "json encode");
+    let Ok(json) = json else {
+        return;
+    };
+    assert!(
+        cbor.len() < json.len(),
+        "CBOR should be smaller than JSON base64 for this payload: cbor={} json={}",
+        cbor.len(),
+        json.len()
+    );
+    let decoded = TtsResponse::from_cbor_slice(&cbor);
+    assert!(decoded.is_ok(), "cbor decode");
+    let Ok(back) = decoded else {
+        return;
+    };
+    assert_eq!(back, response);
+}
+
+#[test]
+fn tts_chunk_cbor_roundtrip() {
+    let chunk = TtsChunk::AudioDelta {
+        data: vec![1, 2, 3],
+    };
+    let encoded = chunk.to_cbor_vec();
+    assert!(encoded.is_ok(), "encode chunk as cbor");
+    let Ok(bytes) = encoded else {
+        return;
+    };
+    let decoded = TtsChunk::from_cbor_slice(&bytes);
+    assert!(decoded.is_ok(), "decode chunk from cbor");
+    let Ok(back) = decoded else {
+        return;
+    };
+    assert_eq!(back, chunk);
 }

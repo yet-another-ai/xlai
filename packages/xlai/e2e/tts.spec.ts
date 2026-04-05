@@ -24,7 +24,9 @@ test('calls unary TTS and returns inline audio', async () => {
     return;
   }
 
-  const decoded = Buffer.from(audio.data_base64, 'base64');
+  const base64 = audio.data ?? audio.data_base64;
+  expect(base64).toBeDefined();
+  const decoded = Buffer.from(base64!, 'base64');
   expect(decoded.length).toBeGreaterThan(64);
 });
 
@@ -50,7 +52,9 @@ test('ttsStream collects started, audio delta, and finished (unary synthesis)', 
   const delta = chunks[1];
   expect(delta?.type).toBe('audio_delta');
   if (delta?.type === 'audio_delta') {
-    expect(Buffer.from(delta.data_base64, 'base64').length).toBeGreaterThan(64);
+    const base64 = delta.data ?? delta.data_base64;
+    expect(base64).toBeDefined();
+    expect(Buffer.from(base64!, 'base64').length).toBeGreaterThan(64);
   }
 
   const last = chunks[2];

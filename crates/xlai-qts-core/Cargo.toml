@@ -1,0 +1,51 @@
+[package]
+name = "xlai-qts-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository = "https://github.com/yetanother.ai/xlai"
+description = "Qwen3 TTS inference (GGUF + GGML) — engine crate for xlai-backend-qts."
+publish = false
+
+[features]
+default = ["openblas"]
+metal = ["xlai-sys/metal"]
+vulkan = ["xlai-sys/vulkan"]
+native = ["xlai-sys/native"]
+openblas = ["xlai-sys/openblas"]
+acl = ["ort/acl"]
+armnn = ["ort/armnn"]
+cann = ["ort/cann"]
+coreml = ["ort/coreml"]
+cuda = ["ort/cuda"]
+directml = ["ort/directml"]
+migraphx = ["ort/migraphx"]
+nnapi = ["ort/nnapi"]
+onednn = ["ort/onednn"]
+openvino = ["ort/openvino"]
+qnn = ["ort/qnn"]
+rknpu = ["ort/rknpu"]
+rocm = ["ort/rocm"]
+tensorrt = ["ort/tensorrt"]
+tvm = ["ort/tvm"]
+vitis = ["ort/vitis"]
+xnnpack = ["ort/xnnpack"]
+
+[dependencies]
+xlai-sys = { path = "../xlai-sys", default-features = false, features = ["qts-ggml"] }
+thiserror.workspace = true
+rand.workspace = true
+hound.workspace = true
+rustfft.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ciborium.workspace = true
+ort.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "synthesize"
+harness = false

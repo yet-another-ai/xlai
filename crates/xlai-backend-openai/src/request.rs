@@ -1,3 +1,4 @@
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Serialize;
 use serde_json::{Map, Value};
 use xlai_core::{
@@ -165,10 +166,10 @@ fn openai_request_part_value(part: &ContentPart) -> Value {
                 MediaSource::Url { url } => url.clone(),
                 MediaSource::InlineData {
                     mime_type: inline_mime,
-                    data_base64,
+                    data,
                 } => {
                     let mime = mime_type.as_deref().unwrap_or(inline_mime.as_str());
-                    format!("data:{mime};base64,{data_base64}")
+                    format!("data:{mime};base64,{}", STANDARD.encode(data))
                 }
             };
             let mut image_url = serde_json::json!({ "url": url });
@@ -187,14 +188,14 @@ fn openai_request_part_value(part: &ContentPart) -> Value {
             }),
             MediaSource::InlineData {
                 mime_type: inline_mime,
-                data_base64,
+                data,
             } => {
                 let mime = mime_type.as_deref().unwrap_or(inline_mime.as_str());
                 serde_json::json!({
                     "type": "file",
                     "file": {
                         "filename": "audio",
-                        "file_data": format!("data:{mime};base64,{data_base64}"),
+                        "file_data": format!("data:{mime};base64,{}", STANDARD.encode(data)),
                     },
                 })
             }
@@ -210,7 +211,7 @@ fn openai_request_part_value(part: &ContentPart) -> Value {
             }),
             MediaSource::InlineData {
                 mime_type: inline_mime,
-                data_base64,
+                data,
             } => {
                 let mime = mime_type.as_deref().unwrap_or(inline_mime.as_str());
                 let fname = filename.clone().unwrap_or_else(|| "attachment".to_owned());
@@ -218,7 +219,7 @@ fn openai_request_part_value(part: &ContentPart) -> Value {
                     "type": "file",
                     "file": {
                         "filename": fname,
-                        "file_data": format!("data:{mime};base64,{data_base64}"),
+                        "file_data": format!("data:{mime};base64,{}", STANDARD.encode(data)),
                     },
                 })
             }

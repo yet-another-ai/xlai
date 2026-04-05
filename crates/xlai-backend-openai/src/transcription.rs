@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::multipart::{Form, Part};
 use serde::Deserialize;
 use serde_json::Value;
@@ -34,11 +33,8 @@ impl OpenAiTranscriptionRequest {
             metadata: _,
         } = request;
 
-        let (source_mime_type, data_base64) = match audio {
-            MediaSource::InlineData {
-                mime_type,
-                data_base64,
-            } => (mime_type, data_base64),
+        let (source_mime_type, audio_bytes) = match audio {
+            MediaSource::InlineData { mime_type, data } => (mime_type, data),
             MediaSource::Url { .. } => {
                 return Err(XlaiError::new(
                     ErrorKind::Unsupported,
@@ -46,13 +42,6 @@ impl OpenAiTranscriptionRequest {
                 ));
             }
         };
-
-        let audio_bytes = STANDARD.decode(data_base64).map_err(|error| {
-            XlaiError::new(
-                ErrorKind::Validation,
-                format!("transcription audio must be valid base64: {error}"),
-            )
-        })?;
 
         Ok(Self {
             model: model

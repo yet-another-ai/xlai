@@ -18,11 +18,17 @@ env:
   LLAMA_CPP_FIXTURE_FILE: Qwen3.5-0.8B-Q4_0.gguf
   VCPKG_ROOT: C:\vcpkg
   VCPKG_OPENBLAS_TRIPLET: x64-windows-static-md
+  QTS_FIXTURE_PATH: fixtures/qts/Qwen3-TTS-12Hz-0.6B-Base-QTS
+  QTS_FIXTURE_REPO: dsh0416/Qwen3-TTS-12Hz-0.6B-Base-QTS
+  ASR_FIXTURE_WAV_PATH: fixtures/audio/transcription-sample.wav
 
 jobs:
   e2e-rust:
     name: Rust - ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.runner == 'windows-latest' && 'C:\\w' || '.' }}
     environment:
       name: e2e
       deployment: false
@@ -43,6 +49,19 @@ jobs:
         with:
           submodules: true
 
+      - name: Mirror checkout to short path (Windows)
+        if: runner.os == 'Windows'
+        working-directory: ${{ github.workspace }}
+        shell: pwsh
+        run: |
+          $src = $env:GITHUB_WORKSPACE
+          $dest = 'C:\w'
+          if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          robocopy $src $dest /E /XD target /R:2 /W:2 /NFL /NDL /NJH /NJS /np
+          if ($LASTEXITCODE -ge 8) { exit $LASTEXITCODE }
+          $global:LASTEXITCODE = 0
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -51,6 +70,8 @@ jobs:
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ runner.os == 'Windows' && 'C:/w -> target' || '' }}
 
       - name: Cache Windows vcpkg OpenBLAS
         if: runner.os == 'Windows'
@@ -59,14 +80,15 @@ jobs:
           path: ${{ env.VCPKG_ROOT }}
           key: vcpkg-openblas-${{ runner.os }}-${{ env.VCPKG_OPENBLAS_TRIPLET }}-v1
 
-      - name: Install Linux OpenBLAS prerequisites
+      - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             libopenblas-dev \
+            libasound2-dev
 
-      - name: Install Windows OpenBLAS prerequisites
+      - name: Install Windows prerequisites
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -86,6 +108,11 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake"
           Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_TARGET_TRIPLET=$env:VCPKG_OPENBLAS_TRIPLET"
 
+      - name: Install macOS prerequisites
+        if: runner.os == 'macOS'
+        run: |
+          brew install shaderc
+
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -97,7 +124,7 @@ jobs:
       - name: Cache llama.cpp test fixture
         uses: actions/cache@v5
         with:
-          path: fixtures/llama.cpp
+          path: ${{ runner.os == 'Windows' && 'C:/w/fixtures/llama.cpp' || 'fixtures/llama.cpp' }}
           key: llama-cpp-fixture-${{ env.LLAMA_CPP_FIXTURE_FILE }}-v1
 
       - name: Download llama.cpp test fixture
@@ -107,6 +134,19 @@ jobs:
           hf download "$LLAMA_CPP_FIXTURE_REPO" "$LLAMA_CPP_FIXTURE_FILE" --repo-type model --local-dir "$(dirname "$LLAMA_CPP_FIXTURE_PATH")"
           test -f "$LLAMA_CPP_FIXTURE_PATH"
 
+      - name: Download QTS test fixture
+        shell: bash
+        run: |
+          mkdir -p "$QTS_FIXTURE_PATH"
+          hf download "$QTS_FIXTURE_REPO" qwen3-tts-0.6b-q8_0.gguf --repo-type model --local-dir "$QTS_FIXTURE_PATH"
+          hf download "$QTS_FIXTURE_REPO" qwen3-tts-vocoder.onnx --repo-type model --local-dir "$QTS_FIXTURE_PATH"
+          hf download "$QTS_FIXTURE_REPO" qwen3-tts-reference-codec.onnx --repo-type model --local-dir "$QTS_FIXTURE_PATH"
+          hf download "$QTS_FIXTURE_REPO" qwen3-tts-reference-codec-preprocess.json --repo-type model --local-dir "$QTS_FIXTURE_PATH"
+          test -f "$QTS_FIXTURE_PATH/qwen3-tts-0.6b-q8_0.gguf"
+          test -f "$QTS_FIXTURE_PATH/qwen3-tts-vocoder.onnx"
+          test -f "$QTS_FIXTURE_PATH/qwen3-tts-reference-codec.onnx"
+          test -f "$QTS_FIXTURE_PATH/qwen3-tts-reference-codec-preprocess.json"
+
       - name: Run ignored e2e tests
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -114,8 +154,11 @@ jobs:
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           OPENAI_TRANSCRIPTION_MODEL: ${{ vars.OPENAI_TRANSCRIPTION_MODEL }}
           OPENAI_TTS_MODEL: ${{ vars.OPENAI_TTS_MODEL }}
-          LLAMA_CPP_MODEL: ${{ github.workspace }}/${{ env.LLAMA_CPP_FIXTURE_PATH }}
-        run: cargo test --workspace -- --ignored
+          LLAMA_CPP_MODEL: ${{ runner.os == 'Windows' && format('C:/w/{0}', env.LLAMA_CPP_FIXTURE_PATH) || format('{0}/{1}', github.workspace, env.LLAMA_CPP_FIXTURE_PATH) }}
+          XLAI_QTS_MODEL_DIR: ${{ runner.os == 'Windows' && format('C:/w/{0}', env.QTS_FIXTURE_PATH) || format('{0}/{1}', github.workspace, env.QTS_FIXTURE_PATH) }}
+          XLAI_QTS_REF_AUDIO_WAV: ${{ runner.os == 'Windows' && format('C:/w/{0}', env.ASR_FIXTURE_WAV_PATH) || format('{0}/{1}', github.workspace, env.ASR_FIXTURE_WAV_PATH) }}
+        run: >-
+          cargo test --workspace -- --ignored
 
   e2e-javascript:
     name: JavaScript

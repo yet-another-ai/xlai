@@ -1,6 +1,7 @@
 //! Runtime tests: filesystem, transcription, TTS.
 use std::sync::{Arc, Mutex};
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
 use xlai_core::{
     ChatResponse, FinishReason, FsEntryKind, FsPath, MediaSource, RuntimeCapability,
@@ -99,12 +100,15 @@ async fn runtime_transcribe_uses_configured_backend() -> Result<(), XlaiError> {
 
     assert!(runtime.has_capability(RuntimeCapability::Transcription));
 
+    let decoded = STANDARD
+        .decode("UklGRg==")
+        .map_err(|error| XlaiError::new(xlai_core::ErrorKind::Validation, error.to_string()))?;
     let response = runtime
         .transcribe(TranscriptionRequest {
             model: Some("gpt-4o-mini-transcribe".to_owned()),
             audio: MediaSource::InlineData {
                 mime_type: "audio/wav".to_owned(),
-                data_base64: "UklGRg==".to_owned(),
+                data: decoded,
             },
             mime_type: Some("audio/wav".to_owned()),
             filename: Some("sample.wav".to_owned()),
@@ -139,12 +143,15 @@ async fn runtime_transcribe_errors_without_backend() -> Result<(), XlaiError> {
         )))
         .build()?;
 
+    let decoded = STANDARD
+        .decode("UklGRg==")
+        .map_err(|error| XlaiError::new(xlai_core::ErrorKind::Validation, error.to_string()))?;
     let error = match runtime
         .transcribe(TranscriptionRequest {
             model: None,
             audio: MediaSource::InlineData {
                 mime_type: "audio/wav".to_owned(),
-                data_base64: "UklGRg==".to_owned(),
+                data: decoded,
             },
             mime_type: Some("audio/wav".to_owned()),
             filename: None,
@@ -176,13 +183,16 @@ async fn runtime_transcribe_errors_without_backend() -> Result<(), XlaiError> {
 #[tokio::test]
 async fn runtime_synthesize_uses_configured_backend() -> Result<(), XlaiError> {
     let requests = Arc::new(Mutex::new(Vec::new()));
+    let decoded = STANDARD
+        .decode("AAAA")
+        .map_err(|error| XlaiError::new(xlai_core::ErrorKind::Validation, error.to_string()))?;
     let runtime = RuntimeBuilder::new()
         .with_tts_model(Arc::new(RecordingTtsModel::new(
             requests.clone(),
             vec![TtsResponse {
                 audio: MediaSource::InlineData {
                     mime_type: "audio/mpeg".to_owned(),
-                    data_base64: "AAAA".to_owned(),
+                    data: decoded,
                 },
                 mime_type: "audio/mpeg".to_owned(),
                 metadata: empty_metadata(),
@@ -268,13 +278,16 @@ async fn runtime_synthesize_errors_without_backend() -> Result<(), XlaiError> {
 async fn runtime_stream_synthesize_uses_trait_default_for_unary_only_model() -> Result<(), XlaiError>
 {
     let requests = Arc::new(Mutex::new(Vec::new()));
+    let decoded = STANDARD
+        .decode("QkVBVg==")
+        .map_err(|error| XlaiError::new(xlai_core::ErrorKind::Validation, error.to_string()))?;
     let runtime = RuntimeBuilder::new()
         .with_tts_model(Arc::new(RecordingTtsModel::new(
             requests.clone(),
             vec![TtsResponse {
                 audio: MediaSource::InlineData {
                     mime_type: "audio/mpeg".to_owned(),
-                    data_base64: "QkVBVg==".to_owned(),
+                    data: decoded,
                 },
                 mime_type: "audio/mpeg".to_owned(),
                 metadata: empty_metadata(),

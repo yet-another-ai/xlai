@@ -1,0 +1,130 @@
+name: Publish QTS Hugging Face release
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  SOURCE_MODEL_ID: Qwen/Qwen3-TTS-12Hz-0.6B-Base
+  HF_REPO_ID: dsh0416/Qwen3-TTS-12Hz-0.6B-Base-QTS
+  HF_USERNAME: dsh0416
+  HF_REPO_DIR: hf-model-repo
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hf-release-qts-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    environment:
+      name: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Free Runner Space
+        uses: justinthelaw/maximize-github-runner-space@v0.8.0
+        with:
+          skip-components: rust,cached-python
+          swapfile-size: 2G
+
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Verify Hugging Face token is configured
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "HF_TOKEN is required to publish tagged releases to Hugging Face." >&2
+            exit 1
+          fi
+
+      - name: Install release prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl sox
+          curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/huggingface/xet-core/refs/heads/main/git_xet/install.sh | sh
+          git xet install
+
+      - name: Sync Python environment
+        run: uv sync --locked
+
+      - name: Clone Hugging Face model repository
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          rm -rf "$HF_REPO_DIR"
+          git clone "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/${HF_REPO_ID}" "$HF_REPO_DIR"
+
+      - name: Remove existing managed model files
+        working-directory: ${{ env.HF_REPO_DIR }}
+        run: |
+          rm -f \
+            qwen3-tts-0.6b-f16.gguf \
+            qwen3-tts-0.6b-q8_0.gguf \
+            qwen3-tts-vocoder.onnx \
+            qwen3-tts-reference-codec.onnx \
+            qwen3-tts-reference-codec-preprocess.json
+
+      - name: Build and sync release files
+        run: |
+          uv run xlai-qts-hf-release \
+            --model "$SOURCE_MODEL_ID" \
+            --main-type f16 \
+            --hf-repo-dir "$HF_REPO_DIR"
+
+      - name: Stage managed release files
+        working-directory: ${{ env.HF_REPO_DIR }}
+        run: |
+          git add -A \
+            .gitattributes \
+            README.md \
+            SHA256SUMS \
+            qwen3-tts-vocoder.onnx \
+            qwen3-tts-reference-codec.onnx \
+            qwen3-tts-reference-codec-preprocess.json \
+            qwen3-tts-0.6b-f16.gguf
+
+      - name: Detect publish changes
+        id: detect_changes
+        working-directory: ${{ env.HF_REPO_DIR }}
+        run: |
+          if git diff --cached --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit release update
+        if: steps.detect_changes.outputs.has_changes == 'true'
+        working-directory: ${{ env.HF_REPO_DIR }}
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          git commit -m "Publish qts release ${GITHUB_REF_NAME}
+
+          Source commit: ${GITHUB_SHA}"
+
+      - name: Push to Hugging Face
+        if: steps.detect_changes.outputs.has_changes == 'true'
+        working-directory: ${{ env.HF_REPO_DIR }}
+        run: git push origin HEAD
+
+      - name: Report no-op release
+        if: steps.detect_changes.outputs.has_changes != 'true'
+        run: echo "No managed Hugging Face release files changed for ${GITHUB_REF_NAME}."

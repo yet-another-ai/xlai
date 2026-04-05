@@ -358,14 +358,14 @@ impl TtsModel for OpenAiTtsModel {
                     mime_type: response.mime_type.clone(),
                     metadata: BTreeMap::new(),
                 };
-                let data_base64 = match &response.audio {
-                    MediaSource::InlineData { data_base64, .. } => data_base64.clone(),
+                let data = match &response.audio {
+                    MediaSource::InlineData { data, .. } => data.clone(),
                     MediaSource::Url { .. } => Err(XlaiError::new(
                         ErrorKind::Unsupported,
                         "openai-compatible TTS stream fallback requires inline audio bytes",
                     ))?,
                 };
-                yield TtsChunk::AudioDelta { data_base64 };
+                yield TtsChunk::AudioDelta { data };
                 yield TtsChunk::Finished { response };
             }),
             TtsDeliveryMode::Stream => {
@@ -418,7 +418,7 @@ impl TtsModel for OpenAiTtsModel {
                                 let response_done = xlai_core::TtsResponse {
                                     audio: MediaSource::InlineData {
                                         mime_type: mime_type.clone(),
-                                        data_base64: STANDARD.encode(&assembled),
+                                        data: assembled.clone(),
                                     },
                                     mime_type: mime_type.clone(),
                                     metadata: meta.clone(),
@@ -438,13 +438,13 @@ impl TtsModel for OpenAiTtsModel {
                                         )
                                     })?;
                                     assembled.extend_from_slice(&decoded);
-                                    yield TtsChunk::AudioDelta { data_base64: b64 };
+                                    yield TtsChunk::AudioDelta { data: decoded };
                                 }
                                 ParsedSpeechSse::Done => {
                                     let response_done = xlai_core::TtsResponse {
                                         audio: MediaSource::InlineData {
                                             mime_type: mime_type.clone(),
-                                            data_base64: STANDARD.encode(&assembled),
+                                            data: assembled.clone(),
                                         },
                                         mime_type: mime_type.clone(),
                                         metadata: meta.clone(),
@@ -462,7 +462,7 @@ impl TtsModel for OpenAiTtsModel {
                     let response_done = xlai_core::TtsResponse {
                         audio: MediaSource::InlineData {
                             mime_type: mime_type.clone(),
-                            data_base64: STANDARD.encode(&assembled),
+                            data: assembled,
                         },
                         mime_type: mime_type.clone(),
                         metadata: meta.clone(),

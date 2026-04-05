@@ -1,0 +1,57 @@
+[package]
+name = "xlai-qts-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "CLI and TUI for Qwen3 TTS (xlai QTS stack)."
+default-run = "xlai-qts"
+
+[[bin]]
+name = "xlai-qts"
+path = "src/main.rs"
+
+[features]
+default = ["openblas"]
+openblas = ["xlai-qts-core/openblas", "xlai-backend-qts/openblas"]
+metal = ["xlai-qts-core/metal", "xlai-backend-qts/metal"]
+vulkan = ["xlai-qts-core/vulkan", "xlai-backend-qts/vulkan"]
+native = ["xlai-qts-core/native"]
+acl = ["xlai-qts-core/acl"]
+armnn = ["xlai-qts-core/armnn"]
+cann = ["xlai-qts-core/cann"]
+coreml = ["xlai-qts-core/coreml"]
+cuda = ["xlai-qts-core/cuda"]
+directml = ["xlai-qts-core/directml"]
+migraphx = ["xlai-qts-core/migraphx"]
+nnapi = ["xlai-qts-core/nnapi"]
+onednn = ["xlai-qts-core/onednn"]
+openvino = ["xlai-qts-core/openvino"]
+qnn = ["xlai-qts-core/qnn"]
+rknpu = ["xlai-qts-core/rknpu"]
+rocm = ["xlai-qts-core/rocm"]
+tensorrt = ["xlai-qts-core/tensorrt"]
+tvm = ["xlai-qts-core/tvm"]
+vitis = ["xlai-qts-core/vitis"]
+xnnpack = ["xlai-qts-core/xnnpack"]
+
+[dependencies]
+anyhow.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+xlai-backend-qts = { path = "../xlai-backend-qts" }
+xlai-core = { path = "../xlai-core" }
+xlai-qts-core = { path = "../xlai-qts-core" }
+xlai-runtime = { path = "../xlai-runtime" }
+hound.workspace = true
+cpal.workspace = true
+crossterm.workspace = true
+libc.workspace = true
+ratatui.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_Console",
+    "Win32_System_Threading",
+] }
