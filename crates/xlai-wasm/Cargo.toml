@@ -14,6 +14,11 @@ crate-type = ["cdylib"]
 [lints]
 workspace = true
 
+[features]
+default = ["qts"]
+# Local QTS in the browser (stub engine until GGML/ORT WASM integration; see docs/qts-wasm-browser-runtime.md).
+qts = ["dep:xlai-backend-qts-wasm", "dep:xlai-qts-browser"]
+
 [dependencies]
 futures-util.workspace = true
 js-sys.workspace = true
@@ -23,8 +28,10 @@ serde-wasm-bindgen.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
 xlai-backend-openai = { path = "../xlai-backend-openai" }
+xlai-backend-qts-wasm = { path = "../xlai-backend-qts-wasm", optional = true }
 xlai-backend-transformersjs = { path = "../xlai-backend-transformersjs" }
 xlai-core = { path = "../xlai-core" }
+xlai-qts-browser = { path = "../xlai-qts-browser", optional = true }
 xlai-runtime = { path = "../xlai-runtime" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

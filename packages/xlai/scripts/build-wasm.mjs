@@ -19,6 +19,9 @@ const args = [
   '../../packages/xlai/pkg',
   '--out-name',
   'xlai_wasm',
+  '--',
+  '--features',
+  'qts',
 ];
 
 await new Promise((resolvePromise, rejectPromise) => {

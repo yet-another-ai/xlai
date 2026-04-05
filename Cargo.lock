@@ -4714,6 +4714,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "xlai-backend-qts-wasm"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "xlai-core",
+ "xlai-qts-browser",
+]
+
+[[package]]
 name = "xlai-backend-transformersjs"
 version = "0.1.0"
 dependencies = [
@@ -4783,6 +4795,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "xlai-qts-browser"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "xlai-qts-cli"
 version = "0.1.0"
 dependencies = [
@@ -4815,6 +4835,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "xlai-observability",
+ "xlai-qts-browser",
  "xlai-sys",
 ]
 
@@ -4858,8 +4879,10 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "xlai-backend-openai",
+ "xlai-backend-qts-wasm",
  "xlai-backend-transformersjs",
  "xlai-core",
+ "xlai-qts-browser",
  "xlai-runtime",
 ]
 
