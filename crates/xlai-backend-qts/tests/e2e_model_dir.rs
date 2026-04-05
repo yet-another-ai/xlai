@@ -6,7 +6,7 @@
 //! export XLAI_QTS_MODEL_DIR=/path/to/models
 //! export XLAI_QTS_REF_AUDIO_WAV=/path/to/reference.wav
 //! export XLAI_QTS_REF_TEXT="optional transcript for ICL tests"
-//! cargo test -p xlai-backend-qts e2e_model_dir -- --ignored --nocapture
+//! cargo test -p xlai-backend-qts e2e_model_dir -- --ignored --nocapture --test-threads=1
 //! ```
 
 use std::env;

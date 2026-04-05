@@ -21,6 +21,7 @@ mod tui;
 use crate::cli_support::{CommonSynthesisArgs, load_engine, parse_value_arg};
 
 fn main() -> Result<()> {
+    xlai_observability::init_logging();
     let mut args = env::args().skip(1);
     match args.next().as_deref() {
         Some("synthesize") => run_synthesize(args.collect()),

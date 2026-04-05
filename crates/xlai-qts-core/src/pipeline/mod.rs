@@ -2,6 +2,7 @@
 
 pub(crate) mod backend;
 mod byte_unicode;
+mod ggml_log_bridge;
 pub mod reference_codec_encoder;
 pub mod speaker_encoder;
 pub mod tokenizer;

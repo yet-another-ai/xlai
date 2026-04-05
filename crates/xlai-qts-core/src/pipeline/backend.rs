@@ -4,8 +4,11 @@ use std::ffi::CStr;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use tracing::debug;
+
 use crate::ggml::sys;
 
+use super::ggml_log_bridge;
 use crate::Qwen3TtsError;
 
 /// `ggml_backend_reg_by_name` argument for the Metal backend (device names are `MTL0`, … — not `"Metal"`).
@@ -164,6 +167,7 @@ struct BackendSetInner {
 
 impl BackendSet {
     pub(crate) fn new() -> Result<Self, Qwen3TtsError> {
+        ggml_log_bridge::ensure_installed();
         unsafe {
             sys::ggml_backend_load_all();
             sys::ggml_cpu_init();
@@ -182,7 +186,7 @@ impl BackendSet {
                 .map(|choice| choice.as_env_str())
                 .collect::<Vec<_>>()
                 .join(" -> ");
-            eprintln!("[backend-debug] auto fallback chain: {chain}");
+            debug!(target: "xlai::qts::backend", "[backend-debug] auto fallback chain: {chain}");
         }
         for choice in order {
             if let Some(backends) = Self::try_backend(*choice)? {
@@ -199,7 +203,11 @@ impl BackendSet {
             BackendPreference::Cpu => {
                 let primary = OwnedBackend::cpu()?;
                 if backend_debug_enabled() {
-                    eprintln!("[backend-debug] selected {}", BackendKind::Cpu.as_str());
+                    debug!(
+                        target: "xlai::qts::backend",
+                        "[backend-debug] selected {}",
+                        BackendKind::Cpu.as_str()
+                    );
                 }
                 Self::with_primary(primary, BackendKind::Cpu, None)
             }
@@ -236,7 +244,11 @@ impl BackendSet {
             BackendPreference::Cpu => {
                 let primary = OwnedBackend::cpu()?;
                 if backend_debug_enabled() {
-                    eprintln!("[backend-debug] selected {}", BackendKind::Cpu.as_str());
+                    debug!(
+                        target: "xlai::qts::backend",
+                        "[backend-debug] selected {}",
+                        BackendKind::Cpu.as_str()
+                    );
                 }
                 Ok(Some(Self::with_primary(primary, BackendKind::Cpu, None)?))
             }
@@ -248,7 +260,8 @@ impl BackendSet {
                 #[cfg(not(all(feature = "metal", target_vendor = "apple")))]
                 {
                     if backend_debug_enabled() {
-                        eprintln!(
+                        debug!(
+                            target: "xlai::qts::backend",
                             "[backend-debug] skipping metal (not supported by this build/target)"
                         );
                     }
@@ -263,7 +276,10 @@ impl BackendSet {
                 #[cfg(not(feature = "vulkan"))]
                 {
                     if backend_debug_enabled() {
-                        eprintln!("[backend-debug] skipping vulkan (not enabled in this build)");
+                        debug!(
+                            target: "xlai::qts::backend",
+                            "[backend-debug] skipping vulkan (not enabled in this build)"
+                        );
                     }
                     Ok(None)
                 }
@@ -276,7 +292,7 @@ impl BackendSet {
         let label = kind.as_str();
         if let Some(primary) = OwnedBackend::init_from_reg(reg, label, false)? {
             if backend_debug_enabled() {
-                eprintln!("[backend-debug] selected {label}");
+                debug!(target: "xlai::qts::backend", "[backend-debug] selected {label}");
             }
             return Ok(Some(Self::with_primary(
                 primary,
@@ -286,7 +302,10 @@ impl BackendSet {
         }
 
         if backend_debug_enabled() {
-            eprintln!("[backend-debug] {label} unavailable, falling back");
+            debug!(
+                target: "xlai::qts::backend",
+                "[backend-debug] {label} unavailable, falling back"
+            );
         }
         Ok(None)
     }
@@ -300,7 +319,10 @@ impl BackendSet {
             ))
         })?;
         if backend_debug_enabled() {
-            eprintln!("[backend-debug] selected {label} (QWEN3_TTS_BACKEND)");
+            debug!(
+                target: "xlai::qts::backend",
+                "[backend-debug] selected {label} (QWEN3_TTS_BACKEND)"
+            );
         }
         Self::with_primary(primary, kind, Some(OwnedBackend::cpu()?))
     }
@@ -621,7 +643,8 @@ fn run_graph_impl(
     }
     let _t3 = std::time::Instant::now();
     if backend_debug_enabled() {
-        eprintln!(
+        debug!(
+            target: "xlai::qts::backend",
             "[graph_impl] upload={:.2}ms  compute={:.2}ms  download={:.2}ms  ({error_message})",
             (_t1 - _t0).as_secs_f64() * 1000.0,
             (_t2 - _t1).as_secs_f64() * 1000.0,
@@ -665,11 +688,15 @@ fn maybe_log_backend_support(backends: &BackendSet, graph: NonNull<sys::ggml_cgr
         }
     }
 
-    eprintln!(
+    debug!(
+        target: "xlai::qts::backend",
         "[backend-debug] {label}: nodes={n_nodes} supported={supported} offloaded={offloaded}"
     );
     for (op, count) in unsupported_ops.into_iter().take(12) {
-        eprintln!("[backend-debug] unsupported {op}: {count}");
+        debug!(
+            target: "xlai::qts::backend",
+            "[backend-debug] unsupported {op}: {count}"
+        );
     }
 }
 

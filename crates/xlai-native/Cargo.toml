@@ -27,6 +27,7 @@ workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+xlai-observability = { path = "../xlai-observability" }
 
 [dependencies]
 xlai-backend-llama-cpp = { path = "../xlai-backend-llama-cpp" }

@@ -12,10 +12,13 @@ publish = false
 [lib]
 name = "xlai_sys"
 
+[dependencies]
+tracing = { workspace = true, optional = true }
+
 [features]
 default = []
 # At least one of `llama` or `qts-ggml` must be enabled by dependents.
-llama = []
+llama = ["dep:tracing"]
 qts-ggml = []
 # Shared backend toggles (both stacks honor these where applicable).
 openblas = []
