@@ -57,10 +57,7 @@ impl QtsModelManifest {
     }
 
     fn require_logical(&self, name: &'static str) -> Result<(), ManifestError> {
-        let found = self
-            .files
-            .iter()
-            .any(|entry| entry.logical_name == name);
+        let found = self.files.iter().any(|entry| entry.logical_name == name);
         if found {
             Ok(())
         } else {
@@ -130,7 +127,9 @@ mod tests {
         };
         assert_eq!(
             manifest.validate_required_files(),
-            Err(ManifestError::MissingLogicalName(logical_names::VOCODER_ONNX))
+            Err(ManifestError::MissingLogicalName(
+                logical_names::VOCODER_ONNX
+            ))
         );
     }
 }

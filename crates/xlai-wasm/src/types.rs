@@ -49,6 +49,15 @@ pub(crate) struct WasmAgentRequest {
     pub(crate) content: Option<ChatContent>,
 }
 
+/// Optional local QTS config on chat/agent sessions (`manifest` only for now).
+#[cfg(feature = "qts")]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WasmQtsSessionConfig {
+    #[serde(default)]
+    pub(crate) manifest: Option<xlai_qts_browser::QtsModelManifest>,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WasmChatSessionOptions {
@@ -63,6 +72,10 @@ pub(crate) struct WasmChatSessionOptions {
     pub(crate) temperature: Option<f32>,
     #[serde(default)]
     pub(crate) max_output_tokens: Option<u32>,
+    /// When set, the runtime behind this session includes local QTS (`QtsBrowserTtsModel`).
+    #[cfg(feature = "qts")]
+    #[serde(default)]
+    pub(crate) qts: Option<WasmQtsSessionConfig>,
 }
 
 #[derive(Deserialize)]
@@ -111,6 +124,8 @@ impl From<WasmChatRequest> for WasmChatSessionOptions {
             system_prompt: value.system_prompt,
             temperature: value.temperature,
             max_output_tokens: value.max_output_tokens,
+            #[cfg(feature = "qts")]
+            qts: None,
         }
     }
 }
@@ -124,6 +139,8 @@ impl From<WasmAgentRequest> for WasmChatSessionOptions {
             system_prompt: value.system_prompt,
             temperature: value.temperature,
             max_output_tokens: value.max_output_tokens,
+            #[cfg(feature = "qts")]
+            qts: None,
         }
     }
 }
@@ -138,6 +155,8 @@ pub(crate) struct WasmTransformersSessionOptions {
     pub(crate) system_prompt: Option<String>,
     pub(crate) temperature: Option<f32>,
     pub(crate) max_output_tokens: Option<u32>,
+    #[cfg(feature = "qts")]
+    pub(crate) qts: Option<WasmQtsSessionConfig>,
 }
 
 #[derive(Serialize)]

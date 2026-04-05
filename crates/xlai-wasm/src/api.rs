@@ -1,14 +1,14 @@
 //! `wasm_bindgen` exports (one-shot `chat` / `agent` and session constructors).
 
+#[cfg(feature = "qts")]
+use crate::factory::qts_runtime::build_runtime_tts_only;
 use futures_util::StreamExt;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::wasm_bindgen;
 use xlai_backend_openai::{OpenAiConfig, OpenAiTtsModel};
-use xlai_core::{ChatContent, TtsChunk, TtsDeliveryMode, TtsModel, TtsRequest};
-#[cfg(feature = "qts")]
-use xlai_backend_qts_wasm::{QtsBrowserTtsConfig, QtsBrowserTtsModel};
 #[cfg(feature = "qts")]
 use xlai_core::XlaiError;
+use xlai_core::{ChatContent, TtsChunk, TtsDeliveryMode, TtsModel, TtsRequest};
 #[cfg(feature = "qts")]
 use xlai_qts_browser::QtsBrowserCapabilities;
 
@@ -23,12 +23,12 @@ use crate::factory::{
     parse_transformers_session_options,
 };
 use crate::memory_fs::WasmMemoryFileSystem;
+#[cfg(feature = "qts")]
+use crate::types::WasmQtsTtsCallOptions;
 use crate::types::{
     DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL, WasmAgentRequest, WasmChatRequest,
     WasmChatSessionOptions, WasmTtsCallOptions,
 };
-#[cfg(feature = "qts")]
-use crate::types::WasmQtsTtsCallOptions;
 use crate::wasm_helpers::js_error;
 
 #[wasm_bindgen]
@@ -57,6 +57,8 @@ pub async fn chat(options: JsValue) -> Result<JsValue, JsValue> {
         system_prompt,
         temperature,
         max_output_tokens,
+        #[cfg(feature = "qts")]
+        qts: None,
     };
     let chat = create_chat_session_inner(session_options, None)?;
     chat.prompt_with_content(serde_wasm_bindgen::to_value(&user_content).map_err(js_error)?)
@@ -83,6 +85,8 @@ pub async fn agent(options: JsValue) -> Result<JsValue, JsValue> {
         system_prompt,
         temperature,
         max_output_tokens,
+        #[cfg(feature = "qts")]
+        qts: None,
     };
     let agent = create_agent_session_inner(session_options, None)?;
     agent
@@ -260,7 +264,7 @@ pub async fn tts_stream(options: JsValue) -> Result<JsValue, JsValue> {
 }
 
 #[cfg(feature = "qts")]
-fn xlai_error_to_js(err: XlaiError) -> JsValue {
+pub(crate) fn xlai_error_to_js(err: XlaiError) -> JsValue {
     serde_wasm_bindgen::to_value(&err).unwrap_or_else(|_| JsValue::from_str(&err.message))
 }
 
@@ -282,7 +286,7 @@ pub fn validate_qts_model_manifest(manifest: JsValue) -> Result<(), JsValue> {
 }
 
 #[cfg(feature = "qts")]
-fn tts_request_from_qts_opts(
+pub(crate) fn tts_request_from_qts_opts(
     opts: &WasmQtsTtsCallOptions,
     delivery: TtsDeliveryMode,
 ) -> TtsRequest {
@@ -304,11 +308,9 @@ fn tts_request_from_qts_opts(
 pub async fn qts_browser_tts(options: JsValue) -> Result<JsValue, JsValue> {
     let opts: WasmQtsTtsCallOptions = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
     let delivery = opts.delivery.unwrap_or(TtsDeliveryMode::Unary);
-    let model = QtsBrowserTtsModel::new(QtsBrowserTtsConfig {
-        manifest: opts.manifest.clone(),
-    });
+    let runtime = build_runtime_tts_only(opts.manifest.clone())?;
     let request = tts_request_from_qts_opts(&opts, delivery);
-    match model.synthesize(request).await {
+    match runtime.synthesize(request).await {
         Ok(response) => serde_wasm_bindgen::to_value(&response).map_err(js_error),
         Err(e) => Err(xlai_error_to_js(e)),
     }
@@ -320,12 +322,12 @@ pub async fn qts_browser_tts(options: JsValue) -> Result<JsValue, JsValue> {
 pub async fn qts_browser_tts_stream(options: JsValue) -> Result<JsValue, JsValue> {
     let opts: WasmQtsTtsCallOptions = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
     let delivery = opts.delivery.unwrap_or(TtsDeliveryMode::Stream);
-    let model = QtsBrowserTtsModel::new(QtsBrowserTtsConfig {
-        manifest: opts.manifest.clone(),
-    });
+    let runtime = build_runtime_tts_only(opts.manifest.clone())?;
     let request = tts_request_from_qts_opts(&opts, delivery);
     let mut chunks = Vec::<TtsChunk>::new();
-    let mut stream = model.synthesize_stream(request);
+    let mut stream = runtime
+        .stream_synthesize(request)
+        .map_err(xlai_error_to_js)?;
     while let Some(item) = stream.next().await {
         match item {
             Ok(c) => chunks.push(c),

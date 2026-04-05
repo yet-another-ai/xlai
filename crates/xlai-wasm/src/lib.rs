@@ -19,6 +19,8 @@ mod api;
 mod chat_session;
 mod factory;
 mod memory_fs;
+#[cfg(feature = "qts")]
+mod tts_runtime;
 mod types;
 mod wasm_helpers;
 
@@ -31,11 +33,6 @@ pub use api::{
     create_chat_session, create_chat_session_with_memory_file_system, package_version, tts,
     tts_stream,
 };
-#[cfg(feature = "qts")]
-pub use api::{
-    qts_browser_tts, qts_browser_tts_capabilities, qts_browser_tts_stream,
-    validate_qts_model_manifest,
-};
 #[cfg(target_arch = "wasm32")]
 pub use api::{
     create_agent_session_with_file_system, create_transformers_agent_session,
@@ -44,8 +41,15 @@ pub use api::{
     create_transformers_chat_session_with_file_system,
     create_transformers_chat_session_with_memory_file_system,
 };
+#[cfg(feature = "qts")]
+pub use api::{
+    qts_browser_tts, qts_browser_tts_capabilities, qts_browser_tts_stream,
+    validate_qts_model_manifest,
+};
 pub use chat_session::WasmChatSession;
 pub use memory_fs::WasmMemoryFileSystem;
+#[cfg(feature = "qts")]
+pub use tts_runtime::{WasmLocalTtsRuntime, create_local_tts_runtime};
 
 #[must_use]
 pub fn builder() -> RuntimeBuilder {
@@ -63,6 +67,10 @@ mod tests {
     };
 
     use crate::factory::create_agent_session_inner;
+    #[cfg(feature = "qts")]
+    use crate::factory::create_chat_session_inner;
+    #[cfg(feature = "qts")]
+    use crate::types::WasmQtsSessionConfig;
     use crate::types::{
         WasmAgentRequest, WasmChatRequest, WasmChatResponse, WasmChatSessionOptions, WasmFsEntry,
     };
@@ -172,10 +180,37 @@ mod tests {
                 system_prompt: Some("Use tools.".to_owned()),
                 temperature: Some(0.1),
                 max_output_tokens: Some(256),
+                #[cfg(feature = "qts")]
+                qts: None,
             },
             None,
         );
 
         assert!(session.is_ok());
+    }
+
+    #[cfg(feature = "qts")]
+    #[test]
+    fn chat_session_with_qts_config_builds() {
+        let session = create_chat_session_inner(
+            WasmChatSessionOptions {
+                api_key: "test-key".to_owned(),
+                base_url: Some("https://example.com/v1".to_owned()),
+                model: Some("gpt-test".to_owned()),
+                system_prompt: None,
+                temperature: None,
+                max_output_tokens: None,
+                qts: Some(WasmQtsSessionConfig::default()),
+            },
+            None,
+        );
+        assert!(session.is_ok());
+    }
+
+    #[cfg(feature = "qts")]
+    #[test]
+    fn tts_only_runtime_builds_via_factory() {
+        let runtime = crate::factory::qts_runtime::build_runtime_tts_only(None);
+        assert!(runtime.is_ok());
     }
 }

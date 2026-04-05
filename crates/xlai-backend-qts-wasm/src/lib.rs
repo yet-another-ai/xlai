@@ -78,7 +78,10 @@ impl TtsModel for QtsBrowserTtsModel {
         })
     }
 
-    fn synthesize_stream(&self, _request: TtsRequest) -> BoxStream<'_, Result<TtsChunk, XlaiError>> {
+    fn synthesize_stream(
+        &self,
+        _request: TtsRequest,
+    ) -> BoxStream<'_, Result<TtsChunk, XlaiError>> {
         let err = match self.validate_manifest_if_present() {
             Ok(()) => Self::engine_pending_error(),
             Err(e) => e,

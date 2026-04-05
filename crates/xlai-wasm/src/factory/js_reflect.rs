@@ -10,6 +10,9 @@ use crate::js_file_system::JsFileSystem;
 use crate::types::WasmTransformersSessionOptions;
 use crate::wasm_helpers::js_error;
 
+#[cfg(feature = "qts")]
+use crate::types::WasmQtsSessionConfig;
+
 pub(crate) fn parse_transformers_session_options(
     options: JsValue,
 ) -> Result<WasmTransformersSessionOptions, JsValue> {
@@ -28,12 +31,25 @@ pub(crate) fn parse_transformers_session_options(
         ));
     }
 
+    #[cfg(feature = "qts")]
+    let qts = {
+        let q = Reflect::get(&options, &JsValue::from_str("qts"))
+            .map_err(|e| js_error(format!("failed to read qts: {e:?}")))?;
+        if q.is_null() || q.is_undefined() {
+            None
+        } else {
+            Some(serde_wasm_bindgen::from_value::<WasmQtsSessionConfig>(q).map_err(js_error)?)
+        }
+    };
+
     Ok(WasmTransformersSessionOptions {
         model_id,
         adapter,
         system_prompt: optional_js_string_field(&options, "systemPrompt")?,
         temperature: optional_js_f32_field(&options, "temperature")?,
         max_output_tokens: optional_js_u32_field(&options, "maxOutputTokens")?,
+        #[cfg(feature = "qts")]
+        qts,
     })
 }
 

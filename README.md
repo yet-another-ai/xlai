@@ -57,7 +57,7 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md).
 - `crates/xlai-native`
   Native Rust-facing facade crate that re-exports the runtime API.
 - `crates/xlai-wasm`
-  Browser-facing `wasm-bindgen` facade crate for web integration.
+  Browser-facing `wasm-bindgen` facade crate for web integration. Default Cargo feature `qts` enables local QTS entrypoints (`qtsBrowserTts`, manifest validation); the in-browser engine is still a stub until GGML/ORT WASM work lands (see `docs/qts-wasm-browser-runtime.md`).
 - `crates/xlai-backend-llama-cpp`
   Native `llama.cpp` chat backend for local GGUF inference.
 - `crates/xlai-sys`
@@ -70,8 +70,12 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md).
   Browser chat backend that delegates generation to a JavaScript adapter (WASM).
 - `crates/xlai-backend-qts`
   Native Qwen3 TTS backend implementing `TtsModel` (WAV output; maps tuning via `TtsRequest` metadata keys `xlai.qts.*`). **`VoiceSpec::Clone`** is supported using the first reference sample (inline WAV only): Rust-native x-vector and ICL prompts via `xlai-qts-core`, with optional `xlai.qts.voice_clone_mode` (`xvector` \| `icl`).
+- `crates/xlai-backend-qts-wasm`
+  Browser-oriented `TtsModel` adapter (`qts-browser`); ships with `xlai-wasm` behind feature `qts`. Returns structured `qts_wasm_engine_pending` until local engines are integrated.
 - `crates/xlai-qts-core`
-  Ported QTS engine; links standalone `ggml` through `xlai-sys` (`qts-ggml`). CPU BLAS follows the same OpenBLAS / Accelerate patterns as the llama stack in `xlai-sys`. Builds `VoiceClonePromptV2` from raw WAV (`create_voice_clone_prompt`); ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts-export-and-hf-publish.md`).
+  Ported QTS engine; links standalone `ggml` through `xlai-sys` (`qts-ggml`). CPU BLAS follows the same OpenBLAS / Accelerate patterns as the llama stack in `xlai-sys`. Builds `VoiceClonePromptV2` from raw WAV (`create_voice_clone_prompt`); ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts-export-and-hf-publish.md`). Optional feature `browser-manifest` re-exports shared browser manifest types from `xlai-qts-browser`.
+- `crates/xlai-qts-browser`
+  Serde types for QTS browser model manifests and capability reporting (`docs/qts-wasm-model-manifest.md`); no native GGML/ORT.
 - `crates/xlai-qts-cli`
   Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without voice-clone flags, `synthesize` uses `xlai-runtime` + `xlai-backend-qts`. With `--voice-clone-prompt` or `--ref-audio`, it uses the direct engine path. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
 - `crates/xlai-local-common`
@@ -105,7 +109,7 @@ cargo test --workspace
 
 ```bash
 rustup target add wasm32-unknown-unknown
-cargo check -p xlai-wasm --target wasm32-unknown-unknown
+cargo check -p xlai-wasm --target wasm32-unknown-unknown --features qts
 ```
 
 ### Install JavaScript dependencies
