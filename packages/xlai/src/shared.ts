@@ -10,6 +10,7 @@ import type {
   ChatResponse,
   ChatSessionOptions,
   ContentPart,
+  QtsSessionConfig,
   ToolDefinition,
   ToolParameterType,
   ToolResult,
@@ -27,7 +28,9 @@ export type ResolvedRequestOptions = {
   maxOutputTokens?: number;
 };
 
-export type ResolvedSessionOptions = Omit<ResolvedRequestOptions, 'prompt'>;
+export type ResolvedSessionOptions = Omit<ResolvedRequestOptions, 'prompt'> & {
+  qts?: QtsSessionConfig;
+};
 
 export type WasmChatFunction = (
   options: ResolvedRequestOptions,
@@ -153,6 +156,7 @@ export function resolveSessionOptions(
     model: options.model ?? envValue('OPENAI_MODEL'),
     temperature: options.temperature,
     maxOutputTokens: options.maxOutputTokens,
+    ...(options.qts !== undefined ? { qts: options.qts } : {}),
   };
 }
 

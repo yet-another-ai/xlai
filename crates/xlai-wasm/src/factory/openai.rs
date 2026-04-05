@@ -32,15 +32,23 @@ pub(crate) fn create_chat_session_with_dyn_file_system(
     let mut runtime_builder = RuntimeBuilder::new().with_chat_backend(OpenAiConfig::new(
         options
             .base_url
+            .clone()
             .unwrap_or_else(|| DEFAULT_OPENAI_BASE_URL.to_owned()),
-        options.api_key,
+        options.api_key.clone(),
         options
             .model
+            .clone()
             .unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_owned()),
     ));
 
     if let Some(file_system) = file_system {
         runtime_builder = runtime_builder.with_file_system(file_system);
+    }
+
+    #[cfg(feature = "qts")]
+    {
+        runtime_builder =
+            crate::factory::qts_runtime::apply_qts_session_to_builder(runtime_builder, &options)?;
     }
 
     let runtime = runtime_builder.build().map_err(js_error)?;
@@ -69,15 +77,23 @@ pub(crate) fn create_agent_session_with_dyn_file_system(
     let mut runtime_builder = RuntimeBuilder::new().with_chat_backend(OpenAiConfig::new(
         options
             .base_url
+            .clone()
             .unwrap_or_else(|| DEFAULT_OPENAI_BASE_URL.to_owned()),
-        options.api_key,
+        options.api_key.clone(),
         options
             .model
+            .clone()
             .unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_owned()),
     ));
 
     if let Some(file_system) = file_system {
         runtime_builder = runtime_builder.with_file_system(file_system);
+    }
+
+    #[cfg(feature = "qts")]
+    {
+        runtime_builder =
+            crate::factory::qts_runtime::apply_qts_session_to_builder(runtime_builder, &options)?;
     }
 
     let runtime = runtime_builder.build().map_err(js_error)?;

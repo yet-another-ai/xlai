@@ -2,6 +2,9 @@
 
 mod openai;
 
+#[cfg(feature = "qts")]
+pub(crate) mod qts_runtime;
+
 #[cfg(target_arch = "wasm32")]
 mod js_reflect;
 #[cfg(target_arch = "wasm32")]

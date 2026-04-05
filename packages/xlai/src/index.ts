@@ -12,6 +12,14 @@ export type {
 export { AgentSession, agent, createAgentSession } from './agent';
 export { ChatSession, chat, createChatSession } from './chat';
 export { tts, ttsStream } from './tts';
+export {
+  LocalTtsRuntime,
+  qtsBrowserTts,
+  qtsBrowserTtsCapabilities,
+  qtsBrowserTtsStream,
+  validateQtsModelManifest,
+} from './qts';
+export type { QtsBrowserCapabilities, QtsTtsOptions } from './qts';
 export { packageVersion } from './shared';
 export type {
   AgentOptions,
@@ -25,6 +33,9 @@ export type {
   ContentPart,
   ImageDetail,
   MediaSource,
+  QtsModelFileEntry,
+  QtsModelManifest,
+  QtsSessionConfig,
   ToolCallExecutionMode,
   ToolDefinition,
   ToolParameter,

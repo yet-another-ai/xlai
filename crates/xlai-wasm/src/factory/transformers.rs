@@ -11,6 +11,9 @@ use crate::chat_session::WasmChatSession;
 use crate::types::WasmTransformersSessionOptions;
 use crate::wasm_helpers::js_error;
 
+#[cfg(feature = "qts")]
+use crate::factory::qts_runtime::apply_qts_config_to_builder;
+
 pub(crate) fn create_transformers_chat_session_with_dyn_file_system(
     options: WasmTransformersSessionOptions,
     file_system: Option<Arc<dyn FileSystem>>,
@@ -21,6 +24,8 @@ pub(crate) fn create_transformers_chat_session_with_dyn_file_system(
         system_prompt,
         temperature,
         max_output_tokens,
+        #[cfg(feature = "qts")]
+        qts,
     } = options;
 
     let mut config = TransformersJsConfig::new(model_id);
@@ -36,6 +41,11 @@ pub(crate) fn create_transformers_chat_session_with_dyn_file_system(
 
     if let Some(file_system) = file_system {
         runtime_builder = runtime_builder.with_file_system(file_system);
+    }
+
+    #[cfg(feature = "qts")]
+    {
+        runtime_builder = apply_qts_config_to_builder(runtime_builder, &qts)?;
     }
 
     let runtime = runtime_builder.build().map_err(js_error)?;
@@ -67,6 +77,8 @@ pub(crate) fn create_transformers_agent_session_with_dyn_file_system(
         system_prompt,
         temperature,
         max_output_tokens,
+        #[cfg(feature = "qts")]
+        qts,
     } = options;
 
     let mut config = TransformersJsConfig::new(model_id);
@@ -82,6 +94,11 @@ pub(crate) fn create_transformers_agent_session_with_dyn_file_system(
 
     if let Some(file_system) = file_system {
         runtime_builder = runtime_builder.with_file_system(file_system);
+    }
+
+    #[cfg(feature = "qts")]
+    {
+        runtime_builder = apply_qts_config_to_builder(runtime_builder, &qts)?;
     }
 
     let runtime = runtime_builder.build().map_err(js_error)?;

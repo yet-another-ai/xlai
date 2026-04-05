@@ -122,6 +122,28 @@ export interface ToolResult {
   metadata?: Record<string, unknown>;
 }
 
+/** Wire shape from Rust `QtsModelFileEntry`. */
+export interface QtsModelFileEntry {
+  logical_name: string;
+  filename: string;
+  sha256?: string;
+  size_bytes?: number;
+  url?: string;
+}
+
+/** Wire shape from Rust `QtsModelManifest`. */
+export interface QtsModelManifest {
+  schema_version: number;
+  model_id: string;
+  revision: string;
+  files: QtsModelFileEntry[];
+}
+
+/** Optional local QTS on chat/agent sessions (passed to WASM `RuntimeBuilder`). */
+export interface QtsSessionConfig {
+  manifest?: QtsModelManifest;
+}
+
 export interface ChatSessionOptions {
   apiKey?: string;
   baseUrl?: string;
@@ -130,6 +152,8 @@ export interface ChatSessionOptions {
   temperature?: number;
   maxOutputTokens?: number;
   fileSystem?: FileSystemApi;
+  /** When set, the WASM runtime behind the session includes local QTS. */
+  qts?: QtsSessionConfig;
 }
 
 export type AgentSessionOptions = ChatSessionOptions;

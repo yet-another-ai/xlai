@@ -10,6 +10,8 @@ publish = false
 
 [features]
 default = ["openblas"]
+# Re-export browser manifest types next to the engine (`use xlai_qts_core::browser::*`).
+browser-manifest = ["dep:xlai-qts-browser"]
 metal = ["xlai-sys/metal"]
 vulkan = ["xlai-sys/vulkan"]
 native = ["xlai-sys/native"]
@@ -34,6 +36,7 @@ xnnpack = ["ort/xnnpack"]
 
 [dependencies]
 tracing.workspace = true
+xlai-qts-browser = { path = "../xlai-qts-browser", optional = true }
 xlai-sys = { path = "../xlai-sys", default-features = false, features = ["qts-ggml"] }
 thiserror.workspace = true
 rand.workspace = true
