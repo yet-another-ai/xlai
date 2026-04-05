@@ -3,7 +3,7 @@ import {
   ToolSession,
   createToolSession,
   normalizeInlineData,
-  resolveRequestOptions,
+  resolveAgentRequestOptions,
   type WasmChatFunction,
   type WasmCreateSessionFunction,
   type WasmCreateSessionWithFileSystemFunction,
@@ -69,6 +69,6 @@ export async function createAgentSession(
 export async function agent(options: AgentOptions): Promise<ChatResponse> {
   await initXlai();
   return normalizeInlineData(
-    await wasmAgentFunction()(resolveRequestOptions(options)),
+    await wasmAgentFunction()(resolveAgentRequestOptions(options)),
   );
 }

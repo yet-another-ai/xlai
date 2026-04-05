@@ -63,7 +63,15 @@ export interface ChatOptions {
   maxOutputTokens?: number;
 }
 
-export type AgentOptions = ChatOptions;
+export interface AgentOptions extends ChatOptions {
+  /**
+   * Applies to **streaming** agent APIs when exposed by the WASM build. When `true` or omitted,
+   * the stream can run multiple model rounds with tool execution until the last response has no
+   * tool calls. When `false`, the stream stops after one model turn (no tool execution).
+   * Unary `agent()` / `prompt` use a single model call regardless of this flag.
+   */
+  agentLoop?: boolean;
+}
 
 export interface ChatUsage {
   inputTokens: number;
@@ -156,7 +164,12 @@ export interface ChatSessionOptions {
   qts?: QtsSessionConfig;
 }
 
-export type AgentSessionOptions = ChatSessionOptions;
+export interface AgentSessionOptions extends ChatSessionOptions {
+  /**
+   * Same semantics as {@link AgentOptions.agentLoop} for sessions (streaming only when supported).
+   */
+  agentLoop?: boolean;
+}
 
 /** Matches `xlai_core::VoiceReferenceSample` JSON. */
 export interface VoiceReferenceSample {

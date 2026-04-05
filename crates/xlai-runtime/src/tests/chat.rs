@@ -13,7 +13,7 @@ use crate::{EmbeddedPromptStore, PromptContext, RuntimeBuilder};
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
-async fn chat_executes_registered_tools_across_round_trips() -> Result<(), XlaiError> {
+async fn chat_does_not_execute_tools_or_call_model_twice() -> Result<(), XlaiError> {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let model = Arc::new(RecordingChatModel::new(
         requests.clone(),
@@ -42,42 +42,30 @@ async fn chat_executes_registered_tools_across_round_trips() -> Result<(), XlaiE
     let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
     let mut chat = runtime.chat_session();
-    chat.register_tool(weather_tool_definition(), |arguments| async move {
-        Ok(xlai_core::ToolResult {
-            tool_name: "ignored_by_runtime".to_owned(),
-            content: format!(
-                "weather for {}: sunny",
-                arguments["city"].as_str().unwrap_or("unknown")
-            ),
-            is_error: false,
-            metadata: empty_metadata(),
-        })
+    let invoked = Arc::new(Mutex::new(false));
+    let invoked_cb = invoked.clone();
+    chat.register_tool(weather_tool_definition(), move |_arguments| {
+        let invoked_cb = invoked_cb.clone();
+        async move {
+            *lock_unpoisoned(&invoked_cb) = true;
+            Ok(xlai_core::ToolResult {
+                tool_name: "lookup_weather".to_owned(),
+                content: "should not run".to_owned(),
+                is_error: false,
+                metadata: empty_metadata(),
+            })
+        }
     });
 
     let response = chat.prompt("What's the weather in Paris?").await?;
 
-    assert_eq!(
-        response.message.content.as_single_text(),
-        Some("Paris is sunny.")
-    );
+    assert_eq!(response.finish_reason, FinishReason::ToolCalls);
+    assert_eq!(response.tool_calls.len(), 1);
+    assert!(!*lock_unpoisoned(&invoked));
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 2);
-    assert_eq!(requests[1].available_tools.len(), 1);
-    assert_eq!(requests[1].messages.len(), 3);
-    assert_eq!(requests[1].messages[2].role, MessageRole::Tool);
-    assert_eq!(
-        requests[1].messages[2].tool_name.as_deref(),
-        Some("lookup_weather")
-    );
-    assert_eq!(
-        requests[1].messages[2].tool_call_id.as_deref(),
-        Some("tool_1")
-    );
-    assert_eq!(
-        requests[1].messages[2].content.as_single_text(),
-        Some("weather for Paris: sunny")
-    );
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].messages.len(), 1);
 
     Ok(())
 }

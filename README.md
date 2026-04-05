@@ -218,10 +218,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 Agent sessions are available through the same runtime:
 
 ```rust
+use futures_util::StreamExt;
 use xlai_native::core::{
-    ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolResult,
+    ChatChunk, ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolResult,
 };
-use xlai_native::{OpenAiConfig, RuntimeBuilder};
+use xlai_native::{ChatExecutionEvent, OpenAiConfig, RuntimeBuilder};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -235,7 +236,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))
         .build()?;
 
-    let mut agent = runtime.agent_session()?.with_system_prompt("Use tools when helpful.");
+    let mut agent = runtime
+        .agent_session()?
+        .with_system_prompt("Use tools when helpful.");
+    // Agent loop (streaming only, on by default):
+    // - `.with_agent_loop_enabled(false)` — one model turn per stream, no tool callbacks.
+    // - `.with_max_tool_round_trips(n)` — cap rounds when the loop is on (default 8).
 
     agent.register_tool(
         ToolDefinition {
@@ -260,12 +266,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     );
 
-    let response = agent.prompt("What's the weather in Paris?").await?;
+    // Unary `prompt` / `execute` / `prompt_*` = one model call (no agent loop, no tool callbacks).
+    // Use `stream_prompt` / `stream` / `stream_*` for the multi-round agent loop (default on).
+    let mut stream = agent.stream_prompt("What's the weather in Paris?");
+    let mut response = None;
+    while let Some(item) = stream.next().await {
+        let item = item?;
+        if let ChatExecutionEvent::Model(ChatChunk::Finished(resp)) = item {
+            response = Some(resp);
+        }
+    }
+    let response = response.expect("stream ended without a finished model response");
     println!("{}", response.message.content);
 
     Ok(())
 }
 ```
+
+Add `futures-util` to your crate’s dependencies (same major line as the workspace) so `StreamExt` is available.
 
 For local native inference, the same builder can be pointed at `llama.cpp`:
 
@@ -304,23 +322,41 @@ The WebAssembly package mirrors this split with `chat(...)`, `createChatSession(
 
 Current behavior:
 
-- tools are registered per chat session
+- tools are registered per chat or agent session
 - tool calls are exposed to the model through the runtime request
-- local chat-session tools are executed before falling back to a runtime-level tool executor
+- **`Chat`** performs one model call per `prompt` / `execute` / `stream`; it does not execute tool callbacks or run multiple model rounds—you get the model’s response (including any `tool_calls`) and can drive the next step yourself
+- **`Agent`**
+  - **Unary** `prompt` / `execute` / `prompt_parts` / `prompt_content`: exactly **one** model call; registered tools are **not** run by the runtime (same “no silent multi-minute loop” guarantee as chat).
+  - **Streaming** `stream` / `stream_prompt` / `stream_prompt_content` / `stream_prompt_parts`: by default the **agent loop** is **on** (`with_agent_loop_enabled` defaults to enabled). After each assistant turn that finishes with tool calls, tools run and another model turn starts until there are no tool calls or **`Agent::with_max_tool_round_trips`** (default `8`) is exceeded. Call **`with_agent_loop_enabled(false)`** to get a single model turn per stream with no tool callbacks.
+- when tools run (on **`Agent`**), local session tools are used before falling back to a runtime-level tool executor
 - each tool’s `ToolDefinition::execution_mode` controls how its calls interact with other calls in the same model turn
 - if any invoked tool in a turn is `Sequential`, all tool calls in that turn run sequentially in model order (no overlap)
 - otherwise, tool calls in a turn run concurrently
 
+### Agent loop
+
+| Surface          | Control                                                           | Effect                                                                                                                                                                                              |
+| ---------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Rust `Agent`** | `with_agent_loop_enabled(bool)`                                   | When `true` (default), streaming APIs run the multi-round loop; when `false`, each stream is one model turn only (no tool execution). Unary methods ignore this—always one model call.              |
+| **Rust `Agent`** | `with_max_tool_round_trips(usize)`                                | Maximum model↔tool rounds per stream when the loop is on (default `8`).                                                                                                                             |
+| **TypeScript**   | `agentLoop?: boolean` on `AgentOptions` and `AgentSessionOptions` | Same semantics as Rust: affects **streaming** agent paths in WASM when supported; unary `agent()` / `prompt` stay one model call. `false` disables the loop; omit or `true` keeps default behavior. |
+| **WASM JSON**    | `agentLoop` on session/request options                            | Forwarded into the Rust agent builder (maps to `with_agent_loop_enabled`).                                                                                                                          |
+
+`Chat` never runs this loop. Unary agent calls never block on long multi-round tool execution without you choosing a streaming API.
+
 ## Streaming
 
 The runtime supports streamed chat output through `ChatChunk` and `ChatExecutionEvent`.
+
+- **`Chat`**: each `stream` / `stream_prompt` / `stream_*` call performs **one** model run; events are deltas and a final `ChatChunk::Finished` for that turn.
+- **`Agent`**: streaming uses the same chunk types, but when **`with_agent_loop_enabled(true)`** (default) the stream may include multiple model rounds. Between rounds you may see **`ChatExecutionEvent::ToolCall`** and **`ToolResult`** events after a finished assistant message that contained tool calls.
 
 Streaming currently includes:
 
 - message start events
 - content delta events
 - tool call delta events
-- final response events
+- final response events (per model turn; agent streams may emit several before the stream ends)
 
 ## Testing Model
 

@@ -24,6 +24,7 @@ pub(crate) fn create_transformers_chat_session_with_dyn_file_system(
         system_prompt,
         temperature,
         max_output_tokens,
+        agent_loop: _,
         #[cfg(feature = "qts")]
         qts,
     } = options;
@@ -77,6 +78,7 @@ pub(crate) fn create_transformers_agent_session_with_dyn_file_system(
         system_prompt,
         temperature,
         max_output_tokens,
+        agent_loop,
         #[cfg(feature = "qts")]
         qts,
     } = options;
@@ -115,6 +117,10 @@ pub(crate) fn create_transformers_agent_session_with_dyn_file_system(
 
     if let Some(max_output_tokens) = max_output_tokens {
         agent = agent.with_max_output_tokens(max_output_tokens);
+    }
+
+    if agent_loop == Some(false) {
+        agent = agent.with_agent_loop_enabled(false);
     }
 
     Ok(WasmAgentSession { inner: agent })

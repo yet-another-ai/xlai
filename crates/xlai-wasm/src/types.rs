@@ -47,6 +47,9 @@ pub(crate) struct WasmAgentRequest {
     pub(crate) max_output_tokens: Option<u32>,
     #[serde(default)]
     pub(crate) content: Option<ChatContent>,
+    /// When `Some(false)`, the agent performs one model call and does not execute tools.
+    #[serde(default)]
+    pub(crate) agent_loop: Option<bool>,
 }
 
 /// Optional local QTS config on chat/agent sessions (`manifest` only for now).
@@ -72,6 +75,9 @@ pub(crate) struct WasmChatSessionOptions {
     pub(crate) temperature: Option<f32>,
     #[serde(default)]
     pub(crate) max_output_tokens: Option<u32>,
+    /// When `Some(false)`, agent sessions disable automatic tool round-trips (single model turn).
+    #[serde(default)]
+    pub(crate) agent_loop: Option<bool>,
     /// When set, the runtime behind this session includes local QTS (`QtsBrowserTtsModel`).
     #[cfg(feature = "qts")]
     #[serde(default)]
@@ -124,6 +130,7 @@ impl From<WasmChatRequest> for WasmChatSessionOptions {
             system_prompt: value.system_prompt,
             temperature: value.temperature,
             max_output_tokens: value.max_output_tokens,
+            agent_loop: None,
             #[cfg(feature = "qts")]
             qts: None,
         }
@@ -139,6 +146,7 @@ impl From<WasmAgentRequest> for WasmChatSessionOptions {
             system_prompt: value.system_prompt,
             temperature: value.temperature,
             max_output_tokens: value.max_output_tokens,
+            agent_loop: value.agent_loop,
             #[cfg(feature = "qts")]
             qts: None,
         }
@@ -155,6 +163,7 @@ pub(crate) struct WasmTransformersSessionOptions {
     pub(crate) system_prompt: Option<String>,
     pub(crate) temperature: Option<f32>,
     pub(crate) max_output_tokens: Option<u32>,
+    pub(crate) agent_loop: Option<bool>,
     #[cfg(feature = "qts")]
     pub(crate) qts: Option<WasmQtsSessionConfig>,
 }

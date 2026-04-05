@@ -85,7 +85,7 @@ async fn agent_skill_tool_uses_configured_skill_store() -> Result<(), XlaiError>
         .build()?;
 
     let agent = runtime.agent_session()?;
-    let response = agent.prompt("Review this patch").await?;
+    let response = agent_stream_prompt_final_response(&agent, "Review this patch").await?;
     assert_eq!(
         response.message.content.as_single_text(),
         Some("skill loaded")
@@ -219,7 +219,8 @@ async fn agent_mcp_registry_executes_registered_tool_calls() -> Result<(), XlaiE
             })
         });
 
-    let response = agent.prompt("What's the weather in Paris?").await?;
+    let response =
+        agent_stream_prompt_final_response(&agent, "What's the weather in Paris?").await?;
     assert_eq!(
         response.message.content.as_single_text(),
         Some("Paris is sunny.")
@@ -236,6 +237,51 @@ async fn agent_mcp_registry_executes_registered_tool_calls() -> Result<(), XlaiE
         requests[1].messages[2].content.as_single_text(),
         Some("weather for Paris: sunny")
     );
+
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_prompt_never_executes_tool_callbacks() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![ChatResponse {
+            message: assistant_message("need tool"),
+            tool_calls: vec![ToolCall {
+                id: "w1".to_owned(),
+                tool_name: "lookup_weather".to_owned(),
+                arguments: json!({ "city": "Paris" }),
+            }],
+            usage: None,
+            finish_reason: FinishReason::ToolCalls,
+            metadata: empty_metadata(),
+        }],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let mut agent = runtime.agent_session()?;
+    let invoked = Arc::new(Mutex::new(false));
+    let invoked_cb = invoked.clone();
+    agent.register_tool(weather_tool_definition(), move |_arguments| {
+        let invoked_cb = invoked_cb.clone();
+        async move {
+            *lock_unpoisoned(&invoked_cb) = true;
+            Ok(xlai_core::ToolResult {
+                tool_name: "lookup_weather".to_owned(),
+                content: "nope".to_owned(),
+                is_error: false,
+                metadata: empty_metadata(),
+            })
+        }
+    });
+
+    let response = agent.prompt("Weather?").await?;
+    assert_eq!(response.finish_reason, FinishReason::ToolCalls);
+    assert!(!response.tool_calls.is_empty());
+    assert!(!*lock_unpoisoned(&invoked));
+    assert_eq!(lock_unpoisoned(&requests).len(), 1);
 
     Ok(())
 }
@@ -286,7 +332,8 @@ async fn agent_register_tool_shorthand_routes_through_mcp_registry() -> Result<(
     assert_eq!(mcp_tools.len(), 1);
     assert_eq!(mcp_tools[0].name, "lookup_weather");
 
-    let response = agent.prompt("What's the weather in Paris?").await?;
+    let response =
+        agent_stream_prompt_final_response(&agent, "What's the weather in Paris?").await?;
     assert_eq!(
         response.message.content.as_single_text(),
         Some("Paris is sunny.")

@@ -160,6 +160,7 @@ mod tests {
             temperature: Some(0.2),
             max_output_tokens: Some(512),
             content: None,
+            agent_loop: Some(false),
         });
 
         assert_eq!(options.api_key, "test-key");
@@ -168,6 +169,7 @@ mod tests {
         assert_eq!(options.system_prompt.as_deref(), Some("Be concise."));
         assert_eq!(options.temperature, Some(0.2));
         assert_eq!(options.max_output_tokens, Some(512));
+        assert_eq!(options.agent_loop, Some(false));
     }
 
     #[test]
@@ -180,6 +182,7 @@ mod tests {
                 system_prompt: Some("Use tools.".to_owned()),
                 temperature: Some(0.1),
                 max_output_tokens: Some(256),
+                agent_loop: None,
                 #[cfg(feature = "qts")]
                 qts: None,
             },
@@ -200,6 +203,7 @@ mod tests {
                 system_prompt: None,
                 temperature: None,
                 max_output_tokens: None,
+                agent_loop: None,
                 qts: Some(WasmQtsSessionConfig::default()),
             },
             None,
