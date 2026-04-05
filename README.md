@@ -28,11 +28,9 @@ xlai/
 ├── crates/
 │   ├── xlai-backend-llama-cpp/
 │   ├── xlai-backend-openai/
-│   ├── xlai-backend-qts/
 │   ├── xlai-backend-transformersjs/
 │   ├── xlai-core/
 │   ├── xlai-ffi/
-│   ├── xlai-local-common/
 │   ├── xlai-native/
 │   ├── xlai-qts-cli/
 │   ├── xlai-qts-core/
@@ -53,7 +51,7 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md).
 - `crates/xlai-ffi`
   Native C ABI facade crate for future FFI integrations.
 - `crates/xlai-runtime`
-  Runtime builder, chat session API, streaming, and tool-calling orchestration.
+  Runtime builder, chat session API, streaming, and tool-calling orchestration. Local-backend helpers (prompts, tool JSON) live under `xlai_runtime::local_common`.
 - `crates/xlai-native`
   Native Rust-facing facade crate that re-exports the runtime API.
 - `crates/xlai-wasm`
@@ -68,19 +66,10 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md).
   OpenAI-compatible backend implementation using `reqwest`.
 - `crates/xlai-backend-transformersjs`
   Browser chat backend that delegates generation to a JavaScript adapter (WASM).
-- `crates/xlai-backend-qts`
-  Native Qwen3 TTS backend implementing `TtsModel` (WAV output; maps tuning via `TtsRequest` metadata keys `xlai.qts.*`). **`VoiceSpec::Clone`** is supported using the first reference sample (inline WAV only): Rust-native x-vector and ICL prompts via `xlai-qts-core`, with optional `xlai.qts.voice_clone_mode` (`xvector` \| `icl`).
-- `crates/xlai-backend-qts-wasm`
-  Browser-oriented `TtsModel` adapter (`qts-browser`); ships with `xlai-wasm` behind feature `qts`. Returns structured `qts_wasm_engine_pending` until local engines are integrated.
 - `crates/xlai-qts-core`
-  Ported QTS engine; links standalone `ggml` through `xlai-sys` (`qts-ggml`). CPU BLAS follows the same OpenBLAS / Accelerate patterns as the llama stack in `xlai-sys`. Builds `VoiceClonePromptV2` from raw WAV (`create_voice_clone_prompt`); ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts-export-and-hf-publish.md`). Optional feature `browser-manifest` re-exports shared browser manifest types from `xlai-qts-browser`.
-- `crates/xlai-qts-browser`
-  Serde types for QTS browser model manifests and capability reporting (`docs/qts-wasm-model-manifest.md`); no native GGML/ORT.
+  Qwen3 TTS engine; links standalone `ggml` through `xlai-sys` (`qts-ggml`). Exposes native `TtsModel` (`QtsTtsModel`, WAV output; tuning via `TtsRequest` metadata `xlai.qts.*`). **`VoiceSpec::Clone`** uses the first reference sample (inline WAV only): x-vector and ICL prompts, with optional `xlai.qts.voice_clone_mode` (`xvector` \| `icl`). ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts-export-and-hf-publish.md`). Module `xlai_qts_core::browser` holds serde manifest types shared with `xlai-wasm` via `browser_include.rs`.
 - `crates/xlai-qts-cli`
-  Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without voice-clone flags, `synthesize` uses `xlai-runtime` + `xlai-backend-qts`. With `--voice-clone-prompt` or `--ref-audio`, it uses the direct engine path. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
-- `crates/xlai-local-common`
-  Internal helpers shared by local inference backends (prompts, tool JSON envelope).
-
+  Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without voice-clone flags, `synthesize` uses `xlai-runtime` + `xlai-qts-core` (`QtsTtsModel`). With `--voice-clone-prompt` or `--ref-audio`, it uses the direct engine path. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
 ## Requirements
 
 - Rust stable
@@ -448,7 +437,7 @@ The ignored native `llama.cpp` smoke test expects:
 The repository intentionally ignores downloaded GGUF fixtures under `fixtures/llama.cpp/`.
 CI downloads that fixture with the Hugging Face CLI and caches it between runs.
 
-Ignored QTS integration tests (`xlai-qts-core`, `xlai-backend-qts`) expect a full Qwen3 TTS model directory:
+Ignored QTS integration tests in `xlai-qts-core` expect a full Qwen3 TTS model directory:
 
 - `XLAI_QTS_MODEL_DIR` pointing at a folder containing the GGUF talker, ONNX vocoder (`qwen3-tts-vocoder.onnx`), tokenizer, and `config.json` (see `xlai_qts_core::ModelPaths`). For **ICL** voice clone, also add `qwen3-tts-reference-codec.onnx` and `qwen3-tts-reference-codec-psreprocess.json` (export with `uv run export-model-artifacts`; see `docs/qts-export-and-hf-publish.md`).
 

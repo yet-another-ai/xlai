@@ -5,8 +5,8 @@ use crate::request::PreparedRequest;
 use crate::{LlamaCppConfig, LoadedModel, map_provider_error};
 
 #[cfg(test)]
-pub(crate) use xlai_local_common::validate_structured_output_schema;
-pub(crate) use xlai_local_common::{
+pub(crate) use xlai_runtime::local_common::validate_structured_output_schema;
+pub(crate) use xlai_runtime::local_common::{
     prompt_messages_with_constraints, render_manual_prompt, validate_structured_output,
 };
 

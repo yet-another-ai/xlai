@@ -1,7 +1,7 @@
 use serde_json::json;
 use xlai_core::{ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType};
 
-use xlai_local_common::{ToolResponse, parse_tool_response, tool_response_schema};
+use xlai_runtime::local_common::{ToolResponse, parse_tool_response, tool_response_schema};
 
 #[test]
 fn tool_response_schema_contains_tool_variants() {

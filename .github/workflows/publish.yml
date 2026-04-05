@@ -20,7 +20,6 @@ env:
   PUBLISH_CRATES_ORDER: >-
     xlai-core
     xlai-runtime
-    xlai-local-common
     xlai-backend-openai
     xlai-backend-transformersjs
 

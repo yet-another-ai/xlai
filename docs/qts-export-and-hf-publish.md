@@ -1,6 +1,6 @@
 # Qwen3-TTS: export artifacts and publish to Hugging Face
 
-This repository owns the **non-protobuf** export pipeline for Qwen3-TTS runtime files used by `xlai-qts-core` and `xlai-backend-qts`.
+This repository owns the **non-protobuf** export pipeline for Qwen3-TTS runtime files used by `xlai-qts-core` (engine and native `TtsModel` bridge).
 
 Protobuf-based voice-clone prompt export (`.pb`) is **not** supported here; use CBOR prompts or Rust-native `create_voice_clone_prompt` instead.
 

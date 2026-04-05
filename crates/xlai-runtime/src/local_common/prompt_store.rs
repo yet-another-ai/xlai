@@ -5,10 +5,11 @@ use tera::{Context, Tera};
 use xlai_core::{ErrorKind, XlaiError};
 
 #[derive(RustEmbed)]
-#[folder = "prompts/"]
-struct PromptAssets;
+#[folder = "prompts/local_common/"]
+struct LocalChatPromptAssets;
 
-static PROMPT_ENGINE: LazyLock<Result<Tera, XlaiError>> = LazyLock::new(build_prompt_engine);
+static LOCAL_CHAT_PROMPT_ENGINE: LazyLock<Result<Tera, XlaiError>> =
+    LazyLock::new(build_prompt_engine);
 
 pub(crate) struct EmbeddedPromptStore;
 
@@ -24,7 +25,7 @@ impl EmbeddedPromptStore {
 }
 
 fn prompt_engine() -> Result<&'static Tera, XlaiError> {
-    match &*PROMPT_ENGINE {
+    match &*LOCAL_CHAT_PROMPT_ENGINE {
         Ok(engine) => Ok(engine),
         Err(error) => Err(error.clone()),
     }
@@ -34,7 +35,7 @@ fn build_prompt_engine() -> Result<Tera, XlaiError> {
     let mut tera = Tera::default();
     tera.autoescape_on(Vec::new());
 
-    for name in PromptAssets::iter() {
+    for name in LocalChatPromptAssets::iter() {
         let name = name.as_ref();
         let source = embedded_prompt_source(name)?;
         tera.add_raw_template(name, &source).map_err(|error| {
@@ -49,7 +50,7 @@ fn build_prompt_engine() -> Result<Tera, XlaiError> {
 }
 
 fn embedded_prompt_source(name: &str) -> Result<String, XlaiError> {
-    let file = PromptAssets::get(name).ok_or_else(|| {
+    let file = LocalChatPromptAssets::get(name).ok_or_else(|| {
         XlaiError::new(
             ErrorKind::Configuration,
             format!("embedded prompt template not found: {name}"),

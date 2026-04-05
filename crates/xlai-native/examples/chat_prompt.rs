@@ -1,11 +1,13 @@
 //! Minimal native chat example. Run with a real key:
 //! `OPENAI_API_KEY=... cargo run -p xlai-native --example chat_prompt`
 
+mod tracing_setup;
+
 use xlai_native::{OpenAiConfig, RuntimeBuilder};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    xlai_observability::init_logging();
+    tracing_setup::init_logging();
     let api_key = std::env::var("OPENAI_API_KEY")?;
     let runtime = RuntimeBuilder::new()
         .with_chat_backend(OpenAiConfig::new(

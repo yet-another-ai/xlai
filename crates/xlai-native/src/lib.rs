@@ -3,7 +3,7 @@ pub use xlai_backend_openai::{
     OpenAiChatModel, OpenAiConfig, OpenAiTranscriptionModel, OpenAiTtsModel,
 };
 #[cfg(feature = "qts")]
-pub use xlai_backend_qts::{QtsTtsConfig, QtsTtsModel};
+pub use xlai_qts_core::{QtsTtsConfig, QtsTtsModel};
 pub use xlai_backend_transformersjs::{
     TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
 };

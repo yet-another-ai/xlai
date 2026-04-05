@@ -5,13 +5,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository = "https://github.com/yetanother.ai/xlai"
-description = "Qwen3 TTS inference (GGUF + GGML) — engine crate for xlai-backend-qts."
+description = "Qwen3 TTS inference (GGUF + GGML) — engine and native TtsModel bridge."
 publish = false
 
 [features]
 default = ["openblas"]
-# Re-export browser manifest types next to the engine (`use xlai_qts_core::browser::*`).
-browser-manifest = ["dep:xlai-qts-browser"]
 metal = ["xlai-sys/metal"]
 vulkan = ["xlai-sys/vulkan"]
 native = ["xlai-sys/native"]
@@ -35,8 +33,9 @@ vitis = ["ort/vitis"]
 xnnpack = ["ort/xnnpack"]
 
 [dependencies]
+async-stream.workspace = true
 tracing.workspace = true
-xlai-qts-browser = { workspace = true, optional = true }
+xlai-core.workspace = true
 xlai-sys = { workspace = true, features = ["qts-ggml"] }
 thiserror.workspace = true
 rand.workspace = true
@@ -46,10 +45,19 @@ serde.workspace = true
 serde_json.workspace = true
 ciborium.workspace = true
 ort.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync"] }
 
 [dev-dependencies]
 criterion.workspace = true
-xlai-observability.workspace = true
+futures-util.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+xlai-runtime.workspace = true
+tracing-subscriber = { workspace = true, default-features = false, features = [
+    "env-filter",
+    "fmt",
+    "registry",
+    "std",
+] }
 
 [[bench]]
 name = "synthesize"

@@ -39,7 +39,7 @@ documentation. Those live in **[yetanother.ai/xlai](https://github.com/yetanothe
 
 ## Relationship To `xlai`
 
-- GitHub [`yetanother.ai/xlai`](https://github.com/yetanother.ai/xlai): source code, export scripts (`scripts/qts`), Rust runtime (`xlai-qts-core`, `xlai-backend-qts`)
+- GitHub [`yetanother.ai/xlai`](https://github.com/yetanother.ai/xlai): source code, export scripts (`scripts/qts`), Rust runtime (`xlai-qts-core`)
 - Hugging Face [`dsh0416/Qwen3-TTS-12Hz-0.6B-Base-QTS`](https://huggingface.co/dsh0416/Qwen3-TTS-12Hz-0.6B-Base-QTS): exported runtime artifacts
 
 Recommended maintenance flow:

@@ -1,10 +1,11 @@
-//! Map [`xlai_core::TtsRequest`] to [`xlai_qts_core::SynthesizeRequest`].
+//! Map [`xlai_core::TtsRequest`] to [`crate::SynthesizeRequest`].
 
 use serde_json::Value;
 use xlai_core::{
     ErrorKind, MediaSource, Metadata, TtsRequest, VoiceReferenceSample, VoiceSpec, XlaiError,
 };
-use xlai_qts_core::{SynthesizeRequest, TalkerKvMode, VoiceCloneMode};
+
+use crate::{SynthesizeRequest, TalkerKvMode, VoiceCloneMode};
 
 /// Parsed voice-clone inputs for QTS (first reference sample only in this release).
 #[derive(Debug, Clone)]
@@ -72,7 +73,7 @@ fn voice_reference_wav_bytes(sample: &VoiceReferenceSample) -> Result<Vec<u8>, X
         MediaSource::InlineData { data, .. } => Ok(data.clone()),
         MediaSource::Url { .. } => Err(XlaiError::new(
             ErrorKind::Unsupported,
-            "voice clone with URL audio references is not supported by xlai-backend-qts",
+            "voice clone with URL audio references is not supported by xlai-qts-core",
         )),
     }
 }

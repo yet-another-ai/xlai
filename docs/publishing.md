@@ -12,9 +12,8 @@ Publish **in this order** (the workflow does the same):
 
 1. `xlai-core`
 2. `xlai-runtime`
-3. `xlai-local-common`
-4. `xlai-backend-openai`
-5. `xlai-backend-transformersjs`
+3. `xlai-backend-openai`
+4. `xlai-backend-transformersjs`
 
 ### npm
 
@@ -66,8 +65,7 @@ These workspace members are **`publish = false`** (Cargo will refuse `cargo publ
 | `xlai-backend-llama-cpp` | Depends on `xlai-sys` |
 | `xlai-native`, `xlai-ffi` | Depend on `xlai-backend-llama-cpp` / aggregate of internal backends |
 | `xlai-wasm` | Built for the npm package; default `qts` feature pulls unpublished QTS WASM/browser crates |
-| `xlai-qts-core`, `xlai-qts-browser`, `xlai-backend-qts-wasm`, `xlai-backend-qts`, `xlai-qts-cli` | QTS stack / internal |
-| `xlai-observability` | Internal tooling crate |
+| `xlai-qts-core`, `xlai-qts-cli` | QTS stack / internal (engine + `TtsModel` bridge live in `xlai-qts-core`; browser manifest types in `xlai_qts_core::browser`; WASM QTS stub in `xlai-wasm`) |
 
 To publish more crates later: remove or relax `publish = false`, ensure every dependency is either on crates.io with a version pin or optional behind features, add `description` / `repository.workspace = true` as needed, extend `[workspace.dependencies]` and `.github/workflows/publish.yml` `PUBLISH_CRATES_ORDER`.
 

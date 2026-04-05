@@ -1,6 +1,6 @@
 //! Qwen3 TTS (GGUF + GGML) — native inference library.
 //!
-//! Enable feature `browser-manifest` to access the `browser` submodule (shared manifest types with WASM tooling).
+//! The [`browser`] module holds serde types for WASM manifests (same source as `xlai-wasm` via `include!`).
 #![allow(clippy::expect_used)]
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::panic)]
@@ -14,9 +14,8 @@
 pub const SAMPLE_RATE_HZ: u32 = 24_000;
 
 mod error;
-#[cfg(feature = "browser-manifest")]
 pub mod browser {
-    pub use xlai_qts_browser::*;
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/browser_include.rs"));
 }
 mod ggml;
 mod model;
@@ -1005,6 +1004,14 @@ where
         self(pcm_f32)
     }
 }
+
+mod qts_request_map;
+mod qts_tts_backend;
+
+pub use qts_request_map::{
+    QtsVoiceCloneParams, synthesize_request_from_tts, voice_clone_params_from_tts,
+};
+pub use qts_tts_backend::{QtsTtsConfig, QtsTtsModel};
 
 #[cfg(test)]
 mod tests {

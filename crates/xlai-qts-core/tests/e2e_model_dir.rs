@@ -6,7 +6,7 @@
 //! export XLAI_QTS_MODEL_DIR=/path/to/models
 //! export XLAI_QTS_REF_AUDIO_WAV=/path/to/reference.wav
 //! export XLAI_QTS_REF_TEXT="optional transcript for ICL tests"
-//! cargo test -p xlai-backend-qts e2e_model_dir -- --ignored --nocapture --test-threads=1
+//! cargo test -p xlai-qts-core e2e_model_dir -- --ignored --nocapture --test-threads=1
 //! ```
 
 use std::env;
@@ -14,7 +14,7 @@ use std::path::PathBuf;
 
 use futures_util::StreamExt;
 use tokio::runtime::Runtime;
-use xlai_backend_qts::{QtsTtsConfig, QtsTtsModel};
+use xlai_qts_core::{QtsTtsConfig, QtsTtsModel};
 use xlai_core::{
     MediaSource, Metadata, TtsChunk, TtsDeliveryMode, TtsRequest, VoiceReferenceSample, VoiceSpec,
 };

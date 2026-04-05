@@ -3,7 +3,7 @@ use xlai_core::{
     ToolDefinition, XlaiError,
 };
 
-use crate::schema::validate_structured_output_schema;
+use super::schema::validate_structured_output_schema;
 
 /// Options for turning a [`ChatRequest`] into a text-only local prompt.
 #[derive(Clone, Debug)]

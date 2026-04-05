@@ -20,6 +20,10 @@ mod chat_session;
 mod factory;
 mod memory_fs;
 #[cfg(feature = "qts")]
+mod backend_qts_browser;
+#[cfg(feature = "qts")]
+mod qts_browser;
+#[cfg(feature = "qts")]
 mod tts_runtime;
 mod types;
 mod wasm_helpers;

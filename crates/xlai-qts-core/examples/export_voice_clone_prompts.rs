@@ -1,10 +1,12 @@
+mod tracing_setup;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use xlai_qts_core::{Qwen3TtsEngine, VoiceCloneMode};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    xlai_observability::init_logging();
+    tracing_setup::init_logging();
     let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
