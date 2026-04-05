@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use futures_util::stream;
+use futures_util::{stream, StreamExt};
 use xlai_core::{
     BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
     ChatResponse, FsPath, MessageRole, Metadata, Skill, SkillStore, ToolCallExecutionMode,
@@ -9,7 +9,7 @@ use xlai_core::{
     TranscriptionResponse, TtsModel, TtsRequest, TtsResponse, XlaiError,
 };
 
-use crate::{MarkdownSkillStore, MemoryFileSystem};
+use crate::{Agent, ChatExecutionEvent, MarkdownSkillStore, MemoryFileSystem};
 use xlai_core::WritableFileSystem;
 
 pub(super) fn empty_metadata() -> Metadata {
@@ -274,4 +274,24 @@ impl TranscriptionModel for RecordingTranscriptionModel {
             })
         })
     }
+}
+
+pub(super) async fn agent_stream_prompt_final_response(
+    agent: &Agent,
+    prompt: &str,
+) -> Result<ChatResponse, XlaiError> {
+    let mut stream = agent.stream_prompt(prompt);
+    let mut last = None;
+    while let Some(item) = stream.next().await {
+        let item = item?;
+        if let ChatExecutionEvent::Model(ChatChunk::Finished(resp)) = item {
+            last = Some(resp);
+        }
+    }
+    last.ok_or_else(|| {
+        XlaiError::new(
+            xlai_core::ErrorKind::Provider,
+            "stream ended without a finished model response",
+        )
+    })
 }

@@ -218,10 +218,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 Agent sessions are available through the same runtime:
 
 ```rust
+use futures_util::StreamExt;
 use xlai_native::core::{
-    ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolResult,
+    ChatChunk, ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolResult,
 };
-use xlai_native::{OpenAiConfig, RuntimeBuilder};
+use xlai_native::{ChatExecutionEvent, OpenAiConfig, RuntimeBuilder};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -235,7 +236,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))
         .build()?;
 
-    let mut agent = runtime.agent_session()?.with_system_prompt("Use tools when helpful.");
+    let mut agent = runtime
+        .agent_session()?
+        .with_system_prompt("Use tools when helpful.");
+    // Optional: `.with_agent_loop_enabled(false)` so streaming skips the multi-round agent loop.
 
     agent.register_tool(
         ToolDefinition {
@@ -260,12 +264,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     );
 
-    let response = agent.prompt("What's the weather in Paris?").await?;
+    // Unary `prompt` / `execute` perform one model call (no automatic tool loop).
+    // Use `stream_prompt` when you want the agent to run tools and call the model again.
+    let mut stream = agent.stream_prompt("What's the weather in Paris?");
+    let mut response = None;
+    while let Some(item) = stream.next().await {
+        let item = item?;
+        if let ChatExecutionEvent::Model(ChatChunk::Finished(resp)) = item {
+            response = Some(resp);
+        }
+    }
+    let response = response.expect("stream ended without a finished model response");
     println!("{}", response.message.content);
 
     Ok(())
 }
 ```
+
+Add `futures-util` to your crate’s dependencies (same major line as the workspace) so `StreamExt` is available.
 
 For local native inference, the same builder can be pointed at `llama.cpp`:
 
@@ -304,12 +320,21 @@ The WebAssembly package mirrors this split with `chat(...)`, `createChatSession(
 
 Current behavior:
 
-- tools are registered per chat session
+- tools are registered per chat or agent session
 - tool calls are exposed to the model through the runtime request
-- local chat-session tools are executed before falling back to a runtime-level tool executor
+- **`Chat`** performs one model call per `prompt` / `execute` / `stream`; it does not run a multi-round tool loop or execute tool callbacks automatically—you get the model’s response (including any `tool_calls`) and can drive the next step yourself
+- **`Agent`** unary `prompt` / `execute` / `prompt_*` also perform **one** model call (no automatic tool execution), so a long multi-round loop cannot block the caller without streaming progress. The multi-round agent loop runs only on **`stream` / `stream_prompt` / `stream_*`** when `agent_loop_enabled` is true (default): after each streamed model response with tool calls, tools run, results are appended, and the model is called again until there are no tool calls or the round-trip limit is hit
+- when tools run (on **`Agent`**), local session tools are used before falling back to a runtime-level tool executor
 - each tool’s `ToolDefinition::execution_mode` controls how its calls interact with other calls in the same model turn
 - if any invoked tool in a turn is `Sequential`, all tool calls in that turn run sequentially in model order (no overlap)
 - otherwise, tool calls in a turn run concurrently
+
+### Agent tool loop
+
+On **streaming** agent APIs only, sessions run multiple model rounds until the last response has no tool calls (capped by `Agent::with_max_tool_round_trips`, default 8). Unary calls stay single-round so they never sit silent for many minutes while tools and follow-up model turns run.
+
+- **Rust:** `Agent::with_agent_loop_enabled(false)` turns off that loop on `stream` / `stream_prompt` / `stream_*` (one model turn per stream, no tool callbacks). Unary `prompt` / `execute` are always single model calls regardless. `Chat` never runs an agent-style tool loop.
+- **TypeScript / WASM:** `createChatSession` / `chat()` match Rust `Chat` (one model call per unary call). `agentLoop` applies when using **streaming** agent APIs where the binding supports the multi-round loop; unary `agent()` / `prompt` remain one model call. Pass `agentLoop: false` to disable the loop on those streaming paths.
 
 ## Streaming
 

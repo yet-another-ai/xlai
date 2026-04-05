@@ -127,6 +127,28 @@ describe('xlai agent api', () => {
     });
   });
 
+  it('passes agentLoop false to the wasm agent API', async () => {
+    const agentSpy = vi
+      .spyOn(
+        wasmModule as typeof wasmModule & {
+          agent: (options: unknown) => Promise<unknown>;
+        },
+        'agent',
+      )
+      .mockResolvedValue({
+        message: { role: 'assistant', content: 'ok' },
+        finishReason: 'completed',
+      });
+
+    vi.stubEnv('OPENAI_API_KEY', 'k');
+
+    await agent({ prompt: 'x', agentLoop: false });
+
+    expect(agentSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ agentLoop: false }),
+    );
+  });
+
   it('creates agent sessions and normalizes registered tools', async () => {
     const registerTool = vi.fn();
     const prompt = vi.fn().mockResolvedValue({
@@ -259,5 +281,31 @@ describe('xlai agent api', () => {
         },
       ],
     });
+  });
+
+  it('passes agentLoop to createAgentSession wasm options', async () => {
+    const createAgentSessionSpy = vi
+      .spyOn(
+        wasmModule as typeof wasmModule & {
+          createAgentSession: (options: unknown) => {
+            registerTool: () => void;
+            prompt: () => Promise<unknown>;
+          };
+        },
+        'createAgentSession',
+      )
+      .mockReturnValue({
+        registerTool: vi.fn(),
+        prompt: vi.fn(),
+        promptWithContent: vi.fn(),
+      });
+
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+
+    await createAgentSession({ agentLoop: false });
+
+    expect(createAgentSessionSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ agentLoop: false }),
+    );
   });
 });

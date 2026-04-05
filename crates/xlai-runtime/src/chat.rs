@@ -43,9 +43,9 @@ pub enum ChatExecutionEvent {
 }
 
 #[derive(Clone)]
-struct ToolExecutionOutcome {
-    call: ToolCall,
-    result: ToolResult,
+pub(crate) struct ToolExecutionOutcome {
+    pub(crate) call: ToolCall,
+    pub(crate) result: ToolResult,
 }
 
 #[derive(Clone)]
@@ -56,7 +56,6 @@ pub struct Chat {
     temperature: Option<f32>,
     max_output_tokens: Option<u32>,
     structured_output: Option<StructuredOutput>,
-    max_tool_round_trips: usize,
     tools: BTreeMap<String, RegisteredTool>,
 }
 
@@ -70,7 +69,6 @@ impl Chat {
             temperature: None,
             max_output_tokens: None,
             structured_output: None,
-            max_tool_round_trips: 8,
             tools: BTreeMap::new(),
         }
     }
@@ -134,12 +132,6 @@ impl Chat {
         self
     }
 
-    #[must_use]
-    pub fn with_max_tool_round_trips(mut self, max_tool_round_trips: usize) -> Self {
-        self.max_tool_round_trips = max_tool_round_trips;
-        self
-    }
-
     pub fn register_tool<F, Fut>(&mut self, definition: ToolDefinition, callback: F) -> &mut Self
     where
         F: Fn(Value) -> Fut + RuntimeBound + 'static,
@@ -193,12 +185,12 @@ impl Chat {
             .collect()
     }
 
-    /// Sends a single user prompt through this chat session.
+    /// Sends a single user prompt through this chat session (one model call).
     ///
     /// # Errors
     ///
-    /// Returns an error if the configured model request fails, if a tool callback
-    /// fails, or if the chat exceeds the maximum number of tool round trips.
+    /// Returns an error if the configured model request fails. Tool calls returned by the model
+    /// are not executed here; use [`crate::Agent`] for automatic tool round-trips.
     pub async fn prompt(&self, content: impl Into<String>) -> Result<ChatResponse, XlaiError> {
         self.prompt_content(ChatContent::text(content.into())).await
     }
@@ -228,34 +220,27 @@ impl Chat {
         self.prompt_content(ChatContent::from_parts(parts)).await
     }
 
-    /// Executes a chat turn with the provided message history.
+    /// Runs exactly one model call with the given message history.
+    ///
+    /// Does not execute tool callbacks. For multi-round tool execution, use [`crate::Agent`].
     ///
     /// # Errors
     ///
-    /// Returns an error if the configured model request fails, if a tool callback
-    /// fails, or if the chat exceeds the maximum number of tool round trips.
-    pub async fn execute(&self, mut messages: Vec<ChatMessage>) -> Result<ChatResponse, XlaiError> {
-        for _ in 0..self.max_tool_round_trips {
-            let response = self
-                .runtime
-                .chat(self.build_request(messages.clone()))
-                .await?;
-            messages.push(response.message.clone());
+    /// Returns an error if the configured model request fails.
+    pub async fn execute(&self, messages: Vec<ChatMessage>) -> Result<ChatResponse, XlaiError> {
+        self.runtime.chat(self.build_request(messages)).await
+    }
 
-            if response.tool_calls.is_empty() {
-                return Ok(response);
-            }
+    /// Runs registered tools and the runtime tool executor for this batch (used by [`crate::Agent`]).
+    pub(crate) async fn dispatch_tool_calls(
+        &self,
+        calls: Vec<ToolCall>,
+    ) -> Result<Vec<ToolExecutionOutcome>, XlaiError> {
+        execute_tool_calls_from(self.runtime.as_ref(), &self.tools, calls).await
+    }
 
-            let outcomes = self.execute_tool_calls(response.tool_calls).await?;
-            for outcome in outcomes {
-                messages.push(tool_result_message(&outcome.call, &outcome.result));
-            }
-        }
-
-        Err(XlaiError::new(
-            ErrorKind::Tool,
-            "chat exceeded the maximum number of tool round trips",
-        ))
+    pub(crate) fn tool_result_as_message(call: &ToolCall, result: &ToolResult) -> ChatMessage {
+        tool_result_message(call, result)
     }
 
     #[must_use]
@@ -290,80 +275,36 @@ impl Chat {
         self.stream_prompt_content(ChatContent::from_parts(parts))
     }
 
+    /// Streams a single model turn for `messages` (no tool execution).
+    ///
+    /// Multi-round streaming with tools is implemented on [`crate::Agent`].
     #[must_use]
     pub fn stream(
         &self,
-        mut messages: Vec<ChatMessage>,
+        messages: Vec<ChatMessage>,
     ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
         let runtime = Arc::clone(&self.runtime);
-        let model = self.model.clone();
-        let system_prompt = self.system_prompt.clone();
-        let temperature = self.temperature;
-        let max_output_tokens = self.max_output_tokens;
-        let structured_output = self.structured_output.clone();
-        let max_tool_round_trips = self.max_tool_round_trips;
-        let tools = self.tools.clone();
+        let chat = self.clone();
 
         Box::pin(try_stream! {
-            for _ in 0..max_tool_round_trips {
-                let request = ChatRequest {
-                    model: model.clone(),
-                    system_prompt: system_prompt.clone(),
-                    messages: messages.clone(),
-                    available_tools: tools
-                        .values()
-                        .map(|tool| tool.definition.clone())
-                        .collect(),
-                    structured_output: structured_output.clone(),
-                    metadata: BTreeMap::new(),
-                    temperature,
-                    max_output_tokens,
-                };
+            let request = chat.build_request(messages);
+            let mut response = None;
+            let mut model_stream = runtime.stream_chat(request)?;
 
-                let mut response = None;
-                let mut model_stream = runtime.stream_chat(request)?;
-
-                while let Some(chunk) = model_stream.next().await {
-                    let chunk = chunk?;
-                    if let ChatChunk::Finished(final_response) = &chunk {
-                        response = Some(final_response.clone());
-                    }
-                    yield ChatExecutionEvent::Model(chunk);
+            while let Some(chunk) = model_stream.next().await {
+                let chunk = chunk?;
+                if let ChatChunk::Finished(final_response) = &chunk {
+                    response = Some(final_response.clone());
                 }
-
-                let response = response.ok_or_else(|| {
-                    XlaiError::new(
-                        ErrorKind::Provider,
-                        "stream ended without a final chat response",
-                    )
-                })?;
-                messages.push(response.message.clone());
-
-                if response.tool_calls.is_empty() {
-                    return;
-                }
-
-                for call in &response.tool_calls {
-                    yield ChatExecutionEvent::ToolCall(call.clone());
-                }
-
-                let outcomes = execute_tool_calls_from(
-                    runtime.as_ref(),
-                    &tools,
-                    response.tool_calls,
-                )
-                .await?;
-
-                for outcome in outcomes {
-                    messages.push(tool_result_message(&outcome.call, &outcome.result));
-                    yield ChatExecutionEvent::ToolResult(outcome.result);
-                }
+                yield ChatExecutionEvent::Model(chunk);
             }
 
-            Err(XlaiError::new(
-                ErrorKind::Tool,
-                "chat exceeded the maximum number of tool round trips",
-            ))?;
+            response.ok_or_else(|| {
+                XlaiError::new(
+                    ErrorKind::Provider,
+                    "stream ended without a final chat response",
+                )
+            })?;
         })
     }
 
@@ -380,12 +321,6 @@ impl Chat {
         }
     }
 
-    async fn execute_tool_calls(
-        &self,
-        calls: Vec<ToolCall>,
-    ) -> Result<Vec<ToolExecutionOutcome>, XlaiError> {
-        execute_tool_calls_from(self.runtime.as_ref(), &self.tools, calls).await
-    }
 }
 
 fn tool_result_message(call: &ToolCall, result: &ToolResult) -> ChatMessage {

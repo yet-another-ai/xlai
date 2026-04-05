@@ -12,7 +12,7 @@ use crate::{ChatExecutionEvent, RuntimeBuilder};
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
-async fn chat_stream_emits_model_and_tool_events() -> Result<(), XlaiError> {
+async fn agent_stream_emits_model_and_tool_events() -> Result<(), XlaiError> {
     let model = Arc::new(StreamingChatModel::new(vec![
         vec![
             ChatChunk::MessageStart {
@@ -54,8 +54,8 @@ async fn chat_stream_emits_model_and_tool_events() -> Result<(), XlaiError> {
 
     let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
-    let mut chat = runtime.chat_session();
-    chat.register_tool(weather_tool_definition(), |arguments| async move {
+    let mut agent = runtime.agent_session()?;
+    agent.register_tool(weather_tool_definition(), |arguments| async move {
         Ok(xlai_core::ToolResult {
             tool_name: "lookup_weather".to_owned(),
             content: format!(
@@ -67,7 +67,7 @@ async fn chat_stream_emits_model_and_tool_events() -> Result<(), XlaiError> {
         })
     });
 
-    let mut stream = chat.stream_prompt("Stream the weather.");
+    let mut stream = agent.stream_prompt("Stream the weather.");
     let mut content_deltas = Vec::new();
     let mut saw_tool_call = false;
     let mut saw_tool_result = false;

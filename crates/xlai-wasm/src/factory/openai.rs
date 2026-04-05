@@ -112,5 +112,9 @@ pub(crate) fn create_agent_session_with_dyn_file_system(
         agent = agent.with_max_output_tokens(max_output_tokens);
     }
 
+    if options.agent_loop == Some(false) {
+        agent = agent.with_agent_loop_enabled(false);
+    }
+
     Ok(WasmAgentSession { inner: agent })
 }

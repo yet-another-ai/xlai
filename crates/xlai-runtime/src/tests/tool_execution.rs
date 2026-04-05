@@ -6,12 +6,12 @@ use serde_json::json;
 use tokio::time::{Duration, sleep};
 use xlai_core::{ChatResponse, FinishReason, ToolCall, XlaiError};
 
-use super::common::*;
+use super::common::{agent_stream_prompt_final_response, *};
 use crate::RuntimeBuilder;
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
-async fn chat_executes_multiple_tool_calls_concurrently_by_default() -> Result<(), XlaiError> {
+async fn agent_executes_multiple_tool_calls_concurrently_by_default() -> Result<(), XlaiError> {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let model = Arc::new(RecordingChatModel::new(
         requests.clone(),
@@ -48,11 +48,11 @@ async fn chat_executes_multiple_tool_calls_concurrently_by_default() -> Result<(
     let max_active_calls = Arc::new(AtomicUsize::new(0));
     let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
-    let mut chat = runtime.chat_session();
+    let mut agent = runtime.agent_session()?;
     {
         let active_calls = active_calls.clone();
         let max_active_calls = max_active_calls.clone();
-        chat.register_tool(weather_tool_definition(), move |_| {
+        agent.register_tool(weather_tool_definition(), move |_| {
             let active_calls = active_calls.clone();
             let max_active_calls = max_active_calls.clone();
             async move {
@@ -72,7 +72,7 @@ async fn chat_executes_multiple_tool_calls_concurrently_by_default() -> Result<(
     {
         let active_calls = active_calls.clone();
         let max_active_calls = max_active_calls.clone();
-        chat.register_tool(time_tool_definition(), move |_| {
+        agent.register_tool(time_tool_definition(), move |_| {
             let active_calls = active_calls.clone();
             let max_active_calls = max_active_calls.clone();
             async move {
@@ -90,7 +90,8 @@ async fn chat_executes_multiple_tool_calls_concurrently_by_default() -> Result<(
         });
     }
 
-    let response = chat.prompt("What's the weather and time in Paris?").await?;
+    let response =
+        agent_stream_prompt_final_response(&agent, "What's the weather and time in Paris?").await?;
     assert_eq!(
         response.message.content.as_single_text(),
         Some("Paris is sunny and 9am.")
@@ -118,7 +119,7 @@ async fn chat_executes_multiple_tool_calls_concurrently_by_default() -> Result<(
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
-async fn chat_can_execute_multiple_tool_calls_concurrently() -> Result<(), XlaiError> {
+async fn agent_can_execute_multiple_tool_calls_concurrently() -> Result<(), XlaiError> {
     let model = Arc::new(RecordingChatModel::new(
         Arc::new(Mutex::new(Vec::new())),
         vec![
@@ -155,12 +156,12 @@ async fn chat_can_execute_multiple_tool_calls_concurrently() -> Result<(), XlaiE
 
     let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
-    let mut chat = runtime.chat_session();
+    let mut agent = runtime.agent_session()?;
 
     {
         let active_calls = active_calls.clone();
         let max_active_calls = max_active_calls.clone();
-        chat.register_tool(weather_tool_definition(), move |_| {
+        agent.register_tool(weather_tool_definition(), move |_| {
             let active_calls = active_calls.clone();
             let max_active_calls = max_active_calls.clone();
             async move {
@@ -180,7 +181,7 @@ async fn chat_can_execute_multiple_tool_calls_concurrently() -> Result<(), XlaiE
     {
         let active_calls = active_calls.clone();
         let max_active_calls = max_active_calls.clone();
-        chat.register_tool(time_tool_definition(), move |_| {
+        agent.register_tool(time_tool_definition(), move |_| {
             let active_calls = active_calls.clone();
             let max_active_calls = max_active_calls.clone();
             async move {
@@ -198,7 +199,8 @@ async fn chat_can_execute_multiple_tool_calls_concurrently() -> Result<(), XlaiE
         });
     }
 
-    let response = chat.prompt("What's the weather and time in Paris?").await?;
+    let response =
+        agent_stream_prompt_final_response(&agent, "What's the weather and time in Paris?").await?;
     assert_eq!(
         response.message.content.as_single_text(),
         Some("Paris is sunny and 9am.")
@@ -213,7 +215,7 @@ async fn chat_can_execute_multiple_tool_calls_concurrently() -> Result<(), XlaiE
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
-async fn chat_runs_tool_batch_sequentially_when_any_tool_is_sequential() -> Result<(), XlaiError> {
+async fn agent_runs_tool_batch_sequentially_when_any_tool_is_sequential() -> Result<(), XlaiError> {
     let execution_order = Arc::new(Mutex::new(Vec::new()));
     let model = Arc::new(RecordingChatModel::new(
         Arc::new(Mutex::new(Vec::new())),
@@ -248,10 +250,10 @@ async fn chat_runs_tool_batch_sequentially_when_any_tool_is_sequential() -> Resu
 
     let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
-    let mut chat = runtime.chat_session();
+    let mut agent = runtime.agent_session()?;
     {
         let execution_order = execution_order.clone();
-        chat.register_tool(weather_tool_definition_sequential(), move |arguments| {
+        agent.register_tool(weather_tool_definition_sequential(), move |arguments| {
             let execution_order = execution_order.clone();
             async move {
                 lock_unpoisoned(&execution_order).push(format!(
@@ -269,7 +271,7 @@ async fn chat_runs_tool_batch_sequentially_when_any_tool_is_sequential() -> Resu
     }
     {
         let execution_order = execution_order.clone();
-        chat.register_tool(time_tool_definition(), move |arguments| {
+        agent.register_tool(time_tool_definition(), move |arguments| {
             let execution_order = execution_order.clone();
             async move {
                 lock_unpoisoned(&execution_order).push(format!(
@@ -286,7 +288,8 @@ async fn chat_runs_tool_batch_sequentially_when_any_tool_is_sequential() -> Resu
         });
     }
 
-    let response = chat.prompt("What's the weather and time in Paris?").await?;
+    let response =
+        agent_stream_prompt_final_response(&agent, "What's the weather and time in Paris?").await?;
     assert_eq!(
         response.message.content.as_single_text(),
         Some("Paris is sunny and 9am.")
@@ -303,7 +306,7 @@ async fn chat_runs_tool_batch_sequentially_when_any_tool_is_sequential() -> Resu
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
-async fn chat_runs_mixed_tool_batch_sequentially_in_model_order() -> Result<(), XlaiError> {
+async fn agent_runs_mixed_tool_batch_sequentially_in_model_order() -> Result<(), XlaiError> {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let model = Arc::new(RecordingChatModel::new(
         requests.clone(),
@@ -346,12 +349,12 @@ async fn chat_runs_mixed_tool_batch_sequentially_in_model_order() -> Result<(), 
     let execution_graph = Arc::new(Mutex::new(Vec::new()));
     let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
-    let mut chat = runtime.chat_session();
+    let mut agent = runtime.agent_session()?;
     {
         let active_calls = active_calls.clone();
         let max_active_calls = max_active_calls.clone();
         let execution_graph = execution_graph.clone();
-        chat.register_tool(weather_tool_definition(), move |_| {
+        agent.register_tool(weather_tool_definition(), move |_| {
             let active_calls = active_calls.clone();
             let max_active_calls = max_active_calls.clone();
             let execution_graph = execution_graph.clone();
@@ -375,7 +378,7 @@ async fn chat_runs_mixed_tool_batch_sequentially_in_model_order() -> Result<(), 
         let active_calls = active_calls.clone();
         let max_active_calls = max_active_calls.clone();
         let execution_graph = execution_graph.clone();
-        chat.register_tool(time_tool_definition_sequential(), move |_| {
+        agent.register_tool(time_tool_definition_sequential(), move |_| {
             let active_calls = active_calls.clone();
             let max_active_calls = max_active_calls.clone();
             let execution_graph = execution_graph.clone();
@@ -399,7 +402,7 @@ async fn chat_runs_mixed_tool_batch_sequentially_in_model_order() -> Result<(), 
         let active_calls = active_calls.clone();
         let max_active_calls = max_active_calls.clone();
         let execution_graph = execution_graph.clone();
-        chat.register_tool(calendar_tool_definition(), move |_| {
+        agent.register_tool(calendar_tool_definition(), move |_| {
             let active_calls = active_calls.clone();
             let max_active_calls = max_active_calls.clone();
             let execution_graph = execution_graph.clone();
@@ -420,7 +423,8 @@ async fn chat_runs_mixed_tool_batch_sequentially_in_model_order() -> Result<(), 
         });
     }
 
-    let response = chat.prompt("Build my Paris schedule.").await?;
+    let response =
+        agent_stream_prompt_final_response(&agent, "Build my Paris schedule.").await?;
     assert_eq!(
         response.message.content.as_single_text(),
         Some("Paris schedule assembled.")
@@ -462,7 +466,7 @@ async fn chat_runs_mixed_tool_batch_sequentially_in_model_order() -> Result<(), 
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
-async fn chat_runs_mixed_batch_sequentially_when_multiple_tools_are_sequential()
+async fn agent_runs_mixed_batch_sequentially_when_multiple_tools_are_sequential()
 -> Result<(), XlaiError> {
     let model = Arc::new(RecordingChatModel::new(
         Arc::new(Mutex::new(Vec::new())),
@@ -505,12 +509,12 @@ async fn chat_runs_mixed_batch_sequentially_when_multiple_tools_are_sequential()
     let execution_order = Arc::new(Mutex::new(Vec::new()));
     let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
 
-    let mut chat = runtime.chat_session();
+    let mut agent = runtime.agent_session()?;
     {
         let active_calls = active_calls.clone();
         let max_active_calls = max_active_calls.clone();
         let execution_order = execution_order.clone();
-        chat.register_tool(weather_tool_definition_sequential(), move |_| {
+        agent.register_tool(weather_tool_definition_sequential(), move |_| {
             let active_calls = active_calls.clone();
             let max_active_calls = max_active_calls.clone();
             let execution_order = execution_order.clone();
@@ -533,7 +537,7 @@ async fn chat_runs_mixed_batch_sequentially_when_multiple_tools_are_sequential()
         let active_calls = active_calls.clone();
         let max_active_calls = max_active_calls.clone();
         let execution_order = execution_order.clone();
-        chat.register_tool(time_tool_definition(), move |_| {
+        agent.register_tool(time_tool_definition(), move |_| {
             let active_calls = active_calls.clone();
             let max_active_calls = max_active_calls.clone();
             let execution_order = execution_order.clone();
@@ -556,7 +560,7 @@ async fn chat_runs_mixed_batch_sequentially_when_multiple_tools_are_sequential()
         let active_calls = active_calls.clone();
         let max_active_calls = max_active_calls.clone();
         let execution_order = execution_order.clone();
-        chat.register_tool(calendar_tool_definition_sequential(), move |_| {
+        agent.register_tool(calendar_tool_definition_sequential(), move |_| {
             let active_calls = active_calls.clone();
             let max_active_calls = max_active_calls.clone();
             let execution_order = execution_order.clone();
@@ -576,7 +580,7 @@ async fn chat_runs_mixed_batch_sequentially_when_multiple_tools_are_sequential()
         });
     }
 
-    let response = chat.prompt("Plan my Paris day.").await?;
+    let response = agent_stream_prompt_final_response(&agent, "Plan my Paris day.").await?;
     assert_eq!(
         response.message.content.as_single_text(),
         Some("Paris plan completed.")

@@ -5,6 +5,8 @@ import type {
   WasmMemoryFileSystemInstance,
 } from './filesystem/types';
 import type {
+  AgentOptions,
+  AgentSessionOptions,
   ChatContent,
   ChatOptions,
   ChatResponse,
@@ -26,6 +28,8 @@ export type ResolvedRequestOptions = {
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  /** Streaming agent loop toggle when the WASM layer supports it; unary `agent()` is always one model call. */
+  agentLoop?: boolean;
 };
 
 export type ResolvedSessionOptions = Omit<ResolvedRequestOptions, 'prompt'> & {
@@ -146,9 +150,23 @@ export function resolveRequestOptions(
   };
 }
 
+/** Resolves options for the one-shot `agent()` helper (includes `agentLoop` when set). */
+export function resolveAgentRequestOptions(
+  options: AgentOptions,
+): ResolvedRequestOptions {
+  const { agentLoop, ...chatLike } = options;
+  const resolved = resolveRequestOptions(chatLike);
+  return agentLoop === undefined ? resolved : { ...resolved, agentLoop };
+}
+
 export function resolveSessionOptions(
-  options: Omit<ChatSessionOptions, 'fileSystem'>,
+  options: Omit<ChatSessionOptions | AgentSessionOptions, 'fileSystem'>,
 ): ResolvedSessionOptions {
+  const agentLoop =
+    'agentLoop' in options && options.agentLoop !== undefined
+      ? { agentLoop: options.agentLoop }
+      : {};
+
   return {
     apiKey: requireApiKey(options.apiKey),
     systemPrompt: options.systemPrompt,
@@ -156,6 +174,7 @@ export function resolveSessionOptions(
     model: options.model ?? envValue('OPENAI_MODEL'),
     temperature: options.temperature,
     maxOutputTokens: options.maxOutputTokens,
+    ...agentLoop,
     ...(options.qts !== undefined ? { qts: options.qts } : {}),
   };
 }
@@ -261,7 +280,7 @@ export abstract class ToolSession {
 }
 
 export async function createToolSession<TSession>(
-  options: ChatSessionOptions,
+  options: ChatSessionOptions | AgentSessionOptions,
   createSession: WasmCreateSessionFunction,
   createSessionWithMemoryFileSystem: WasmCreateSessionWithMemoryFileSystemFunction,
   createSessionWithFileSystem: WasmCreateSessionWithFileSystemFunction,

@@ -1,23 +1,32 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 mod builtin;
 mod mcp;
 
+use async_stream::try_stream;
+use futures_util::StreamExt;
 use serde_json::Value;
 use tera::Context;
 use xlai_core::{
-    BoxStream, ChatContent, ChatMessage, ChatResponse, ContentPart, StructuredOutput,
-    ToolDefinition, ToolResult, XlaiError,
+    BoxStream, ChatChunk, ChatContent, ChatMessage, ChatResponse, ContentPart, ErrorKind,
+    MessageRole, StructuredOutput, ToolDefinition, ToolResult, XlaiError,
 };
 
-use crate::{Chat, ChatExecutionEvent, XlaiRuntime};
+use crate::chat::Chat;
+use crate::{ChatExecutionEvent, XlaiRuntime};
 
 pub use mcp::McpRegistry;
 
-/// High-level agent session API built on top of `Chat`.
+/// High-level agent session: multi-round tool execution runs only on **streaming** APIs when
+/// the agent loop is enabled (see [`Self::with_agent_loop_enabled`]). Unary [`Self::execute`] / [`Self::prompt`] always issue
+/// a single model call (no tool callbacks), so callers are not blocked for arbitrarily long runs.
+/// [`Chat`] also performs only single model calls.
 #[derive(Clone)]
 pub struct Agent {
     chat: Chat,
+    agent_loop_enabled: bool,
+    max_tool_round_trips: usize,
 }
 
 impl Agent {
@@ -29,7 +38,11 @@ impl Agent {
     pub fn new(runtime: Arc<XlaiRuntime>) -> Result<Self, XlaiError> {
         let mut chat = Chat::new(runtime.clone());
         builtin::register_builtin_tools(&mut chat, runtime)?;
-        Ok(Self { chat })
+        Ok(Self {
+            chat,
+            agent_loop_enabled: true,
+            max_tool_round_trips: 8,
+        })
     }
 
     #[must_use]
@@ -95,7 +108,23 @@ impl Agent {
 
     #[must_use]
     pub fn with_max_tool_round_trips(mut self, max_tool_round_trips: usize) -> Self {
-        self.chat = self.chat.with_max_tool_round_trips(max_tool_round_trips);
+        self.max_tool_round_trips = max_tool_round_trips;
+        self
+    }
+
+    /// Controls the multi-round agent loop on **streaming** APIs only ([`Self::stream`],
+    /// [`Self::stream_prompt`], etc.).
+    ///
+    /// When `false`, those streams perform a single model turn and do not run tool callbacks.
+    ///
+    /// When `true` (default), streams repeat model → tools → model until there are no tool calls
+    /// (bounded by [`Self::with_max_tool_round_trips`]).
+    ///
+    /// [`Self::execute`] and [`Self::prompt`] always perform exactly one model call and never run
+    /// tool callbacks here (use streaming if you need the agent tool loop).
+    #[must_use]
+    pub fn with_agent_loop_enabled(mut self, agent_loop_enabled: bool) -> Self {
+        self.agent_loop_enabled = agent_loop_enabled;
         self
     }
 
@@ -138,32 +167,51 @@ impl Agent {
         self.chat
     }
 
-    /// Sends a single user prompt through this agent session.
+    /// Sends a single user prompt (one model call; no automatic tool execution).
     ///
     /// # Errors
     ///
-    /// Returns an error if the configured model request fails, if a tool callback
-    /// fails, or if the chat exceeds the maximum number of tool round trips.
+    /// Returns an error if the configured model request fails.
     pub async fn prompt(&self, content: impl Into<String>) -> Result<ChatResponse, XlaiError> {
-        self.chat.prompt(content).await
+        self.execute(vec![ChatMessage {
+            role: MessageRole::User,
+            content: ChatContent::text(content.into()),
+            tool_name: None,
+            tool_call_id: None,
+            metadata: BTreeMap::new(),
+        }])
+        .await
     }
 
-    /// Same as [`Chat::prompt_content`].
     pub async fn prompt_content(&self, content: ChatContent) -> Result<ChatResponse, XlaiError> {
-        self.chat.prompt_content(content).await
+        self.execute(vec![ChatMessage {
+            role: MessageRole::User,
+            content,
+            tool_name: None,
+            tool_call_id: None,
+            metadata: BTreeMap::new(),
+        }])
+        .await
     }
 
-    /// Same as [`Chat::prompt_parts`].
     pub async fn prompt_parts(&self, parts: Vec<ContentPart>) -> Result<ChatResponse, XlaiError> {
-        self.chat.prompt_parts(parts).await
+        self.execute(vec![ChatMessage {
+            role: MessageRole::User,
+            content: ChatContent::from_parts(parts),
+            tool_name: None,
+            tool_call_id: None,
+            metadata: BTreeMap::new(),
+        }])
+        .await
     }
 
-    /// Executes a chat turn with the provided message history.
+    /// Runs exactly one model call with the given message history (no tool execution).
+    ///
+    /// For multi-round tool execution with incremental output, use [`Self::stream`] instead.
     ///
     /// # Errors
     ///
-    /// Returns an error if the configured model request fails, if a tool callback
-    /// fails, or if the chat exceeds the maximum number of tool round trips.
+    /// Returns an error if the configured model request fails.
     pub async fn execute(&self, messages: Vec<ChatMessage>) -> Result<ChatResponse, XlaiError> {
         self.chat.execute(messages).await
     }
@@ -173,7 +221,13 @@ impl Agent {
         &self,
         content: impl Into<String>,
     ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
-        self.chat.stream_prompt(content)
+        self.stream(vec![ChatMessage {
+            role: MessageRole::User,
+            content: ChatContent::text(content.into()),
+            tool_name: None,
+            tool_call_id: None,
+            metadata: BTreeMap::new(),
+        }])
     }
 
     #[must_use]
@@ -181,7 +235,13 @@ impl Agent {
         &self,
         content: ChatContent,
     ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
-        self.chat.stream_prompt_content(content)
+        self.stream(vec![ChatMessage {
+            role: MessageRole::User,
+            content,
+            tool_name: None,
+            tool_call_id: None,
+            metadata: BTreeMap::new(),
+        }])
     }
 
     #[must_use]
@@ -189,7 +249,13 @@ impl Agent {
         &self,
         parts: Vec<ContentPart>,
     ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
-        self.chat.stream_prompt_parts(parts)
+        self.stream(vec![ChatMessage {
+            role: MessageRole::User,
+            content: ChatContent::from_parts(parts),
+            tool_name: None,
+            tool_call_id: None,
+            metadata: BTreeMap::new(),
+        }])
     }
 
     #[must_use]
@@ -197,6 +263,54 @@ impl Agent {
         &self,
         messages: Vec<ChatMessage>,
     ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
-        self.chat.stream(messages)
+        if !self.agent_loop_enabled {
+            return self.chat.stream(messages);
+        }
+
+        let chat = self.chat.clone();
+        let max = self.max_tool_round_trips;
+
+        Box::pin(try_stream! {
+            let mut messages = messages;
+            for _ in 0..max {
+                let mut final_response: Option<ChatResponse> = None;
+                let mut inner = chat.stream(messages.clone());
+                while let Some(item) = inner.next().await {
+                    let item = item?;
+                    if let ChatExecutionEvent::Model(ChatChunk::Finished(resp)) = &item {
+                        final_response = Some(resp.clone());
+                    }
+                    yield item;
+                }
+
+                let response = final_response.ok_or_else(|| {
+                    XlaiError::new(
+                        ErrorKind::Provider,
+                        "stream ended without a final chat response",
+                    )
+                })?;
+
+                messages.push(response.message.clone());
+
+                if response.tool_calls.is_empty() {
+                    return;
+                }
+
+                for call in &response.tool_calls {
+                    yield ChatExecutionEvent::ToolCall(call.clone());
+                }
+
+                let outcomes = chat.dispatch_tool_calls(response.tool_calls).await?;
+                for outcome in outcomes {
+                    messages.push(Chat::tool_result_as_message(&outcome.call, &outcome.result));
+                    yield ChatExecutionEvent::ToolResult(outcome.result);
+                }
+            }
+
+            Err(XlaiError::new(
+                ErrorKind::Tool,
+                "agent exceeded the maximum number of tool round trips",
+            ))?;
+        })
     }
 }
