@@ -275,7 +275,7 @@ pub fn qts_browser_tts_capabilities() -> Result<JsValue, JsValue> {
     serde_wasm_bindgen::to_value(&QtsBrowserCapabilities::current_stub()).map_err(js_error)
 }
 
-/// Validates a [`QtsModelManifest`] (required logical names). Throws on invalid JSON or schema.
+/// Validates a [`QtsModelManifest`](xlai_qts_browser::QtsModelManifest) (required logical names). Throws on invalid JSON or schema.
 #[cfg(feature = "qts")]
 #[wasm_bindgen(js_name = validateQtsModelManifest)]
 pub fn validate_qts_model_manifest(manifest: JsValue) -> Result<(), JsValue> {
