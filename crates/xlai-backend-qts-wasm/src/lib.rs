@@ -92,13 +92,15 @@ impl TtsModel for QtsBrowserTtsModel {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic)] // intentional test failure paths (disallowed: expect/unwrap by project lint)
+
     use super::*;
     use xlai_core::{TtsDeliveryMode, VoiceSpec};
 
     #[tokio::test]
     async fn synthesize_returns_engine_pending() {
         let model = QtsBrowserTtsModel::default();
-        let err = model
+        let Err(err) = model
             .synthesize(TtsRequest {
                 model: None,
                 input: "hi".into(),
@@ -112,9 +114,13 @@ mod tests {
                 metadata: Default::default(),
             })
             .await
-            .expect_err("stub must error");
+        else {
+            panic!("stub must error");
+        };
         assert_eq!(err.kind, ErrorKind::Unsupported);
-        let details = err.details.expect("details");
+        let Some(details) = err.details else {
+            panic!("expected error details");
+        };
         assert_eq!(details["code"], "qts_wasm_engine_pending");
     }
 }
