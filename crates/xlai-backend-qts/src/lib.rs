@@ -41,7 +41,7 @@ use xlai_core::{
     BoxFuture, BoxStream, ErrorKind, MediaSource, Metadata, TtsAudioFormat, TtsChunk,
     TtsDeliveryMode, TtsModel, TtsRequest, TtsResponse, XlaiError,
 };
-use xlai_qts_core::{ModelPaths, Qwen3TtsEngine, Qwen3TtsError, VoiceCloneMode, SAMPLE_RATE_HZ};
+use xlai_qts_core::{ModelPaths, Qwen3TtsEngine, Qwen3TtsError, SAMPLE_RATE_HZ, VoiceCloneMode};
 
 pub use request_map::{
     QtsVoiceCloneParams, synthesize_request_from_tts, voice_clone_params_from_tts,
@@ -128,9 +128,10 @@ impl QtsTtsModel {
     }
 
     fn load_worker(&self) -> Result<QtsWorkerHandle, XlaiError> {
-        let loaded = self.runtime.worker.get_or_init(|| {
-            spawn_worker(self.model_dir.clone()).map_err(|error| error.message)
-        });
+        let loaded = self
+            .runtime
+            .worker
+            .get_or_init(|| spawn_worker(self.model_dir.clone()).map_err(|error| error.message));
 
         loaded
             .clone()
@@ -243,8 +244,8 @@ fn spawn_worker(model_dir: PathBuf) -> Result<QtsWorkerHandle, XlaiError> {
     thread::Builder::new()
         .name("xlai-qts-worker".to_owned())
         .spawn(move || {
-            let engine = Qwen3TtsEngine::load(ModelPaths::from_model_dir(&model_dir))
-                .map_err(map_qts_err);
+            let engine =
+                Qwen3TtsEngine::load(ModelPaths::from_model_dir(&model_dir)).map_err(map_qts_err);
 
             match engine {
                 Ok(engine) => {
@@ -348,8 +349,8 @@ fn run_stream_synthesis(
     let mut full_pcm = Vec::new();
     let mut sink = |pcm_f32: &[f32]| -> Result<(), Qwen3TtsError> {
         full_pcm.extend_from_slice(pcm_f32);
-        let wav_chunk = pcm_f32_to_wav_bytes(pcm_f32, SAMPLE_RATE_HZ)
-            .map_err(Qwen3TtsError::InvalidInput)?;
+        let wav_chunk =
+            pcm_f32_to_wav_bytes(pcm_f32, SAMPLE_RATE_HZ).map_err(Qwen3TtsError::InvalidInput)?;
         send_stream_chunk(&chunks, Ok(TtsChunk::AudioDelta { data: wav_chunk }))
             .map_err(|error| Qwen3TtsError::InvalidInput(error.message))?;
         Ok(())
