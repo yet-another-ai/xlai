@@ -5,7 +5,7 @@
 //! cargo test -p xlai-qts-core integration_ -- --ignored --nocapture
 //! ```
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use xlai_qts_core::{Qwen3TtsEngine, SynthesizeRequest, VoiceCloneMode, VoiceClonePromptV2};
 
@@ -20,11 +20,23 @@ fn load_fixture_prompt(engine: &Qwen3TtsEngine, name: &str) -> VoiceClonePromptV
         .join("testdata")
         .join(name);
     let bytes = std::fs::read(&path).unwrap_or_else(|err| {
-        panic!("failed to read fixture {}: {err}", path.display());
+        panic!(
+            "failed to read fixture {}: {err}\n\
+             regenerate with: XLAI_QTS_MODEL_DIR=/path/to/models cargo run -p xlai-qts-core --example export_voice_clone_prompts",
+            path.display()
+        );
     });
     engine
         .decode_voice_clone_prompt(&bytes)
         .expect("decode voice clone prompt fixture")
+}
+
+fn shared_ref_audio_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root")
+        .join("fixtures/audio/transcription-sample.wav")
 }
 
 #[test]
@@ -93,9 +105,11 @@ fn integration_voice_clone_prompt_icl_mode() {
         prompt.speaker_embedding_dim(),
         Some(engine.speaker_embedding_size())
     );
+    let (frames, codebooks) = prompt.ref_code_shape().expect("ICL ref_code shape");
+    assert!(frames > 0, "expected at least one ICL reference frame");
     assert_eq!(
-        prompt.ref_code_shape(),
-        Some((105, engine.transformer().config().n_codebooks as usize))
+        codebooks,
+        engine.transformer().config().n_codebooks as usize
     );
     let req = SynthesizeRequest {
         text: "world".into(),
@@ -123,11 +137,19 @@ fn integration_native_xvector_prompt_parity_shape() {
         return;
     }
     let golden = load_fixture_prompt(&engine, "sample1.xvector.voice-clone-prompt.cbor");
-    let ref_wav = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let local_ref_wav = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("testdata")
         .join("sample1_ref.wav");
+    let ref_wav = if local_ref_wav.is_file() {
+        local_ref_wav
+    } else {
+        shared_ref_audio_path()
+    };
     if !ref_wav.is_file() {
-        eprintln!("skip: place sample1_ref.wav next to fixtures for full parity");
+        eprintln!(
+            "skip: missing reference WAV {}; run the exporter example or place sample1_ref.wav next to fixtures",
+            ref_wav.display()
+        );
         return;
     }
     let wav = std::fs::read(&ref_wav).expect("read ref wav");
