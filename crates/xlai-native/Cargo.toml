@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Aggregate native xlai backends (llama.cpp, OpenAI, QTS, transformers.js)."
+publish = false
 
 [features]
 default = ["openblas"]

@@ -26,7 +26,11 @@ Publish **in this order** (the workflow does the same):
 | Event | Rust | npm |
 |--------|------|-----|
 | Pull request, or push to `main` | `cargo publish -p … --dry-run --locked` for each crate in order (see note below) | `npm publish --dry-run` after `pnpm --filter @yai-xlai/xlai build` |
-| Push tag `v*` | `cargo publish -p … --locked` in order (with pauses for index propagation) | `npm publish --access public --provenance` |
+| Push tag `v*` | `cargo publish -p … --locked` in order (with pauses for index propagation) | `npm publish --access public` |
+
+### `publish = false` crates
+
+Crates marked `publish = false` are **not** released to crates.io. `cargo publish -p <crate> --dry-run` fails immediately with a clear error—this is expected for `xlai-backend-llama-cpp`, `xlai-native`, `xlai-ffi`, `xlai-wasm`, the QTS stack, etc. Use the [allowlist above](#rust-cratesio) for registry releases.
 
 ### Dry-run and unpublished dependencies
 
@@ -48,20 +52,22 @@ The Hugging Face workflow uses **`HF_TOKEN`** on the same environment; keep all 
 
 ## Version bumps
 
-- Rust: bump `[workspace.package] version` in the root `Cargo.toml` and the `version = "…"` fields in `[workspace.dependencies]` for the five publishable crate entries (keep them in sync).
+- Rust: bump `[workspace.package] version` in the root `Cargo.toml` and every `version = "…"` in `[workspace.dependencies]` for workspace members (keep them in sync with the tag you are releasing).
 - npm: bump `"version"` in `packages/xlai/package.json`.
 - Tag: push a tag matching `v*` (for example `v0.2.0`) after those bumps are on the branch you release from.
 
 ## Crates not published yet (refactor track)
 
-These workspace members are **`publish = false`** or are blocked because they depend on unpublished / internal crates:
+These workspace members are **`publish = false`** (Cargo will refuse `cargo publish` / `--dry-run` for them) until the dependency graph is crates.io-ready:
 
 | Crate / area | Reason |
 |--------------|--------|
-| `xlai-sys` | `publish = false`; vendored native build; blocks `xlai-backend-llama-cpp` and anything pulling it |
-| `xlai-qts-core`, `xlai-qts-browser`, `xlai-backend-qts-wasm` | `publish = false`; QTS stack not on crates.io |
-| `xlai-observability` | `publish = false`; blocks `xlai-qts-cli` until policy changes |
-| `xlai-backend-qts`, `xlai-native`, `xlai-wasm`, `xlai-ffi`, `xlai-qts-cli` | Depend on the above or on each other in ways that need a published graph or feature splits |
+| `xlai-sys` | Vendored native build; not on crates.io |
+| `xlai-backend-llama-cpp` | Depends on `xlai-sys` |
+| `xlai-native`, `xlai-ffi` | Depend on `xlai-backend-llama-cpp` / aggregate of internal backends |
+| `xlai-wasm` | Built for the npm package; default `qts` feature pulls unpublished QTS WASM/browser crates |
+| `xlai-qts-core`, `xlai-qts-browser`, `xlai-backend-qts-wasm`, `xlai-backend-qts`, `xlai-qts-cli` | QTS stack / internal |
+| `xlai-observability` | Internal tooling crate |
 
 To publish more crates later: remove or relax `publish = false`, ensure every dependency is either on crates.io with a version pin or optional behind features, add `description` / `repository.workspace = true` as needed, extend `[workspace.dependencies]` and `.github/workflows/publish.yml` `PUBLISH_CRATES_ORDER`.
 

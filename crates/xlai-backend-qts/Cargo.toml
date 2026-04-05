@@ -4,7 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Native Qwen3 TTS (QTS) backend for xlai via `TtsModel`."
+publish = false
 
 [features]
 default = ["openblas"]

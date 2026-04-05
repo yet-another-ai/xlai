@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "llama.cpp-backed chat and embeddings backend for xlai (depends on unpublished `xlai-sys`)."
+publish = false
 
 [features]
 default = ["openblas"]

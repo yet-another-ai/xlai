@@ -4,7 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "CLI and TUI for Qwen3 TTS (xlai QTS stack)."
+publish = false
 default-run = "xlai-qts"
 
 [[bin]]

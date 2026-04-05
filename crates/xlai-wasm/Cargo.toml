@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "WebAssembly bindings for xlai (built for the `@yai-xlai/xlai` npm package; not published as its own crates.io crate)."
+publish = false
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false
