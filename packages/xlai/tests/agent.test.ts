@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import * as wasmModule from '../pkg/xlai_wasm.js';
-import { agent, createAgentSession } from '../src/index';
+import { AgentSession, agent, createAgentSession } from '../src/index';
 
 describe('xlai agent api', () => {
   afterEach(() => {
@@ -308,5 +308,44 @@ describe('xlai agent api', () => {
     expect(createAgentSessionSpy).toHaveBeenCalledWith(
       expect.objectContaining({ agentLoop: false }),
     );
+  });
+
+  it('wires registerContextCompressor and streamPrompt on AgentSession', async () => {
+    const registerContextCompressor = vi.fn();
+    const streamPrompt = vi
+      .fn()
+      .mockResolvedValue([
+        { kind: 'model', data: { MessageStart: { role: 'assistant' } } },
+      ]);
+
+    vi.spyOn(
+      wasmModule as typeof wasmModule & {
+        createAgentSession: (options: unknown) => {
+          registerTool: () => void;
+          prompt: () => Promise<unknown>;
+          registerContextCompressor: typeof registerContextCompressor;
+          streamPrompt: typeof streamPrompt;
+        };
+      },
+      'createAgentSession',
+    ).mockReturnValue({
+      registerTool: vi.fn(),
+      prompt: vi.fn(),
+      registerContextCompressor,
+      streamPrompt,
+    });
+
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+
+    const session = await createAgentSession({});
+    expect(session).toBeInstanceOf(AgentSession);
+
+    session.registerContextCompressor(async (messages) => messages);
+    expect(registerContextCompressor).toHaveBeenCalledTimes(1);
+
+    await expect(session.streamPrompt('hello')).resolves.toEqual([
+      { kind: 'model', data: { MessageStart: { role: 'assistant' } } },
+    ]);
+    expect(streamPrompt).toHaveBeenCalledWith('hello');
   });
 });

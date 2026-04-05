@@ -5,6 +5,7 @@ use std::sync::Arc;
 use async_stream::try_stream;
 use futures_util::StreamExt;
 use futures_util::future::try_join_all;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tera::Context;
 use xlai_core::{
@@ -35,7 +36,11 @@ struct RegisteredTool {
     origin: ToolOrigin,
 }
 
-#[derive(Clone, Debug)]
+/// One item from a chat/agent stream (model chunks, tool calls, tool results).
+///
+/// Serialized for WASM/JS as `{"kind":"model"|"toolCall"|"toolResult","data":...}` (camelCase).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "data", rename_all = "camelCase")]
 pub enum ChatExecutionEvent {
     Model(ChatChunk),
     ToolCall(ToolCall),
@@ -320,6 +325,27 @@ impl Chat {
             max_output_tokens: self.max_output_tokens,
         }
     }
+
+    /// Best-effort estimate of input-side token load for the outgoing request that would be built
+    /// from `messages` (same shape as [`Self::execute`] / [`Self::stream`]).
+    ///
+    /// Uses JSON serialization size with a bytes÷4 heuristic; not provider-tokenizer-accurate.
+    pub(crate) fn estimate_input_tokens_for_messages(
+        &self,
+        messages: &[ChatMessage],
+    ) -> Option<u32> {
+        estimate_chat_request_input_tokens(&self.build_request(messages.to_vec()))
+    }
+}
+
+/// Best-effort input token estimate from the full [`ChatRequest`] wire payload.
+///
+/// Returns [`None`] if the request cannot be serialized. This is intentionally approximate.
+pub(crate) fn estimate_chat_request_input_tokens(request: &ChatRequest) -> Option<u32> {
+    let bytes = serde_json::to_vec(request).ok()?;
+    // Common rough rule: ~4 UTF-8 bytes per token for English-ish text; JSON adds structure overhead.
+    let est = (bytes.len() as u128).saturating_add(3) / 4;
+    Some(est.min(u32::MAX as u128) as u32)
 }
 
 fn tool_result_message(call: &ToolCall, result: &ToolResult) -> ChatMessage {

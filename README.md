@@ -242,6 +242,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Agent loop (streaming only, on by default):
     // - `.with_agent_loop_enabled(false)` — one model turn per stream, no tool callbacks.
     // - `.with_max_tool_round_trips(n)` — cap rounds when the loop is on (default 8).
+    // - `.with_context_compressor(|msgs, est| async move { Ok(msgs) })` — optional Rust-only hook
+    //   before each looped model call (see README “Context compression hook”).
 
     agent.register_tool(
         ToolDefinition {
@@ -344,12 +346,20 @@ Current behavior:
 
 `Chat` never runs this loop. Unary agent calls never block on long multi-round tool execution without you choosing a streaming API.
 
+### Context compression hook
+
+On **`Agent`**, **`with_context_compressor`** (Rust) registers an **async** closure that runs **once per streaming agent-loop round**, immediately **before** each model call, when **`with_agent_loop_enabled(true)`** (default). It receives the full accumulated `ChatMessage` list for that stream and a **best-effort** `Option<u32>` input-token estimate (JSON serialization of the outgoing `ChatRequest`, bytes÷4 heuristic—not provider-tokenizer-accurate). It must return the message list to send for that round (often a compressed copy). The agent still appends assistant and tool messages to its **internal** history after each round; only the **outgoing** request for that step uses the returned list. Returning an empty list fails the stream with a provider error. **`Agent::register_context_compressor`** is the `&mut self` variant for the same hook.
+
+The hook is **not** used for unary `prompt` / `execute`, and **not** when streaming with **`with_agent_loop_enabled(false)`** (delegates to `Chat::stream`).
+
+**JavaScript (`@yai-xlai/xlai`):** on **`AgentSession`**, call **`registerContextCompressor(async (messages, estimatedInputTokens) => messages)`** before **`streamPrompt`** / **`streamPromptWithContent`**. The callback receives the same semantics as Rust (message array in Rust JSON shape, `estimatedInputTokens` as `number | null`). WASM exports **`registerContextCompressor`**, **`streamPrompt`**, and **`streamPromptWithContent`** on **`AgentSession`**.
+
 ## Streaming
 
 The runtime supports streamed chat output through `ChatChunk` and `ChatExecutionEvent`.
 
 - **`Chat`**: each `stream` / `stream_prompt` / `stream_*` call performs **one** model run; events are deltas and a final `ChatChunk::Finished` for that turn.
-- **`Agent`**: streaming uses the same chunk types, but when **`with_agent_loop_enabled(true)`** (default) the stream may include multiple model rounds. Between rounds you may see **`ChatExecutionEvent::ToolCall`** and **`ToolResult`** events after a finished assistant message that contained tool calls.
+- **`Agent`**: streaming uses the same chunk types, but when **`with_agent_loop_enabled(true)`** (default) the stream may include multiple model rounds. Between rounds you may see **`ChatExecutionEvent::ToolCall`** and **`ToolResult`** events after a finished assistant message that contained tool calls. An optional context-compressor hook may rewrite the message list before each of those model calls (Rust **`with_context_compressor`**, or JS **`AgentSession.registerContextCompressor`**). In JS, **`streamPrompt`** / **`streamPromptWithContent`** collect the full event list in order (one round-trip through the WASM bridge; not a browser `ReadableStream` yet).
 
 Streaming currently includes:
 

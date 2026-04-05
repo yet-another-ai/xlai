@@ -55,6 +55,12 @@ export type WasmToolSessionInstance = {
   ) => void;
   prompt: (content: string) => Promise<ChatResponse>;
   promptWithContent?: (content: ChatContent) => Promise<ChatResponse>;
+  /** `AgentSession` (WASM) only. */
+  registerContextCompressor?: (
+    callback: (messages: unknown, estimatedInputTokens: unknown) => unknown,
+  ) => void;
+  streamPrompt?: (content: string) => Promise<unknown>;
+  streamPromptWithContent?: (content: ChatContent) => Promise<unknown>;
 };
 
 export type WasmCreateSessionFunction = (
@@ -241,7 +247,7 @@ function toWasmToolResult(
 }
 
 export abstract class ToolSession {
-  protected constructor(private readonly inner: WasmToolSessionInstance) {}
+  protected constructor(protected readonly inner: WasmToolSessionInstance) {}
 
   registerTool(
     definition: ToolDefinition,

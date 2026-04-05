@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::sync::Arc;
 
 mod builtin;
@@ -9,8 +10,9 @@ use futures_util::StreamExt;
 use serde_json::Value;
 use tera::Context;
 use xlai_core::{
-    BoxStream, ChatChunk, ChatContent, ChatMessage, ChatResponse, ContentPart, ErrorKind,
-    MessageRole, StructuredOutput, ToolDefinition, ToolResult, XlaiError,
+    BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatResponse, ContentPart,
+    ErrorKind, MaybeSend, MessageRole, RuntimeBound, StructuredOutput, ToolDefinition, ToolResult,
+    XlaiError,
 };
 
 use crate::chat::Chat;
@@ -18,15 +20,52 @@ use crate::{ChatExecutionEvent, XlaiRuntime};
 
 pub use mcp::McpRegistry;
 
+#[cfg(not(target_arch = "wasm32"))]
+type ContextCompressorFn = dyn Fn(Vec<ChatMessage>, Option<u32>) -> BoxFuture<'static, Result<Vec<ChatMessage>, XlaiError>>
+    + Send
+    + Sync;
+#[cfg(target_arch = "wasm32")]
+type ContextCompressorFn = dyn Fn(
+    Vec<ChatMessage>,
+    Option<u32>,
+) -> BoxFuture<'static, Result<Vec<ChatMessage>, XlaiError>>;
+
+/// Runs before each model call in the streaming agent loop (see [`Agent::with_context_compressor`]).
+async fn prepare_messages_for_agent_round(
+    chat: &Chat,
+    messages: &[ChatMessage],
+    compressor: &Option<Arc<ContextCompressorFn>>,
+) -> Result<Vec<ChatMessage>, XlaiError> {
+    let Some(compressor) = compressor.as_ref() else {
+        return Ok(messages.to_vec());
+    };
+
+    let estimated_input_tokens = chat.estimate_input_tokens_for_messages(messages);
+    let rewritten = (compressor)(messages.to_vec(), estimated_input_tokens).await?;
+
+    if rewritten.is_empty() {
+        return Err(XlaiError::new(
+            ErrorKind::Provider,
+            "context compressor returned an empty message list",
+        ));
+    }
+
+    Ok(rewritten)
+}
+
 /// High-level agent session: multi-round tool execution runs only on **streaming** APIs when
 /// the agent loop is enabled (see [`Self::with_agent_loop_enabled`]). Unary [`Self::execute`] / [`Self::prompt`] always issue
 /// a single model call (no tool callbacks), so callers are not blocked for arbitrarily long runs.
 /// [`Chat`] also performs only single model calls.
+///
+/// Optionally, [`Self::with_context_compressor`] can rewrite the message list before each looped
+/// model call (streaming + agent loop only).
 #[derive(Clone)]
 pub struct Agent {
     chat: Chat,
     agent_loop_enabled: bool,
     max_tool_round_trips: usize,
+    context_compressor: Option<Arc<ContextCompressorFn>>,
 }
 
 impl Agent {
@@ -42,6 +81,7 @@ impl Agent {
             chat,
             agent_loop_enabled: true,
             max_tool_round_trips: 8,
+            context_compressor: None,
         })
     }
 
@@ -125,6 +165,48 @@ impl Agent {
     #[must_use]
     pub fn with_agent_loop_enabled(mut self, agent_loop_enabled: bool) -> Self {
         self.agent_loop_enabled = agent_loop_enabled;
+        self
+    }
+
+    /// Registers an async hook that runs **before each model call** in the streaming agent loop
+    /// ([`Self::stream`], [`Self::stream_prompt`], etc.), when [`Self::with_agent_loop_enabled`] is
+    /// `true`.
+    ///
+    /// The callback receives the full accumulated [`ChatMessage`] history for this stream and a
+    /// best-effort [`Option<u32>`] input-token estimate derived from JSON-serialized request size
+    /// (bytes÷4 heuristic; not tokenizer-accurate).
+    /// It should return the message list to send for that round (often a compressed or summarized
+    /// copy). The in-memory history used for the next round still grows with assistant and tool
+    /// messages as usual; only the outgoing request for that step uses the returned list.
+    ///
+    /// If the hook returns an empty vector, the stream fails with [`ErrorKind::Provider`].
+    ///
+    /// Unary [`Self::prompt`] / [`Self::execute`] do not invoke this hook. When the agent loop is
+    /// disabled on streaming, [`Self::stream`] delegates to [`Chat::stream`] and the hook is not
+    /// used.
+    pub fn register_context_compressor<F, Fut>(&mut self, f: F) -> &mut Self
+    where
+        F: Fn(Vec<ChatMessage>, Option<u32>) -> Fut + RuntimeBound + 'static,
+        Fut: Future<Output = Result<Vec<ChatMessage>, XlaiError>> + MaybeSend + 'static,
+    {
+        self.context_compressor = Some(Arc::new(
+            move |messages,
+                  estimated_input_tokens|
+                  -> BoxFuture<'static, Result<Vec<ChatMessage>, XlaiError>> {
+                Box::pin(f(messages, estimated_input_tokens))
+            },
+        ));
+        self
+    }
+
+    /// See [`Self::register_context_compressor`].
+    #[must_use]
+    pub fn with_context_compressor<F, Fut>(mut self, f: F) -> Self
+    where
+        F: Fn(Vec<ChatMessage>, Option<u32>) -> Fut + RuntimeBound + 'static,
+        Fut: Future<Output = Result<Vec<ChatMessage>, XlaiError>> + MaybeSend + 'static,
+    {
+        self.register_context_compressor(f);
         self
     }
 
@@ -269,12 +351,16 @@ impl Agent {
 
         let chat = self.chat.clone();
         let max = self.max_tool_round_trips;
+        let compressor = self.context_compressor.clone();
 
         Box::pin(try_stream! {
             let mut messages = messages;
             for _ in 0..max {
+                let to_send =
+                    prepare_messages_for_agent_round(&chat, &messages, &compressor).await?;
+
                 let mut final_response: Option<ChatResponse> = None;
-                let mut inner = chat.stream(messages.clone());
+                let mut inner = chat.stream(to_send);
                 while let Some(item) = inner.next().await {
                     let item = item?;
                     if let ChatExecutionEvent::Model(ChatChunk::Finished(resp)) = &item {

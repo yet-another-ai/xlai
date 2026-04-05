@@ -94,6 +94,32 @@ export interface ChatResponse {
   usage?: ChatUsage;
 }
 
+/** Matches Rust `ChatMessage` JSON (snake_case fields from serde). */
+export type ChatMessageRole = 'system' | 'user' | 'assistant' | 'tool';
+
+export interface ChatMessage {
+  role: ChatMessageRole;
+  content: ChatContent;
+  tool_name?: string | null;
+  tool_call_id?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * One event from `AgentSession.streamPrompt` / `streamPromptWithContent` (WASM JSON).
+ * `data` holds a `ChatChunk`, `ToolCall`, or `ToolResult` shape from the core types.
+ */
+export type ChatExecutionEvent =
+  | { kind: 'model'; data: unknown }
+  | { kind: 'toolCall'; data: unknown }
+  | { kind: 'toolResult'; data: unknown };
+
+/** Async hook before each streamed agent-loop model call (see README). */
+export type AgentContextCompressor = (
+  messages: ChatMessage[],
+  estimatedInputTokens: number | null,
+) => Promise<ChatMessage[]>;
+
 export type ToolParameterType =
   | 'string'
   | 'number'
