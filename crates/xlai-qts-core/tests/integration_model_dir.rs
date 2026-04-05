@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! export XLAI_QTS_MODEL_DIR=/path/to/models   # contains qwen3-tts-0.6b-f16.gguf + qwen3-tts-vocoder.onnx
-//! cargo test -p xlai-qts-core integration_ -- --ignored --nocapture
+//! cargo test -p xlai-qts-core integration_ -- --ignored --nocapture --test-threads=1
 //! ```
 
 use std::path::{Path, PathBuf};

@@ -339,7 +339,7 @@ These use real provider credentials and are ignored by default.
 Run locally with:
 
 ```bash
-cargo test --workspace -- --ignored
+cargo test --workspace -- --ignored --test-threads=1
 ```
 
 The current OpenAI smoke tests will also load `.env` automatically for local runs.

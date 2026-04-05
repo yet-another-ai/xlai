@@ -158,7 +158,7 @@ jobs:
           XLAI_QTS_MODEL_DIR: ${{ runner.os == 'Windows' && format('C:/w/{0}', env.QTS_FIXTURE_PATH) || format('{0}/{1}', github.workspace, env.QTS_FIXTURE_PATH) }}
           XLAI_QTS_REF_AUDIO_WAV: ${{ runner.os == 'Windows' && format('C:/w/{0}', env.ASR_FIXTURE_WAV_PATH) || format('{0}/{1}', github.workspace, env.ASR_FIXTURE_WAV_PATH) }}
         run: >-
-          cargo test --workspace -- --ignored
+          cargo test --workspace -- --ignored --test-threads=1
 
   e2e-javascript:
     name: JavaScript
