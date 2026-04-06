@@ -1,4 +1,4 @@
-//! Process-wide [`tracing`] initialization (inlined from former `xlai-observability`).
+//! Process-wide `tracing` initialization (inlined from former `xlai-observability`).
 
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
