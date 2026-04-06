@@ -14,10 +14,10 @@ use std::path::PathBuf;
 
 use futures_util::StreamExt;
 use tokio::runtime::Runtime;
-use xlai_qts_core::{QtsTtsConfig, QtsTtsModel};
 use xlai_core::{
     MediaSource, Metadata, TtsChunk, TtsDeliveryMode, TtsRequest, VoiceReferenceSample, VoiceSpec,
 };
+use xlai_qts_core::{QtsTtsConfig, QtsTtsModel};
 use xlai_runtime::RuntimeBuilder;
 
 fn require_model_dir() -> PathBuf {

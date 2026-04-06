@@ -16,11 +16,11 @@ pub use xlai_runtime::{
 
 mod agent_session;
 mod api;
+#[cfg(feature = "qts")]
+mod backend_qts_browser;
 mod chat_session;
 mod factory;
 mod memory_fs;
-#[cfg(feature = "qts")]
-mod backend_qts_browser;
 #[cfg(feature = "qts")]
 mod qts_browser;
 #[cfg(feature = "qts")]

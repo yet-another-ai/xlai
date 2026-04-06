@@ -15,7 +15,10 @@ pub const SAMPLE_RATE_HZ: u32 = 24_000;
 
 mod error;
 pub mod browser {
-    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/browser_include.rs"));
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/browser_include.rs"
+    ));
 }
 mod ggml;
 mod model;

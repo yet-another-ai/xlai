@@ -4,9 +4,9 @@
 use std::sync::Arc;
 
 #[cfg(feature = "qts")]
-use wasm_bindgen::JsValue;
-#[cfg(feature = "qts")]
 use crate::backend_qts_browser::{QtsBrowserTtsConfig, QtsBrowserTtsModel};
+#[cfg(feature = "qts")]
+use wasm_bindgen::JsValue;
 #[cfg(feature = "qts")]
 use xlai_runtime::RuntimeBuilder;
 

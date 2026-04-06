@@ -2,6 +2,8 @@
 
 #[cfg(feature = "qts")]
 use crate::factory::qts_runtime::build_runtime_tts_only;
+#[cfg(feature = "qts")]
+use crate::qts_browser::QtsBrowserCapabilities;
 use futures_util::StreamExt;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -9,8 +11,6 @@ use xlai_backend_openai::{OpenAiConfig, OpenAiTtsModel};
 #[cfg(feature = "qts")]
 use xlai_core::XlaiError;
 use xlai_core::{ChatContent, TtsChunk, TtsDeliveryMode, TtsModel, TtsRequest};
-#[cfg(feature = "qts")]
-use crate::qts_browser::QtsBrowserCapabilities;
 
 use crate::agent_session::WasmAgentSession;
 use crate::chat_session::WasmChatSession;

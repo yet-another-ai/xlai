@@ -148,9 +148,7 @@ impl TtsModel for QtsTtsModel {
             {
                 return Err(XlaiError::new(
                     ErrorKind::Unsupported,
-                    format!(
-                        "xlai-qts-core only supports WAV output in this release (got {fmt:?})"
-                    ),
+                    format!("xlai-qts-core only supports WAV output in this release (got {fmt:?})"),
                 ));
             }
 

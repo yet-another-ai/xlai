@@ -36,5 +36,8 @@ xlai-backend-transformersjs.workspace = true
 xlai-core.workspace = true
 xlai-runtime.workspace = true
 
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
