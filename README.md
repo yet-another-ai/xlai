@@ -70,6 +70,7 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md).
   Qwen3 TTS engine; links standalone `ggml` through `xlai-sys` (`qts-ggml`). Exposes native `TtsModel` (`QtsTtsModel`, WAV output; tuning via `TtsRequest` metadata `xlai.qts.*`). **`VoiceSpec::Clone`** uses the first reference sample (inline WAV only): x-vector and ICL prompts, with optional `xlai.qts.voice_clone_mode` (`xvector` \| `icl`). ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts-export-and-hf-publish.md`). Module `xlai_qts_core::browser` holds serde manifest types shared with `xlai-wasm` via `browser_include.rs`.
 - `crates/xlai-qts-cli`
   Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without voice-clone flags, `synthesize` uses `xlai-runtime` + `xlai-qts-core` (`QtsTtsModel`). With `--voice-clone-prompt` or `--ref-audio`, it uses the direct engine path. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
+
 ## Requirements
 
 - Rust stable
