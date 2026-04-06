@@ -2,6 +2,8 @@
 
 #[cfg(feature = "qts")]
 use crate::factory::qts_runtime::build_runtime_tts_only;
+#[cfg(feature = "qts")]
+use crate::qts_browser::QtsBrowserCapabilities;
 use futures_util::StreamExt;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -9,8 +11,6 @@ use xlai_backend_openai::{OpenAiConfig, OpenAiTtsModel};
 #[cfg(feature = "qts")]
 use xlai_core::XlaiError;
 use xlai_core::{ChatContent, TtsChunk, TtsDeliveryMode, TtsModel, TtsRequest};
-#[cfg(feature = "qts")]
-use xlai_qts_browser::QtsBrowserCapabilities;
 
 use crate::agent_session::WasmAgentSession;
 use crate::chat_session::WasmChatSession;
@@ -278,11 +278,11 @@ pub fn qts_browser_tts_capabilities() -> Result<JsValue, JsValue> {
     serde_wasm_bindgen::to_value(&QtsBrowserCapabilities::current_stub()).map_err(js_error)
 }
 
-/// Validates QTS model manifest JSON (wire shape: `xlai_qts_browser::QtsModelManifest`): required logical names. Throws on invalid JSON or schema.
+/// Validates QTS model manifest JSON (wire shape: `QtsModelManifest`): required logical names. Throws on invalid JSON or schema.
 #[cfg(feature = "qts")]
 #[wasm_bindgen(js_name = validateQtsModelManifest)]
 pub fn validate_qts_model_manifest(manifest: JsValue) -> Result<(), JsValue> {
-    let m: xlai_qts_browser::QtsModelManifest =
+    let m: crate::qts_browser::QtsModelManifest =
         serde_wasm_bindgen::from_value(manifest).map_err(js_error)?;
     m.validate_required_files()
         .map_err(|e| JsValue::from_str(&e.to_string()))

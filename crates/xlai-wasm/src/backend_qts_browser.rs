@@ -1,9 +1,4 @@
-//! QTS [`TtsModel`] for browser / WASM builds.
-//!
-//! Today this backend is a **stub**: native GGML (`xlai-sys`) and ONNX Runtime (`ort`) do not
-//! yet support `wasm32-unknown-unknown` in this workspace (see `docs/qts-wasm-browser-runtime.md`).
-//! Callers should use [`QtsBrowserCapabilities::current_stub`] and handle
-//! `details.code == "qts_wasm_engine_pending"` on errors.
+//! Browser QTS [`TtsModel`] (stub; merged from former `xlai-backend-qts-wasm`).
 
 use futures_util::stream;
 use serde::{Deserialize, Serialize};
@@ -11,7 +6,8 @@ use xlai_core::{
     BoxFuture, BoxStream, ErrorKind, TtsAudioFormat, TtsChunk, TtsModel, TtsRequest, TtsResponse,
     XlaiError,
 };
-use xlai_qts_browser::{QtsBrowserCapabilities, QtsModelManifest};
+
+use crate::qts_browser::{QtsBrowserCapabilities, QtsModelManifest};
 
 /// JSON-friendly config from JS (optional manifest for future asset loading).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -70,7 +66,7 @@ impl TtsModel for QtsBrowserTtsModel {
                 return Err(XlaiError::new(
                     ErrorKind::Unsupported,
                     format!(
-                        "xlai-backend-qts-wasm stub only documents WAV for future local QTS (got {fmt:?})"
+                        "xlai-wasm QTS stub only documents WAV for future local QTS (got {fmt:?})"
                     ),
                 ));
             }
@@ -92,7 +88,7 @@ impl TtsModel for QtsBrowserTtsModel {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::panic)] // intentional test failure paths (disallowed: expect/unwrap by project lint)
+    #![allow(clippy::panic)]
 
     use super::*;
     use xlai_core::{TtsDeliveryMode, VoiceSpec};

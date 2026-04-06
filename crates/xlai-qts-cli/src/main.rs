@@ -9,19 +9,20 @@ use anyhow::{Context, Result, bail};
 use hound::{SampleFormat, WavSpec, WavWriter};
 use serde_json::json;
 use tokio::runtime::Runtime;
-use xlai_backend_qts::{QtsTtsConfig, QtsTtsModel};
 use xlai_core::{MediaSource, Metadata, TtsRequest, TtsResponse, VoiceSpec};
+use xlai_qts_core::{QtsTtsConfig, QtsTtsModel};
 use xlai_qts_core::{Qwen3TtsEngine, SynthesisStageTimings, VoiceCloneMode, VoiceClonePromptV2};
 use xlai_runtime::RuntimeBuilder;
 
 mod cli_support;
+mod tracing_init;
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tui;
 
 use crate::cli_support::{CommonSynthesisArgs, load_engine, parse_value_arg};
 
 fn main() -> Result<()> {
-    xlai_observability::init_logging();
+    tracing_init::init_logging();
     let mut args = env::args().skip(1);
     match args.next().as_deref() {
         Some("synthesize") => run_synthesize(args.collect()),
@@ -84,7 +85,7 @@ fn run_synthesize(args: Vec<String>) -> Result<()> {
     let wav_bytes = inline_wav_bytes(&response).context("decode TTS response")?;
     fs::write(&out_path, &wav_bytes).with_context(|| format!("write {}", out_path.display()))?;
     eprintln!(
-        "wrote synthesis (xlai-runtime + xlai-backend-qts): path={} bytes={}",
+        "wrote synthesis (xlai-runtime + xlai-qts-core): path={} bytes={}",
         out_path.display(),
         wav_bytes.len()
     );
@@ -280,6 +281,6 @@ fn write_wav_f32(path: &Path, sample_rate_hz: u32, pcm_f32: &[f32]) -> Result<()
 
 fn print_usage() {
     eprintln!(
-        "usage:\n  cargo run -p xlai-qts-cli -- synthesize --text TEXT --out OUT.wav [--model-dir DIR] [--voice-clone-prompt prompt.cbor | --ref-audio ref.wav [--ref-text STR] [--voice-clone-mode xvector|icl]] ...\n  cargo run -p xlai-qts-cli -- profile ...\n  cargo run -p xlai-qts-cli -- tui ...\n\nWithout voice clone flags, synthesize uses xlai-runtime + xlai-backend-qts.\nWith --voice-clone-prompt or --ref-audio, the direct Qwen3TtsEngine path is used.\n\nEnv: QWEN3_TTS_BACKEND / QWEN3_TTS_VOCODER_EP / QWEN3_TTS_TALKER_KV_MODE (see docs)."
+        "usage:\n  cargo run -p xlai-qts-cli -- synthesize --text TEXT --out OUT.wav [--model-dir DIR] [--voice-clone-prompt prompt.cbor | --ref-audio ref.wav [--ref-text STR] [--voice-clone-mode xvector|icl]] ...\n  cargo run -p xlai-qts-cli -- profile ...\n  cargo run -p xlai-qts-cli -- tui ...\n\nWithout voice clone flags, synthesize uses xlai-runtime + xlai-qts-core (`QtsTtsModel`).\nWith --voice-clone-prompt or --ref-audio, the direct Qwen3TtsEngine path is used.\n\nEnv: QWEN3_TTS_BACKEND / QWEN3_TTS_VOCODER_EP / QWEN3_TTS_TALKER_KV_MODE (see docs)."
     );
 }

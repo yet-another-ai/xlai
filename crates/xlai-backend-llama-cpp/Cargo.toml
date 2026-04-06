@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "llama.cpp-backed chat and embeddings backend for xlai (depends on unpublished `xlai-sys`)."
+publish = false
 
 [features]
 default = ["openblas"]
@@ -16,13 +19,12 @@ async-stream.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-xlai-core = { path = "../xlai-core" }
-xlai-local-common = { path = "../xlai-local-common" }
-xlai-sys = { path = "../xlai-sys", default-features = false, features = ["llama"] }
+xlai-core.workspace = true
+xlai-runtime.workspace = true
+xlai-sys = { workspace = true, features = ["llama"] }
 
 [dev-dependencies]
 tokio.workspace = true
-xlai-runtime = { path = "../xlai-runtime" }
 
 [lints]
 workspace = true

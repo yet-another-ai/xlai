@@ -2,7 +2,7 @@ use serde_json::{Map, Value, json};
 use tera::Context;
 use xlai_core::{ErrorKind, ToolCall, ToolDefinition, ToolParameterType, XlaiError};
 
-use crate::prompt_store::EmbeddedPromptStore;
+use super::prompt_store::EmbeddedPromptStore;
 
 pub enum ToolResponse {
     AssistantMessage(String),

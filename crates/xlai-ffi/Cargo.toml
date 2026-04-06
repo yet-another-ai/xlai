@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "C ABI shared library wrapping `xlai-native`."
+publish = false
 
 [features]
 default = ["openblas"]
@@ -15,7 +18,7 @@ vulkan = ["xlai-native/vulkan"]
 crate-type = ["cdylib"]
 
 [dependencies]
-xlai-native = { path = "../xlai-native" }
+xlai-native.workspace = true
 
 [lints]
 workspace = true

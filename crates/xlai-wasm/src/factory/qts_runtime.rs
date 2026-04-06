@@ -4,9 +4,9 @@
 use std::sync::Arc;
 
 #[cfg(feature = "qts")]
-use wasm_bindgen::JsValue;
+use crate::backend_qts_browser::{QtsBrowserTtsConfig, QtsBrowserTtsModel};
 #[cfg(feature = "qts")]
-use xlai_backend_qts_wasm::{QtsBrowserTtsConfig, QtsBrowserTtsModel};
+use wasm_bindgen::JsValue;
 #[cfg(feature = "qts")]
 use xlai_runtime::RuntimeBuilder;
 
@@ -43,7 +43,7 @@ pub(crate) fn apply_qts_session_to_builder(
 /// Build an [`xlai_runtime::XlaiRuntime`] with only local QTS as TTS (for `createLocalTtsRuntime`).
 #[cfg(feature = "qts")]
 pub(crate) fn build_runtime_tts_only(
-    manifest: Option<xlai_qts_browser::QtsModelManifest>,
+    manifest: Option<crate::qts_browser::QtsModelManifest>,
 ) -> Result<xlai_runtime::XlaiRuntime, JsValue> {
     let model = QtsBrowserTtsModel::new(QtsBrowserTtsConfig { manifest });
     RuntimeBuilder::new()

@@ -2,9 +2,9 @@ use serde_json::json;
 use tera::Context;
 use xlai_core::{ErrorKind, StructuredOutput, StructuredOutputFormat, XlaiError};
 
-use crate::prompt_store::EmbeddedPromptStore;
-use crate::request::{PreparedLocalChatRequest, PromptMessage, PromptRole};
-use crate::tool_calling::tool_call_instruction;
+use super::prompt_store::EmbeddedPromptStore;
+use super::request::{PreparedLocalChatRequest, PromptMessage, PromptRole};
+use super::tool_calling::tool_call_instruction;
 
 const MANUAL_PROMPT_TEMPLATE: &str = "chat/manual.txt";
 const COMBINED_INSTRUCTION_TEMPLATE: &str = "system/combined-instruction.md";
@@ -114,13 +114,15 @@ pub fn structured_output_instruction(
 #[allow(clippy::expect_used, clippy::panic)]
 mod tests {
     use super::{prompt_messages_with_constraints, render_manual_prompt};
-    use crate::request::{PromptMessage, PromptRole};
+    use crate::local_common::request::{PromptMessage, PromptRole};
     use xlai_core::{
         StructuredOutput, ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType,
     };
 
-    fn prepared_request(messages: Vec<PromptMessage>) -> crate::request::PreparedLocalChatRequest {
-        crate::request::PreparedLocalChatRequest {
+    fn prepared_request(
+        messages: Vec<PromptMessage>,
+    ) -> crate::local_common::request::PreparedLocalChatRequest {
+        crate::local_common::request::PreparedLocalChatRequest {
             messages,
             available_tools: Vec::new(),
             structured_output: None,

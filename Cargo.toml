@@ -1,16 +1,11 @@
 [workspace]
 members = [
-    "crates/xlai-observability",
     "crates/xlai-backend-llama-cpp",
     "crates/xlai-backend-openai",
-    "crates/xlai-backend-qts-wasm",
-    "crates/xlai-backend-qts",
     "crates/xlai-backend-transformersjs",
     "crates/xlai-core",
     "crates/xlai-ffi",
-    "crates/xlai-local-common",
     "crates/xlai-native",
-    "crates/xlai-qts-browser",
     "crates/xlai-qts-cli",
     "crates/xlai-qts-core",
     "crates/xlai-runtime",
@@ -25,6 +20,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.94"
 license = "Apache-2.0"
+repository = "https://github.com/yetanother.ai/xlai"
 
 [workspace.dependencies]
 anyhow = "1.0"
@@ -66,6 +62,18 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4.67"
 windows-sys = "0.61"
+
+# Path + version for workspace members that are published to crates.io (see docs/publishing.md).
+xlai-core = { path = "crates/xlai-core", version = "0.1.0" }
+xlai-runtime = { path = "crates/xlai-runtime", version = "0.1.0" }
+xlai-backend-openai = { path = "crates/xlai-backend-openai", version = "0.1.0" }
+xlai-backend-transformersjs = { path = "crates/xlai-backend-transformersjs", version = "0.1.0" }
+xlai-backend-llama-cpp = { path = "crates/xlai-backend-llama-cpp", version = "0.1.0" }
+xlai-ffi = { path = "crates/xlai-ffi", version = "0.1.0" }
+xlai-native = { path = "crates/xlai-native", version = "0.1.0" }
+xlai-qts-core = { path = "crates/xlai-qts-core", version = "0.1.0" }
+xlai-sys = { path = "crates/xlai-sys", version = "0.1.0" }
+xlai-wasm = { path = "crates/xlai-wasm", version = "0.1.0" }
 
 [workspace.lints.rust]
 unconditional_panic = "deny"

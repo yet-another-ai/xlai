@@ -915,9 +915,9 @@ dependencies = [
 
 [[package]]
 name = "fastrand"
-version = "2.3.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
+checksum = "a043dc74da1e37d6afe657061213aa6f425f855399a11d3463c6ecccc4dfda1f"
 
 [[package]]
 name = "filedescriptor"
@@ -3136,9 +3136,9 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.27"
+version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
+checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
 
 [[package]]
 name = "serde"
@@ -4677,7 +4677,6 @@ dependencies = [
  "tokio",
  "tracing",
  "xlai-core",
- "xlai-local-common",
  "xlai-runtime",
  "xlai-sys",
 ]
@@ -4699,33 +4698,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "xlai-backend-qts"
-version = "0.1.0"
-dependencies = [
- "async-stream",
- "base64",
- "futures-util",
- "hound",
- "serde_json",
- "tokio",
- "xlai-core",
- "xlai-qts-core",
- "xlai-runtime",
-]
-
-[[package]]
-name = "xlai-backend-qts-wasm"
-version = "0.1.0"
-dependencies = [
- "futures-util",
- "serde",
- "serde_json",
- "tokio",
- "xlai-core",
- "xlai-qts-browser",
-]
-
-[[package]]
 name = "xlai-backend-transformersjs"
 version = "0.1.0"
 dependencies = [
@@ -4738,7 +4710,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "xlai-core",
- "xlai-local-common",
+ "xlai-runtime",
 ]
 
 [[package]]
@@ -4762,44 +4734,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "xlai-local-common"
-version = "0.1.0"
-dependencies = [
- "jsonschema",
- "rust-embed",
- "serde_json",
- "tera",
- "xlai-core",
-]
-
-[[package]]
 name = "xlai-native"
 version = "0.1.0"
 dependencies = [
  "tokio",
+ "tracing-subscriber",
  "xlai-backend-llama-cpp",
  "xlai-backend-openai",
- "xlai-backend-qts",
  "xlai-backend-transformersjs",
  "xlai-core",
- "xlai-observability",
+ "xlai-qts-core",
  "xlai-runtime",
-]
-
-[[package]]
-name = "xlai-observability"
-version = "0.1.0"
-dependencies = [
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "xlai-qts-browser"
-version = "0.1.0"
-dependencies = [
- "serde",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -4813,9 +4758,8 @@ dependencies = [
  "ratatui",
  "serde_json",
  "tokio",
- "xlai-backend-qts",
+ "tracing-subscriber",
  "xlai-core",
- "xlai-observability",
  "xlai-qts-core",
  "xlai-runtime",
 ]
@@ -4824,8 +4768,10 @@ dependencies = [
 name = "xlai-qts-core"
 version = "0.1.0"
 dependencies = [
+ "async-stream",
  "ciborium",
  "criterion",
+ "futures-util",
  "hound",
  "ort",
  "rand 0.10.0",
@@ -4833,9 +4779,11 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "tokio",
  "tracing",
- "xlai-observability",
- "xlai-qts-browser",
+ "tracing-subscriber",
+ "xlai-core",
+ "xlai-runtime",
  "xlai-sys",
 ]
 
@@ -4848,6 +4796,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.2.17",
  "gray_matter",
+ "jsonschema",
  "rust-embed",
  "serde",
  "serde_json",
@@ -4876,13 +4825,13 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "xlai-backend-openai",
- "xlai-backend-qts-wasm",
  "xlai-backend-transformersjs",
  "xlai-core",
- "xlai-qts-browser",
  "xlai-runtime",
 ]
 

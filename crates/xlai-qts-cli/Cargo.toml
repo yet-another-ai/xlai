@@ -4,7 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "CLI and TUI for Qwen3 TTS (xlai QTS stack)."
+publish = false
 default-run = "xlai-qts"
 
 [[bin]]
@@ -13,9 +15,9 @@ path = "src/main.rs"
 
 [features]
 default = ["openblas"]
-openblas = ["xlai-qts-core/openblas", "xlai-backend-qts/openblas"]
-metal = ["xlai-qts-core/metal", "xlai-backend-qts/metal"]
-vulkan = ["xlai-qts-core/vulkan", "xlai-backend-qts/vulkan"]
+openblas = ["xlai-qts-core/openblas"]
+metal = ["xlai-qts-core/metal"]
+vulkan = ["xlai-qts-core/vulkan"]
 native = ["xlai-qts-core/native"]
 acl = ["xlai-qts-core/acl"]
 armnn = ["xlai-qts-core/armnn"]
@@ -38,13 +40,17 @@ xnnpack = ["xlai-qts-core/xnnpack"]
 [dependencies]
 anyhow.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-xlai-backend-qts = { path = "../xlai-backend-qts" }
-xlai-core = { path = "../xlai-core" }
-xlai-observability = { path = "../xlai-observability" }
-xlai-qts-core = { path = "../xlai-qts-core" }
-xlai-runtime = { path = "../xlai-runtime" }
+xlai-core.workspace = true
+xlai-qts-core.workspace = true
+xlai-runtime.workspace = true
 hound.workspace = true
 cpal.workspace = true
 crossterm.workspace = true
 ratatui.workspace = true
 serde_json.workspace = true
+tracing-subscriber = { workspace = true, default-features = false, features = [
+    "env-filter",
+    "fmt",
+    "registry",
+    "std",
+] }

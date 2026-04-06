@@ -1,4 +1,4 @@
-//! Qwen3 TTS (`xlai-qts-core`) exposed as an [`xlai_core::TtsModel`].
+//! Qwen3 TTS engine exposed as an [`xlai_core::TtsModel`].
 //!
 //! ## Voice cloning
 //!
@@ -27,8 +27,6 @@
 //! - `xlai.qts.talker_kv_mode` (string: `f16` or `turboquant`)
 //! - `xlai.qts.voice_clone_mode` (string: `icl` or `xvector`)
 
-mod request_map;
-
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock, mpsc as std_mpsc};
@@ -41,11 +39,9 @@ use xlai_core::{
     BoxFuture, BoxStream, ErrorKind, MediaSource, Metadata, TtsAudioFormat, TtsChunk,
     TtsDeliveryMode, TtsModel, TtsRequest, TtsResponse, XlaiError,
 };
-use xlai_qts_core::{ModelPaths, Qwen3TtsEngine, Qwen3TtsError, SAMPLE_RATE_HZ, VoiceCloneMode};
 
-pub use request_map::{
-    QtsVoiceCloneParams, synthesize_request_from_tts, voice_clone_params_from_tts,
-};
+use crate::qts_request_map::{synthesize_request_from_tts, voice_clone_params_from_tts};
+use crate::{ModelPaths, Qwen3TtsEngine, Qwen3TtsError, SAMPLE_RATE_HZ, VoiceCloneMode};
 
 /// Configuration for [`QtsTtsModel`].
 #[derive(Clone, Debug)]
@@ -152,9 +148,7 @@ impl TtsModel for QtsTtsModel {
             {
                 return Err(XlaiError::new(
                     ErrorKind::Unsupported,
-                    format!(
-                        "xlai-backend-qts only supports WAV output in this release (got {fmt:?})"
-                    ),
+                    format!("xlai-qts-core only supports WAV output in this release (got {fmt:?})"),
                 ));
             }
 
@@ -435,4 +429,5 @@ fn pcm_f32_to_wav_bytes(pcm_f32: &[f32], sample_rate_hz: u32) -> Result<Vec<u8>,
 
 #[cfg(test)]
 #[allow(clippy::expect_used)]
+#[path = "qts_tts_backend_tests.rs"]
 mod tests;

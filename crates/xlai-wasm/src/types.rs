@@ -58,7 +58,7 @@ pub(crate) struct WasmAgentRequest {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WasmQtsSessionConfig {
     #[serde(default)]
-    pub(crate) manifest: Option<xlai_qts_browser::QtsModelManifest>,
+    pub(crate) manifest: Option<crate::qts_browser::QtsModelManifest>,
 }
 
 #[derive(Deserialize)]
@@ -118,7 +118,7 @@ pub(crate) struct WasmQtsTtsCallOptions {
     #[serde(default)]
     pub(crate) delivery: Option<TtsDeliveryMode>,
     #[serde(default)]
-    pub(crate) manifest: Option<xlai_qts_browser::QtsModelManifest>,
+    pub(crate) manifest: Option<crate::qts_browser::QtsModelManifest>,
 }
 
 impl From<WasmChatRequest> for WasmChatSessionOptions {

@@ -1,11 +1,13 @@
-//! Types for browser-side QTS: model manifests, file layout, and capability reporting.
-//!
-//! This crate intentionally avoids `xlai-sys`, `ort`, or filesystem GGUF loading so it
-//! compiles on every target including `wasm32-unknown-unknown`.
+// Browser-side QTS manifest and capability types (shared by `xlai-qts-core::browser` and `xlai-wasm` via `include!`).
+//
+// This file intentionally avoids `xlai-sys`, `ort`, or filesystem GGUF loading.
 
 use serde::{Deserialize, Serialize};
 
 /// Logical names for artifacts referenced by a [`QtsModelManifest`].
+///
+/// Not every consumer references all keys; `include!` sites (e.g. `xlai-wasm`) may only use a subset.
+#[allow(dead_code)]
 pub mod logical_names {
     pub const MAIN_GGUF: &str = "main_gguf";
     pub const VOCODER_ONNX: &str = "vocoder_onnx";
@@ -108,7 +110,7 @@ impl QtsBrowserCapabilities {
 }
 
 #[cfg(test)]
-mod tests {
+mod browser_include_tests {
     use super::*;
 
     #[test]

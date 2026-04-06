@@ -1,3 +1,5 @@
+mod tracing_setup;
+
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
@@ -5,7 +7,7 @@ use std::path::PathBuf;
 use xlai_qts_core::{PrefillConditioning, Qwen3TtsEngine, SynthesizeRequest};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    xlai_observability::init_logging();
+    tracing_setup::init_logging();
     let mut args = std::env::args().skip(1);
     let model_dir = PathBuf::from(args.next().ok_or("missing model dir")?);
     let text = args.next().ok_or("missing text")?;

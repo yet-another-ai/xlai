@@ -4,35 +4,43 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Aggregate native xlai backends (llama.cpp, OpenAI, QTS, transformers.js)."
+publish = false
 
 [features]
 default = ["openblas"]
 openblas = [
     "xlai-backend-llama-cpp/openblas",
-    "xlai-backend-qts?/openblas",
+    "xlai-qts-core?/openblas",
 ]
 metal = [
     "xlai-backend-llama-cpp/metal",
-    "xlai-backend-qts?/metal",
+    "xlai-qts-core?/metal",
 ]
 vulkan = [
     "xlai-backend-llama-cpp/vulkan",
-    "xlai-backend-qts?/vulkan",
+    "xlai-qts-core?/vulkan",
 ]
 # Optional: avoid linking QTS (standalone GGML) unless you need native TTS in the aggregate crate.
-qts = ["dep:xlai-backend-qts"]
+qts = ["dep:xlai-qts-core"]
 
 [lints]
 workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-xlai-observability = { path = "../xlai-observability" }
+tracing-subscriber = { workspace = true, default-features = false, features = [
+    "env-filter",
+    "fmt",
+    "registry",
+    "std",
+] }
 
 [dependencies]
-xlai-backend-llama-cpp = { path = "../xlai-backend-llama-cpp" }
-xlai-backend-openai = { path = "../xlai-backend-openai" }
-xlai-backend-qts = { path = "../xlai-backend-qts", optional = true }
-xlai-backend-transformersjs = { path = "../xlai-backend-transformersjs" }
-xlai-core = { path = "../xlai-core" }
-xlai-runtime = { path = "../xlai-runtime" }
+xlai-backend-llama-cpp.workspace = true
+xlai-backend-openai.workspace = true
+xlai-qts-core = { workspace = true, optional = true }
+xlai-backend-transformersjs.workspace = true
+xlai-core.workspace = true
+xlai-runtime.workspace = true

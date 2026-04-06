@@ -1,6 +1,7 @@
 mod agent;
 mod chat;
 mod fs;
+pub mod local_common;
 mod prompt;
 mod skill_store;
 
