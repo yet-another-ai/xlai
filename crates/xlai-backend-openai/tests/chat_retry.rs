@@ -59,10 +59,11 @@ async fn no_policy_single_503_fails_without_second_request() {
 
     let config = OpenAiConfig::new(format!("{}/v1", server.uri()), "k", "gpt-test");
     let model = OpenAiChatModel::new(config);
-    let err = model
-        .generate(minimal_chat_request(None))
-        .await
-        .expect_err("expected provider error");
+    let out = model.generate(minimal_chat_request(None)).await;
+    assert!(out.is_err(), "expected provider error");
+    let Err(err) = out else {
+        return;
+    };
 
     assert_eq!(err.kind, ErrorKind::Provider);
     assert_eq!(hits.load(Ordering::SeqCst), 1);
@@ -94,10 +95,11 @@ async fn retry_policy_recovers_after_transient_503() {
 
     let config = OpenAiConfig::new(format!("{}/v1", server.uri()), "k", "gpt-test");
     let model = OpenAiChatModel::new(config);
-    let response = model
-        .generate(minimal_chat_request(Some(policy)))
-        .await
-        .expect("retry should succeed");
+    let out = model.generate(minimal_chat_request(Some(policy))).await;
+    assert!(out.is_ok(), "retry should succeed");
+    let Ok(response) = out else {
+        return;
+    };
 
     assert_eq!(response.message.content.as_single_text(), Some("ok"));
     assert_eq!(count.load(Ordering::SeqCst), 2);
@@ -121,10 +123,8 @@ async fn does_not_retry_when_policy_disabled() {
     let policy = ChatRetryPolicy::disabled();
     let config = OpenAiConfig::new(format!("{}/v1", server.uri()), "k", "gpt-test");
     let model = OpenAiChatModel::new(config);
-    let _err = model
-        .generate(minimal_chat_request(Some(policy)))
-        .await
-        .expect_err("disabled retry");
+    let out = model.generate(minimal_chat_request(Some(policy))).await;
+    assert!(out.is_err(), "disabled retry should fail on 503");
 
     assert_eq!(hits.load(Ordering::SeqCst), 1);
 }
@@ -151,10 +151,11 @@ async fn does_not_retry_non_retryable_http_error() {
 
     let config = OpenAiConfig::new(format!("{}/v1", server.uri()), "k", "gpt-test");
     let model = OpenAiChatModel::new(config);
-    let err = model
-        .generate(minimal_chat_request(Some(policy)))
-        .await
-        .expect_err("401 not retryable");
+    let out = model.generate(minimal_chat_request(Some(policy))).await;
+    assert!(out.is_err(), "401 should not succeed");
+    let Err(err) = out else {
+        return;
+    };
 
     assert_eq!(err.kind, ErrorKind::Provider);
     assert_eq!(err.retryable, Some(false));
