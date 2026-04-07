@@ -3,12 +3,45 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use xlai_core::{
-    ChatContent, ChatResponse, FinishReason, FsEntry, FsEntryKind, MessageRole, TokenUsage,
-    TtsAudioFormat, TtsDeliveryMode, VoiceSpec,
+    ChatContent, ChatResponse, ChatRetryPolicy, FinishReason, FsEntry, FsEntryKind, MessageRole,
+    TokenUsage, TtsAudioFormat, TtsDeliveryMode, VoiceSpec,
 };
 
 pub(crate) const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 pub(crate) const DEFAULT_OPENAI_MODEL: &str = "gpt-4.1-mini";
+
+/// Retry policy from JS (`retryPolicy`), mapped to [`ChatRetryPolicy`].
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WasmChatRetryPolicy {
+    #[serde(default)]
+    pub(crate) enabled: Option<bool>,
+    #[serde(default)]
+    pub(crate) max_retries: Option<u32>,
+    #[serde(default)]
+    pub(crate) initial_backoff_ms: Option<u64>,
+    #[serde(default)]
+    pub(crate) max_backoff_ms: Option<u64>,
+}
+
+impl From<WasmChatRetryPolicy> for ChatRetryPolicy {
+    fn from(wasm: WasmChatRetryPolicy) -> Self {
+        let mut p = ChatRetryPolicy::default();
+        if let Some(enabled) = wasm.enabled {
+            p.enabled = enabled;
+        }
+        if let Some(max_retries) = wasm.max_retries {
+            p.max_retries = max_retries;
+        }
+        if let Some(ms) = wasm.initial_backoff_ms {
+            p.initial_backoff_ms = ms;
+        }
+        if let Some(ms) = wasm.max_backoff_ms {
+            p.max_backoff_ms = ms;
+        }
+        p
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +61,8 @@ pub(crate) struct WasmChatRequest {
     /// When set, used as the user message body instead of plain-text [`Self::prompt`].
     #[serde(default)]
     pub(crate) content: Option<ChatContent>,
+    #[serde(default)]
+    pub(crate) retry_policy: Option<WasmChatRetryPolicy>,
 }
 
 #[derive(Deserialize)]
@@ -50,6 +85,8 @@ pub(crate) struct WasmAgentRequest {
     /// When `Some(false)`, the agent performs one model call and does not execute tools.
     #[serde(default)]
     pub(crate) agent_loop: Option<bool>,
+    #[serde(default)]
+    pub(crate) retry_policy: Option<WasmChatRetryPolicy>,
 }
 
 /// Optional local QTS config on chat/agent sessions (`manifest` only for now).
@@ -78,6 +115,8 @@ pub(crate) struct WasmChatSessionOptions {
     /// When `Some(false)`, agent sessions disable automatic tool round-trips (single model turn).
     #[serde(default)]
     pub(crate) agent_loop: Option<bool>,
+    #[serde(default)]
+    pub(crate) retry_policy: Option<WasmChatRetryPolicy>,
     /// When set, the runtime behind this session includes local QTS (`QtsBrowserTtsModel`).
     #[cfg(feature = "qts")]
     #[serde(default)]
@@ -131,6 +170,7 @@ impl From<WasmChatRequest> for WasmChatSessionOptions {
             temperature: value.temperature,
             max_output_tokens: value.max_output_tokens,
             agent_loop: None,
+            retry_policy: value.retry_policy,
             #[cfg(feature = "qts")]
             qts: None,
         }
@@ -147,6 +187,7 @@ impl From<WasmAgentRequest> for WasmChatSessionOptions {
             temperature: value.temperature,
             max_output_tokens: value.max_output_tokens,
             agent_loop: value.agent_loop,
+            retry_policy: value.retry_policy,
             #[cfg(feature = "qts")]
             qts: None,
         }
@@ -164,6 +205,7 @@ pub(crate) struct WasmTransformersSessionOptions {
     pub(crate) temperature: Option<f32>,
     pub(crate) max_output_tokens: Option<u32>,
     pub(crate) agent_loop: Option<bool>,
+    pub(crate) retry_policy: Option<WasmChatRetryPolicy>,
     #[cfg(feature = "qts")]
     pub(crate) qts: Option<WasmQtsSessionConfig>,
 }

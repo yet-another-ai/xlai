@@ -67,6 +67,10 @@ pub(crate) fn create_chat_session_with_dyn_file_system(
         chat = chat.with_max_output_tokens(max_output_tokens);
     }
 
+    if let Some(ref rp) = options.retry_policy {
+        chat = chat.with_retry_policy(Some(rp.clone().into()));
+    }
+
     Ok(WasmChatSession { inner: chat })
 }
 
@@ -114,6 +118,10 @@ pub(crate) fn create_agent_session_with_dyn_file_system(
 
     if options.agent_loop == Some(false) {
         agent = agent.with_agent_loop_enabled(false);
+    }
+
+    if let Some(ref rp) = options.retry_policy {
+        agent = agent.with_retry_policy(Some(rp.clone().into()));
     }
 
     Ok(WasmAgentSession { inner: agent })

@@ -159,6 +159,7 @@ mod tests {
             max_output_tokens: Some(512),
             content: None,
             agent_loop: Some(false),
+            retry_policy: None,
         });
 
         assert_eq!(options.api_key, "test-key");
@@ -181,6 +182,7 @@ mod tests {
                 temperature: Some(0.1),
                 max_output_tokens: Some(256),
                 agent_loop: None,
+                retry_policy: None,
                 #[cfg(feature = "qts")]
                 qts: None,
             },
@@ -202,6 +204,7 @@ mod tests {
                 temperature: None,
                 max_output_tokens: None,
                 agent_loop: None,
+                retry_policy: None,
                 qts: Some(WasmQtsSessionConfig::default()),
             },
             None,

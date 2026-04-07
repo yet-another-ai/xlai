@@ -5,12 +5,13 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use futures_util::{StreamExt, stream as stream_util};
 use reqwest::Client;
 use xlai_core::{
-    BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatModel, ChatRequest, ChatResponse, ErrorKind,
-    MediaSource, MessageRole, StreamTextDelta, TranscriptionBackend, TranscriptionModel,
-    TranscriptionRequest, TranscriptionResponse, TtsBackend, TtsChunk, TtsDeliveryMode, TtsModel,
-    TtsRequest, TtsResponse, XlaiError,
+    BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatModel, ChatRequest, ChatResponse,
+    ChatRetryPolicy, ErrorKind, MediaSource, MessageRole, StreamTextDelta, TranscriptionBackend,
+    TranscriptionModel, TranscriptionRequest, TranscriptionResponse, TtsBackend, TtsChunk,
+    TtsDeliveryMode, TtsModel, TtsRequest, TtsResponse, XlaiError,
 };
 
+mod chat_retry;
 mod provider_response;
 mod request;
 mod response;
@@ -21,7 +22,10 @@ mod tts;
 #[cfg(test)]
 mod tests;
 
-use provider_response::require_success_response;
+use chat_retry::{
+    backoff_delay_ms, retry_limits_for_chat_request, should_retry_xlai_error, sleep_ms,
+};
+use provider_response::{require_success_response, xlai_error_from_reqwest};
 use request::OpenAiChatRequest;
 use response::OpenAiChatResponse;
 use stream::{OpenAiStreamResponse, SseParser, StreamState, update_finish_reason};
@@ -111,6 +115,43 @@ impl OpenAiChatModel {
             config,
         }
     }
+
+    /// POST `/chat/completions` with optional retries before the response body is consumed.
+    async fn post_chat_completions_checked(
+        &self,
+        payload: &OpenAiChatRequest,
+        max_extra_attempts: u32,
+        policy_for_backoff: Option<&ChatRetryPolicy>,
+    ) -> Result<reqwest::Response, XlaiError> {
+        let endpoint = self.config.chat_completions_url();
+        let mut failures = 0u32;
+        loop {
+            let attempt = async {
+                let response = self
+                    .client
+                    .post(&endpoint)
+                    .bearer_auth(&self.config.api_key)
+                    .json(payload)
+                    .send()
+                    .await
+                    .map_err(xlai_error_from_reqwest)?;
+                require_success_response(response).await
+            }
+            .await;
+            match attempt {
+                Ok(response) => return Ok(response),
+                Err(e) => {
+                    if failures >= max_extra_attempts || !should_retry_xlai_error(&e) {
+                        return Err(e);
+                    }
+                    if let Some(policy) = policy_for_backoff {
+                        sleep_ms(backoff_delay_ms(policy, failures)).await;
+                    }
+                    failures += 1;
+                }
+            }
+        }
+    }
 }
 
 impl OpenAiTranscriptionModel {
@@ -164,19 +205,13 @@ impl ChatModel for OpenAiChatModel {
 
     fn generate(&self, request: ChatRequest) -> BoxFuture<'_, Result<ChatResponse, XlaiError>> {
         Box::pin(async move {
-            let endpoint = self.config.chat_completions_url();
+            let policy = request.retry_policy.clone();
+            let (max_extra, policy_for_backoff) = retry_limits_for_chat_request(policy.as_ref());
             let payload = OpenAiChatRequest::from_core_request(&self.config, request, false)?;
 
             let response = self
-                .client
-                .post(endpoint)
-                .bearer_auth(&self.config.api_key)
-                .json(&payload)
-                .send()
-                .await
-                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
-
-            let response = require_success_response(response).await?;
+                .post_chat_completions_checked(&payload, max_extra, policy_for_backoff)
+                .await?;
 
             let response: OpenAiChatResponse = response
                 .json()
@@ -188,20 +223,15 @@ impl ChatModel for OpenAiChatModel {
     }
 
     fn generate_stream(&self, request: ChatRequest) -> BoxStream<'_, Result<ChatChunk, XlaiError>> {
+        let this = self.clone();
         Box::pin(try_stream! {
-            let endpoint = self.config.chat_completions_url();
-            let payload = OpenAiChatRequest::from_core_request(&self.config, request, true)?;
+            let policy = request.retry_policy.clone();
+            let (max_extra, policy_for_backoff) = retry_limits_for_chat_request(policy.as_ref());
+            let payload = OpenAiChatRequest::from_core_request(&this.config, request, true)?;
 
-            let response = self
-                .client
-                .post(endpoint)
-                .bearer_auth(&self.config.api_key)
-                .json(&payload)
-                .send()
-                .await
-                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
-
-            let response = require_success_response(response).await?;
+            let response = this
+                .post_chat_completions_checked(&payload, max_extra, policy_for_backoff)
+                .await?;
 
             let mut bytes_stream = response.bytes_stream();
             let mut parser = SseParser::default();

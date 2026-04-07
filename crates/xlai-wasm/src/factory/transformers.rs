@@ -25,6 +25,7 @@ pub(crate) fn create_transformers_chat_session_with_dyn_file_system(
         temperature,
         max_output_tokens,
         agent_loop: _,
+        retry_policy,
         #[cfg(feature = "qts")]
         qts,
     } = options;
@@ -65,6 +66,10 @@ pub(crate) fn create_transformers_chat_session_with_dyn_file_system(
         chat = chat.with_max_output_tokens(max_output_tokens);
     }
 
+    if let Some(ref rp) = retry_policy {
+        chat = chat.with_retry_policy(Some(rp.clone().into()));
+    }
+
     Ok(WasmChatSession { inner: chat })
 }
 
@@ -79,6 +84,7 @@ pub(crate) fn create_transformers_agent_session_with_dyn_file_system(
         temperature,
         max_output_tokens,
         agent_loop,
+        retry_policy,
         #[cfg(feature = "qts")]
         qts,
     } = options;
@@ -121,6 +127,10 @@ pub(crate) fn create_transformers_agent_session_with_dyn_file_system(
 
     if agent_loop == Some(false) {
         agent = agent.with_agent_loop_enabled(false);
+    }
+
+    if let Some(ref rp) = retry_policy {
+        agent = agent.with_retry_policy(Some(rp.clone().into()));
     }
 
     Ok(WasmAgentSession { inner: agent })

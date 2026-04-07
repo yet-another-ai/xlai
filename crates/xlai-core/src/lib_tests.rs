@@ -2,8 +2,8 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 
 use crate::{
-    ChatContent, ChatMessage, ContentPart, ErrorKind, MediaSource, MessageRole, StructuredOutput,
-    StructuredOutputFormat, TtsChunk, TtsResponse, XlaiError,
+    ChatContent, ChatMessage, ChatRequest, ChatRetryPolicy, ContentPart, ErrorKind, MediaSource,
+    MessageRole, StructuredOutput, StructuredOutputFormat, TtsChunk, TtsResponse, XlaiError,
 };
 
 #[test]
@@ -289,4 +289,41 @@ fn tts_chunk_cbor_roundtrip() {
         return;
     };
     assert_eq!(back, chunk);
+}
+
+#[test]
+fn chat_request_deserializes_without_retry_policy() {
+    let v = json!({
+        "model": null,
+        "system_prompt": null,
+        "messages": [],
+        "available_tools": [],
+        "metadata": {},
+        "temperature": null,
+        "max_output_tokens": null
+    });
+    let req: ChatRequest = serde_json::from_value(v).expect("deserialize");
+    assert!(req.retry_policy.is_none());
+}
+
+#[test]
+fn chat_request_round_trips_retry_policy() {
+    let req = ChatRequest {
+        model: None,
+        system_prompt: None,
+        messages: vec![],
+        available_tools: vec![],
+        structured_output: None,
+        metadata: Default::default(),
+        temperature: None,
+        max_output_tokens: None,
+        retry_policy: Some(
+            ChatRetryPolicy::default()
+                .with_max_retries(1)
+                .with_initial_backoff_ms(100),
+        ),
+    };
+    let v = serde_json::to_value(&req).expect("serialize");
+    let back: ChatRequest = serde_json::from_value(v).expect("deserialize");
+    assert_eq!(back, req);
 }

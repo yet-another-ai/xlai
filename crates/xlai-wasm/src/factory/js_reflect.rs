@@ -7,7 +7,7 @@ use wasm_bindgen::JsValue;
 use xlai_runtime::FileSystem;
 
 use crate::js_file_system::JsFileSystem;
-use crate::types::WasmTransformersSessionOptions;
+use crate::types::{WasmChatRetryPolicy, WasmTransformersSessionOptions};
 use crate::wasm_helpers::js_error;
 
 #[cfg(feature = "qts")]
@@ -42,6 +42,16 @@ pub(crate) fn parse_transformers_session_options(
         }
     };
 
+    let retry_policy = {
+        let v = Reflect::get(&options, &JsValue::from_str("retryPolicy"))
+            .map_err(|e| js_error(format!("failed to read retryPolicy: {e:?}")))?;
+        if v.is_null() || v.is_undefined() {
+            None
+        } else {
+            Some(serde_wasm_bindgen::from_value::<WasmChatRetryPolicy>(v).map_err(js_error)?)
+        }
+    };
+
     Ok(WasmTransformersSessionOptions {
         model_id,
         adapter,
@@ -49,6 +59,7 @@ pub(crate) fn parse_transformers_session_options(
         temperature: optional_js_f32_field(&options, "temperature")?,
         max_output_tokens: optional_js_u32_field(&options, "maxOutputTokens")?,
         agent_loop: optional_js_bool_field(&options, "agentLoop")?,
+        retry_policy,
         #[cfg(feature = "qts")]
         qts,
     })

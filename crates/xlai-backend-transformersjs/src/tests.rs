@@ -36,6 +36,7 @@ fn native_chat_model_generate_is_unsupported() {
             metadata: Default::default(),
             temperature: None,
             max_output_tokens: None,
+            retry_policy: None,
         }))
         .expect_err("wasm-only backend");
 
@@ -64,6 +65,7 @@ fn prepared_rejects_tools_plus_structured() {
         metadata: Default::default(),
         temperature: None,
         max_output_tokens: None,
+        retry_policy: None,
     };
 
     let opts = LocalChatPrepareOptions {
