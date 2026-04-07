@@ -10,8 +10,8 @@ use serde_json::Value;
 use tera::Context;
 use xlai_core::{
     BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatRequest, ChatResponse,
-    ContentPart, ErrorKind, MaybeSend, MessageRole, RuntimeBound, StructuredOutput, ToolCall,
-    ToolCallExecutionMode, ToolDefinition, ToolResult, XlaiError,
+    ChatRetryPolicy, ContentPart, ErrorKind, MaybeSend, MessageRole, RuntimeBound,
+    StructuredOutput, ToolCall, ToolCallExecutionMode, ToolDefinition, ToolResult, XlaiError,
 };
 
 use crate::{EmbeddedPromptStore, XlaiRuntime};
@@ -61,6 +61,7 @@ pub struct Chat {
     temperature: Option<f32>,
     max_output_tokens: Option<u32>,
     structured_output: Option<StructuredOutput>,
+    retry_policy: Option<ChatRetryPolicy>,
     tools: BTreeMap<String, RegisteredTool>,
 }
 
@@ -74,6 +75,7 @@ impl Chat {
             temperature: None,
             max_output_tokens: None,
             structured_output: None,
+            retry_policy: None,
             tools: BTreeMap::new(),
         }
     }
@@ -134,6 +136,16 @@ impl Chat {
     #[must_use]
     pub fn with_structured_output(mut self, structured_output: StructuredOutput) -> Self {
         self.structured_output = Some(structured_output);
+        self
+    }
+
+    /// Sets an optional auto-retry policy for outgoing chat requests.
+    ///
+    /// Backends that support it use this hint; others ignore it. When `None`, no policy is sent
+    /// (backends typically do not auto-retry).
+    #[must_use]
+    pub fn with_retry_policy(mut self, retry_policy: Option<ChatRetryPolicy>) -> Self {
+        self.retry_policy = retry_policy;
         self
     }
 
@@ -323,6 +335,7 @@ impl Chat {
             metadata: BTreeMap::new(),
             temperature: self.temperature,
             max_output_tokens: self.max_output_tokens,
+            retry_policy: self.retry_policy.clone(),
         }
     }
 

@@ -146,6 +146,13 @@ impl Agent {
         self
     }
 
+    /// See [`Chat::with_retry_policy`].
+    #[must_use]
+    pub fn with_retry_policy(mut self, retry_policy: Option<xlai_core::ChatRetryPolicy>) -> Self {
+        self.chat = self.chat.with_retry_policy(retry_policy);
+        self
+    }
+
     #[must_use]
     pub fn with_max_tool_round_trips(mut self, max_tool_round_trips: usize) -> Self {
         self.max_tool_round_trips = max_tool_round_trips;

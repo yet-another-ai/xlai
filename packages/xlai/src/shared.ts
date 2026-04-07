@@ -10,6 +10,7 @@ import type {
   ChatContent,
   ChatOptions,
   ChatResponse,
+  ChatRetryPolicy,
   ChatSessionOptions,
   ContentPart,
   QtsSessionConfig,
@@ -28,6 +29,7 @@ export type ResolvedRequestOptions = {
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  retryPolicy?: ChatRetryPolicy;
   /** Streaming agent loop toggle when the WASM layer supports it; unary `agent()` is always one model call. */
   agentLoop?: boolean;
 };
@@ -153,6 +155,9 @@ export function resolveRequestOptions(
     model: options.model ?? envValue('OPENAI_MODEL'),
     temperature: options.temperature,
     maxOutputTokens: options.maxOutputTokens,
+    ...(options.retryPolicy !== undefined
+      ? { retryPolicy: options.retryPolicy }
+      : {}),
   };
 }
 
@@ -175,6 +180,9 @@ export function resolveSessionOptions(
     model: options.model ?? envValue('OPENAI_MODEL'),
     temperature: options.temperature,
     maxOutputTokens: options.maxOutputTokens,
+    ...(options.retryPolicy !== undefined
+      ? { retryPolicy: options.retryPolicy }
+      : {}),
     ...(options.qts !== undefined ? { qts: options.qts } : {}),
   };
 

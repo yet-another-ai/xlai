@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use xlai_core::{
-    ChatContent, ChatMessage, ChatResponse, ContentPart, ErrorKind, FinishReason, MediaSource,
-    MessageRole, StructuredOutput, StructuredOutputFormat, ToolCall, XlaiError,
+    ChatContent, ChatMessage, ChatResponse, ChatRetryPolicy, ContentPart, ErrorKind, FinishReason,
+    MediaSource, MessageRole, StructuredOutput, StructuredOutputFormat, ToolCall, XlaiError,
 };
 
 use super::common::*;
@@ -346,6 +346,45 @@ async fn chat_session_propagates_structured_output_requests() -> Result<(), Xlai
         StructuredOutputFormat::LarkGrammar { grammar }
             if grammar == "start: NAME\nNAME: /[A-Z][a-z]+/"
     ));
+
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn chat_session_propagates_retry_policy() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![ChatResponse {
+            message: assistant_message("done."),
+            tool_calls: Vec::new(),
+            usage: None,
+            finish_reason: FinishReason::Completed,
+            metadata: empty_metadata(),
+        }],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let policy = ChatRetryPolicy::default()
+        .with_max_retries(5)
+        .with_initial_backoff_ms(50);
+    let chat = runtime
+        .chat_session()
+        .with_retry_policy(Some(policy.clone()));
+
+    let _response = chat.prompt("Hello").await?;
+
+    let requests = lock_unpoisoned(&requests);
+    assert_eq!(requests.len(), 1);
+    let rp = requests[0].retry_policy.as_ref();
+    assert!(rp.is_some(), "retry policy should be propagated");
+    let Some(rp) = rp else {
+        return Ok(());
+    };
+    assert_eq!(rp.max_retries, policy.max_retries);
+    assert_eq!(rp.initial_backoff_ms, policy.initial_backoff_ms);
+    assert_eq!(rp.enabled, policy.enabled);
 
     Ok(())
 }

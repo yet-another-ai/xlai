@@ -3,6 +3,27 @@ use xlai_core::{ErrorKind, XlaiError};
 
 use crate::response::OpenAiErrorEnvelope;
 
+#[must_use]
+pub(crate) fn xlai_error_from_reqwest(err: reqwest::Error) -> XlaiError {
+    let retryable = reqwest_error_suggests_retry(&err);
+    let mut e = XlaiError::new(ErrorKind::Provider, err.to_string());
+    if retryable {
+        e = e.with_retryable(true);
+    }
+    e
+}
+
+fn reqwest_error_suggests_retry(err: &reqwest::Error) -> bool {
+    if err.is_timeout() {
+        return true;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    if err.is_connect() {
+        return true;
+    }
+    err.is_request()
+}
+
 pub(crate) async fn require_success_response(
     response: reqwest::Response,
 ) -> Result<reqwest::Response, XlaiError> {

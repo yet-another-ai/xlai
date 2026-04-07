@@ -140,6 +140,92 @@ impl StructuredOutput {
     }
 }
 
+/// Optional auto-retry hints for chat requests.
+///
+/// Backends interpret this struct; unsupported providers ignore it. Fields are advisory: each
+/// backend may clamp attempts, backoff, or disable retry for streaming mid-flight.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ChatRetryPolicy {
+    /// When `false`, backends should not perform automatic retries for this request.
+    #[serde(default = "default_chat_retry_enabled")]
+    pub enabled: bool,
+    /// Number of **additional** attempts after the first failure (0 = at most one try).
+    #[serde(default = "default_chat_retry_max_retries")]
+    pub max_retries: u32,
+    /// Initial delay before the first retry, in milliseconds.
+    #[serde(default = "default_chat_retry_initial_backoff_ms")]
+    pub initial_backoff_ms: u64,
+    /// Maximum delay between retries, in milliseconds (exponential backoff caps here).
+    #[serde(default = "default_chat_retry_max_backoff_ms")]
+    pub max_backoff_ms: u64,
+}
+
+fn default_chat_retry_enabled() -> bool {
+    true
+}
+
+fn default_chat_retry_max_retries() -> u32 {
+    2
+}
+
+fn default_chat_retry_initial_backoff_ms() -> u64 {
+    200
+}
+
+fn default_chat_retry_max_backoff_ms() -> u64 {
+    10_000
+}
+
+impl Default for ChatRetryPolicy {
+    fn default() -> Self {
+        Self {
+            enabled: default_chat_retry_enabled(),
+            max_retries: default_chat_retry_max_retries(),
+            initial_backoff_ms: default_chat_retry_initial_backoff_ms(),
+            max_backoff_ms: default_chat_retry_max_backoff_ms(),
+        }
+    }
+}
+
+impl ChatRetryPolicy {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    #[must_use]
+    pub fn disabled() -> Self {
+        Self {
+            enabled: false,
+            ..Self::default()
+        }
+    }
+
+    #[must_use]
+    pub fn with_enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+
+    #[must_use]
+    pub fn with_max_retries(mut self, max_retries: u32) -> Self {
+        self.max_retries = max_retries;
+        self
+    }
+
+    #[must_use]
+    pub fn with_initial_backoff_ms(mut self, ms: u64) -> Self {
+        self.initial_backoff_ms = ms;
+        self
+    }
+
+    #[must_use]
+    pub fn with_max_backoff_ms(mut self, ms: u64) -> Self {
+        self.max_backoff_ms = ms;
+        self
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ChatRequest {
     pub model: Option<String>,
@@ -152,6 +238,8 @@ pub struct ChatRequest {
     pub metadata: Metadata,
     pub temperature: Option<f32>,
     pub max_output_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_policy: Option<ChatRetryPolicy>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

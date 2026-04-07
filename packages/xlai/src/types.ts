@@ -52,6 +52,14 @@ export type ChatContent =
       parts: ContentPart[];
     };
 
+/** Matches Rust `ChatRetryPolicy` JSON (camelCase via serde on WASM). */
+export interface ChatRetryPolicy {
+  enabled?: boolean;
+  maxRetries?: number;
+  initialBackoffMs?: number;
+  maxBackoffMs?: number;
+}
+
 export interface ChatOptions {
   prompt?: string;
   content?: ChatContent;
@@ -61,6 +69,7 @@ export interface ChatOptions {
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  retryPolicy?: ChatRetryPolicy;
 }
 
 export interface AgentOptions extends ChatOptions {
@@ -185,6 +194,7 @@ export interface ChatSessionOptions {
   systemPrompt?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  retryPolicy?: ChatRetryPolicy;
   fileSystem?: FileSystemApi;
   /** When set, the WASM runtime behind the session includes local QTS. */
   qts?: QtsSessionConfig;

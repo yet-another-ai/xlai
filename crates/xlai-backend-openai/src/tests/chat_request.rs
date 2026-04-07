@@ -40,6 +40,7 @@ fn serializes_multimodal_user_message_as_content_array() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        retry_policy: None,
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -76,6 +77,7 @@ fn serializes_plain_text_user_message_as_string_content() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        retry_policy: None,
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -120,6 +122,7 @@ fn serializes_inline_audio_as_file_content_part() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        retry_policy: None,
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -164,6 +167,7 @@ fn serializes_json_schema_structured_output_as_response_format() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        retry_policy: None,
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -209,6 +213,7 @@ fn json_schema_structured_output_defaults_response_format_name() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        retry_policy: None,
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -253,6 +258,7 @@ fn rejects_lark_structured_output_for_openai_compatible_backend() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        retry_policy: None,
     };
 
     let result = OpenAiChatRequest::from_core_request(&config, request, false);
