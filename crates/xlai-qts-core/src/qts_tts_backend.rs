@@ -23,7 +23,7 @@
 //! - `xlai.qts.repetition_penalty` (number)
 //! - `xlai.qts.language_id` (number)
 //! - `xlai.qts.vocoder_thread_count` (number)
-//! - `xlai.qts.vocoder_chunk_size` (number)
+//! - `xlai.qts.vocoder_chunk_size` (number; `> 0` enables pipelining — use **4** for 12Hz, see `QTS12HZ_RECOMMENDED_VOCODER_CHUNK_FRAMES` / `docs/qts-vocoder-streaming.md`)
 //! - `xlai.qts.talker_kv_mode` (string: `f16` or `turboquant`)
 //! - `xlai.qts.voice_clone_mode` (string: `icl` or `xvector`)
 
@@ -415,7 +415,9 @@ fn pcm_f32_to_wav_bytes(pcm_f32: &[f32], sample_rate_hz: u32) -> Result<Vec<u8>,
         bits_per_sample: 16,
         sample_format: SampleFormat::Int,
     };
-    let mut cursor = std::io::Cursor::new(Vec::new());
+    // Standard PCM WAV header is 44 bytes; 16-bit mono samples = 2 bytes each.
+    let buf = Vec::with_capacity(44usize.saturating_add(pcm_f32.len().saturating_mul(2)));
+    let mut cursor = std::io::Cursor::new(buf);
     let mut writer = WavWriter::new(&mut cursor, spec).map_err(|e| e.to_string())?;
     for sample in pcm_f32.iter().copied() {
         let clamped = sample.clamp(-1.0, 1.0);

@@ -152,6 +152,8 @@ pub struct CodecRollout {
 pub struct VocoderChunk {
     pub codes: Vec<i32>,
     pub n_frames: usize,
+    /// Prefix / ICL reference codec frames only: vocoder worker updates overlap tail without emitting PCM.
+    pub prefix_warmup_only: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1692,8 +1694,21 @@ impl TtsTransformer {
                 let _ = tx.send(VocoderChunk {
                     codes,
                     n_frames: end - start,
+                    prefix_warmup_only: false,
                 });
             };
+
+        if prefix_frame_count > 0 {
+            let codes = frames[..prefix_frame_count]
+                .iter()
+                .flat_map(|f| f.codebook_tokens.iter().copied())
+                .collect::<Vec<_>>();
+            let _ = chunk_tx.send(VocoderChunk {
+                codes,
+                n_frames: prefix_frame_count,
+                prefix_warmup_only: true,
+            });
+        }
 
         let mut talker_steps_dur = Duration::ZERO;
         let mut kv_writeback_dur = Duration::ZERO;

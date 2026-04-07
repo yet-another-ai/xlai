@@ -52,3 +52,15 @@ Use `--skip-export` to package artifacts that are already on disk.
 The Hugging Face model packaging job is **manual only**: run [`.github/workflows/hf-release-qts.yml`](../.github/workflows/hf-release-qts.yml) from the Actions tab (**workflow_dispatch**). Configure the `HF_TOKEN` secret on the `publish` environment.
 
 Pushing a `v*` tag does **not** trigger that workflow; it **does** run [`.github/workflows/build.yml`](../.github/workflows/build.yml) (artifacts) and [`.github/workflows/publish.yml`](../.github/workflows/publish.yml) (crates.io + npm) if you use those release paths. See [`docs/publishing.md`](publishing.md) for registry releases.
+
+## Future: stateful streaming vocoder ONNX
+
+The native runtime currently calls `qwen3-tts-vocoder.onnx` in a **stateless** way: each ORT run takes a full `[1, n_frames, n_codebooks]` window. Chunk continuity is handled in Rust via a small **overlap-and-add** layer (`OverlapAddChunkDecoder`; see [`qts-vocoder-streaming.md`](./qts-vocoder-streaming.md)).
+
+A **stateful** export (extra inputs/outputs for convolver or decoder cache tensors) could remove redundant re-decoding of context frames and shrink overlap further. That would require:
+
+1. A new or alternate ONNX graph from the training/export stack (`scripts/qts/export_model_artifacts.py` and upstream checkpoints).
+2. Matching changes in `crates/xlai-qts-core/src/pipeline/vocoder.rs` to bind and thread state across steps.
+3. Versioning or manifest entries so HF bundles can declare which vocoder interface they ship.
+
+Until then, tuning `xlai.qts.vocoder_chunk_size` and `QWEN3_TTS_VOCODER_OVERLAP_FRAMES` is the supported path.
