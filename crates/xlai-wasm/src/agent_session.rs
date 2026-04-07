@@ -83,6 +83,31 @@ impl WasmAgentSession {
         Ok(())
     }
 
+    /// Registers a JS async callback invoked before **every** model call (`prompt`, `promptWithContent`,
+    /// `streamPrompt`, …). Signature: `(messages: ChatMessage[]) => Promise<string>`.
+    ///
+    /// The `messages` argument is the conversation transcript **without** internal system-reminder
+    /// rows; composed reminders are request-only and are not part of stream-visible history.
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen(js_name = registerSystemReminder)]
+    pub fn register_system_reminder(&mut self, callback: Function) -> Result<(), JsValue> {
+        self.inner.register_system_reminder(move |messages| {
+            let callback = callback.clone();
+            async move {
+                let messages_js = serde_wasm_bindgen::to_value(&messages).map_err(tool_js_error)?;
+                let result = callback
+                    .call1(&JsValue::NULL, &messages_js)
+                    .map_err(provider_js_value_error)?;
+                let result = JsFuture::from(Promise::resolve(&result))
+                    .await
+                    .map_err(provider_js_value_error)?;
+                serde_wasm_bindgen::from_value::<String>(result).map_err(tool_js_error)
+            }
+        });
+
+        Ok(())
+    }
+
     /// Runs the agent streaming loop (tool round-trips when enabled) and returns all execution
     /// events as a JSON array (`kind` + `data` per item).
     #[wasm_bindgen(js_name = streamPrompt)]

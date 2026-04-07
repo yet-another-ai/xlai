@@ -310,6 +310,42 @@ describe('xlai agent api', () => {
     );
   });
 
+  it('wires registerSystemReminder on AgentSession', async () => {
+    const registerSystemReminder = vi.fn();
+    const prompt = vi.fn().mockResolvedValue({
+      message: { role: 'assistant', content: 'ok' },
+      finishReason: 'completed',
+    });
+
+    vi.spyOn(
+      wasmModule as typeof wasmModule & {
+        createAgentSession: (options: unknown) => {
+          registerTool: () => void;
+          prompt: typeof prompt;
+          registerSystemReminder: typeof registerSystemReminder;
+        };
+      },
+      'createAgentSession',
+    ).mockReturnValue({
+      registerTool: vi.fn(),
+      prompt,
+      registerSystemReminder,
+    });
+
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+
+    const session = await createAgentSession({});
+    session.registerSystemReminder(async () => 'custom reminder');
+
+    expect(registerSystemReminder).toHaveBeenCalledTimes(1);
+    const [[cb]] = registerSystemReminder.mock.calls as [
+      (messages: unknown) => Promise<unknown>,
+    ][];
+    await expect(cb([{ role: 'user', content: 'hi' }])).resolves.toBe(
+      'custom reminder',
+    );
+  });
+
   it('wires registerContextCompressor and streamPrompt on AgentSession', async () => {
     const registerContextCompressor = vi.fn();
     const streamPrompt = vi

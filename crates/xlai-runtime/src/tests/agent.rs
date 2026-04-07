@@ -98,17 +98,18 @@ async fn agent_skill_tool_uses_configured_skill_store() -> Result<(), XlaiError>
 
     let requests = lock_unpoisoned(&requests);
     assert_eq!(requests.len(), 2);
-    assert_eq!(requests[1].messages.len(), 3);
-    assert_eq!(requests[1].messages[2].tool_name.as_deref(), Some("skill"));
+    // Second model round: [user, assistant, system_reminder, tool]
+    assert_eq!(requests[1].messages.len(), 4);
+    assert_eq!(requests[1].messages[3].tool_name.as_deref(), Some("skill"));
     assert!(
-        requests[1].messages[2]
+        requests[1].messages[3]
             .content
             .text_parts_concatenated()
             .contains("Prioritize bugs, regressions, and missing tests."),
         "expected the skill tool result to include the resolved prompt fragment"
     );
     assert!(
-        requests[1].messages[2]
+        requests[1].messages[3]
             .content
             .text_parts_concatenated()
             .contains("Focus on correctness."),
@@ -372,6 +373,19 @@ fn user_message(text: &str) -> ChatMessage {
         tool_name: None,
         tool_call_id: None,
         metadata: empty_metadata(),
+    }
+}
+
+/// Simulates a leaked internal reminder row that must not appear in user-managed history.
+fn leaked_internal_system_reminder(content: &str) -> ChatMessage {
+    let mut metadata = empty_metadata();
+    metadata.insert("xlai_system_reminder".to_owned(), json!(true));
+    ChatMessage {
+        role: MessageRole::System,
+        content: ChatContent::text(content),
+        tool_name: None,
+        tool_call_id: None,
+        metadata,
     }
 }
 
@@ -681,5 +695,343 @@ async fn agent_context_compressor_skipped_when_agent_loop_disabled() -> Result<(
 
     let _ = agent_stream_prompt_final_response(&agent, "x").await?;
     assert_eq!(calls.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_system_reminder_unary_inserts_before_user() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![ChatResponse {
+            message: assistant_message("ok"),
+            tool_calls: Vec::new(),
+            usage: None,
+            finish_reason: FinishReason::Completed,
+            metadata: empty_metadata(),
+        }],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let agent = runtime
+        .agent_session()?
+        .with_system_reminder(|_msgs| async { Ok("remember: be brief".to_owned()) });
+
+    agent.prompt("hello").await?;
+
+    let reqs = lock_unpoisoned(&requests);
+    assert_eq!(reqs.len(), 1);
+    assert_eq!(reqs[0].messages.len(), 2);
+    assert_eq!(reqs[0].messages[0].role, MessageRole::System);
+    assert!(
+        reqs[0].messages[0]
+            .metadata
+            .get("xlai_system_reminder")
+            .and_then(|v| v.as_bool())
+            == Some(true),
+        "expected synthetic reminder metadata marker"
+    );
+    assert!(
+        reqs[0].messages[0]
+            .content
+            .as_single_text()
+            .is_some_and(|t| t.contains("remember: be brief")),
+        "expected reminder to include user hook text"
+    );
+    assert_eq!(reqs[0].messages[1].role, MessageRole::User);
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_system_reminder_strips_inbound_internal_rows_from_history() -> Result<(), XlaiError>
+{
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![ChatResponse {
+            message: assistant_message("ok"),
+            tool_calls: Vec::new(),
+            usage: None,
+            finish_reason: FinishReason::Completed,
+            metadata: empty_metadata(),
+        }],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let mut agent = runtime.agent_session()?;
+    agent.register_system_reminder(|msgs| async move {
+        assert_eq!(
+            msgs.len(),
+            1,
+            "callback must not see internal reminder rows"
+        );
+        assert!(
+            msgs.iter().all(|m| {
+                m.metadata
+                    .get("xlai_system_reminder")
+                    .and_then(|v| v.as_bool())
+                    != Some(true)
+            }),
+            "callback transcript must exclude internal reminders"
+        );
+        Ok("new-reminder".to_owned())
+    });
+
+    agent
+        .execute(vec![
+            user_message("hi"),
+            leaked_internal_system_reminder("leaked-secret-body"),
+        ])
+        .await?;
+
+    let reqs = lock_unpoisoned(&requests);
+    assert_eq!(reqs[0].messages.len(), 2);
+    let Some(reminder_text) = reqs[0].messages[0].content.as_single_text() else {
+        return Err(XlaiError::new(
+            ErrorKind::Provider,
+            "expected plain-text system reminder",
+        ));
+    };
+    assert!(
+        reminder_text.contains("new-reminder"),
+        "expected fresh composed reminder"
+    );
+    assert!(
+        !reminder_text.contains("leaked-secret-body"),
+        "leaked internal reminder must not be forwarded"
+    );
+    assert_eq!(reqs[0].messages[1].role, MessageRole::User);
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_system_reminder_inserts_before_non_user_tail() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![ChatResponse {
+            message: assistant_message("tail"),
+            tool_calls: Vec::new(),
+            usage: None,
+            finish_reason: FinishReason::Completed,
+            metadata: empty_metadata(),
+        }],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let agent = runtime
+        .agent_session()?
+        .with_system_reminder(|_| async { Ok("reminder-body".to_owned()) });
+
+    agent
+        .execute(vec![user_message("u"), assistant_message("a")])
+        .await?;
+
+    let reqs = lock_unpoisoned(&requests);
+    assert_eq!(reqs[0].messages.len(), 3);
+    assert_eq!(reqs[0].messages[0].role, MessageRole::User);
+    assert_eq!(reqs[0].messages[1].role, MessageRole::System);
+    assert!(
+        reqs[0].messages[1]
+            .content
+            .as_single_text()
+            .is_some_and(|t| t.contains("reminder-body")),
+        "expected reminder before non-user tail"
+    );
+    assert_eq!(reqs[0].messages[2].role, MessageRole::Assistant);
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_system_reminder_skips_when_nothing_to_add() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![ChatResponse {
+            message: assistant_message("ok"),
+            tool_calls: Vec::new(),
+            usage: None,
+            finish_reason: FinishReason::Completed,
+            metadata: empty_metadata(),
+        }],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let agent = runtime
+        .agent_session()?
+        .with_system_reminder(|_| async { Ok("  \n\t".to_owned()) });
+
+    agent.prompt("hi").await?;
+
+    let reqs = lock_unpoisoned(&requests);
+    assert_eq!(reqs[0].messages.len(), 1);
+    assert_eq!(reqs[0].messages[0].role, MessageRole::User);
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_system_reminder_stream_runs_once_per_loop_round() -> Result<(), XlaiError> {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![
+            ChatResponse {
+                message: assistant_message(""),
+                tool_calls: vec![ToolCall {
+                    id: "t1".to_owned(),
+                    tool_name: "lookup_weather".to_owned(),
+                    arguments: json!({ "city": "Paris" }),
+                }],
+                usage: None,
+                finish_reason: FinishReason::ToolCalls,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("done"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
+        ],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let calls_cb = Arc::clone(&calls);
+    let mut agent = runtime.agent_session()?.with_system_reminder(move |_msgs| {
+        let calls_cb = Arc::clone(&calls_cb);
+        async move {
+            calls_cb.fetch_add(1, Ordering::SeqCst);
+            Ok("ping".to_owned())
+        }
+    });
+    agent.register_tool(weather_tool_definition(), |arguments| async move {
+        Ok(xlai_core::ToolResult {
+            tool_name: "lookup_weather".to_owned(),
+            content: format!("weather for {}", arguments["city"].as_str().unwrap_or("?")),
+            is_error: false,
+            metadata: empty_metadata(),
+        })
+    });
+
+    agent_stream_prompt_final_response(&agent, "Paris?").await?;
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+
+    let reqs = lock_unpoisoned(&requests);
+    assert_eq!(reqs.len(), 2);
+    for r in reqs.iter() {
+        assert!(
+            r.messages.iter().any(|m| {
+                m.role == MessageRole::System
+                    && m.metadata
+                        .get("xlai_system_reminder")
+                        .and_then(|v| v.as_bool())
+                        == Some(true)
+            }),
+            "expected a system reminder on each outgoing request"
+        );
+    }
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_system_reminder_includes_available_skills_from_store() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![ChatResponse {
+            message: assistant_message("ok"),
+            tool_calls: Vec::new(),
+            usage: None,
+            finish_reason: FinishReason::Completed,
+            metadata: empty_metadata(),
+        }],
+    ));
+
+    let runtime = RuntimeBuilder::new()
+        .with_chat_model(model)
+        .with_skill_store(seed_markdown_skill_store().await?)
+        .build()?;
+    let agent = runtime.agent_session()?;
+
+    agent.prompt("use skills").await?;
+
+    let reqs = lock_unpoisoned(&requests);
+    assert_eq!(reqs[0].messages.len(), 2);
+    assert_eq!(reqs[0].messages[0].role, MessageRole::System);
+    let Some(text) = reqs[0].messages[0].content.as_single_text() else {
+        return Err(XlaiError::new(
+            ErrorKind::Provider,
+            "expected plain-text available-skills reminder",
+        ));
+    };
+    assert!(
+        text.contains("review.code"),
+        "expected available-skills reminder, got: {text:?}"
+    );
+    Ok(())
+}
+
+fn skill_tool_message(skill_id: &str) -> ChatMessage {
+    let mut metadata = empty_metadata();
+    metadata.insert("skill_id".to_owned(), json!(skill_id));
+    metadata.insert("skill_name".to_owned(), json!("Code Review"));
+    ChatMessage {
+        role: MessageRole::Tool,
+        content: ChatContent::text("resolved"),
+        tool_name: Some("skill".to_owned()),
+        tool_call_id: Some("c1".to_owned()),
+        metadata,
+    }
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_system_reminder_includes_invoked_skills_section() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![ChatResponse {
+            message: assistant_message("ok"),
+            tool_calls: Vec::new(),
+            usage: None,
+            finish_reason: FinishReason::Completed,
+            metadata: empty_metadata(),
+        }],
+    ));
+
+    let runtime = RuntimeBuilder::new()
+        .with_chat_model(model)
+        .with_skill_store(seed_markdown_skill_store().await?)
+        .build()?;
+    let agent = runtime.agent_session()?;
+
+    agent
+        .execute(vec![
+            user_message("prior"),
+            skill_tool_message("review.code"),
+        ])
+        .await?;
+
+    let reqs = lock_unpoisoned(&requests);
+    let reminder_idx = reqs[0].messages.len() - 2;
+    let Some(text) = reqs[0].messages[reminder_idx].content.as_single_text() else {
+        return Err(XlaiError::new(
+            ErrorKind::Provider,
+            "expected plain-text invoked-skills reminder",
+        ));
+    };
+    assert!(
+        text.contains("were invoked"),
+        "expected invoked-skills section, got: {text:?}"
+    );
+    assert!(text.contains("review.code"));
     Ok(())
 }

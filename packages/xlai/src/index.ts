@@ -25,6 +25,7 @@ export type {
   AgentContextCompressor,
   AgentOptions,
   AgentSessionOptions,
+  AgentSystemReminder,
   ChatExecutionEvent,
   ChatFinishReason,
   ChatContent,

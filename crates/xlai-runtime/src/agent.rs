@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 mod builtin;
 mod mcp;
+mod system_reminder;
 
 use async_stream::try_stream;
 use futures_util::StreamExt;
@@ -29,6 +30,12 @@ type ContextCompressorFn = dyn Fn(
     Vec<ChatMessage>,
     Option<u32>,
 ) -> BoxFuture<'static, Result<Vec<ChatMessage>, XlaiError>>;
+
+#[cfg(not(target_arch = "wasm32"))]
+type SystemReminderFn =
+    dyn Fn(Vec<ChatMessage>) -> BoxFuture<'static, Result<String, XlaiError>> + Send + Sync;
+#[cfg(target_arch = "wasm32")]
+type SystemReminderFn = dyn Fn(Vec<ChatMessage>) -> BoxFuture<'static, Result<String, XlaiError>>;
 
 /// Runs before each model call in the streaming agent loop (see [`Agent::with_context_compressor`]).
 async fn prepare_messages_for_agent_round(
@@ -60,12 +67,21 @@ async fn prepare_messages_for_agent_round(
 ///
 /// Optionally, [`Self::with_context_compressor`] can rewrite the message list before each looped
 /// model call (streaming + agent loop only).
+///
+/// [`Self::register_system_reminder`] injects a composed system reminder before every model call
+/// (unary and streaming, including each agent-loop round), placed immediately before the last
+/// message in the outgoing request. Reminder rows are **internal**: they are not stored in the
+/// agent loop’s growing transcript, are omitted from [`Self::stream`] yields, and any prior
+/// reminder-shaped messages are stripped from inbound history before each request so user-managed
+/// chat history never accumulates them.
 #[derive(Clone)]
 pub struct Agent {
+    runtime: Arc<XlaiRuntime>,
     chat: Chat,
     agent_loop_enabled: bool,
     max_tool_round_trips: usize,
     context_compressor: Option<Arc<ContextCompressorFn>>,
+    system_reminder: Option<Arc<SystemReminderFn>>,
 }
 
 impl Agent {
@@ -76,12 +92,14 @@ impl Agent {
     /// Returns an error if a built-in tool cannot be configured.
     pub fn new(runtime: Arc<XlaiRuntime>) -> Result<Self, XlaiError> {
         let mut chat = Chat::new(runtime.clone());
-        builtin::register_builtin_tools(&mut chat, runtime)?;
+        builtin::register_builtin_tools(&mut chat, runtime.clone())?;
         Ok(Self {
+            runtime,
             chat,
             agent_loop_enabled: true,
             max_tool_round_trips: 8,
             context_compressor: None,
+            system_reminder: None,
         })
     }
 
@@ -217,6 +235,42 @@ impl Agent {
         self
     }
 
+    /// Registers an async hook invoked before **every** model call ([`Self::execute`], [`Self::prompt`],
+    /// and [`Self::stream`] / agent-loop rounds).
+    ///
+    /// The callback receives the current **transcript** for that request (never including internal
+    /// reminder rows) and returns additional reminder text. The runtime merges that string with
+    /// built-in reminder sections (available and invoked skills when applicable), then inserts one
+    /// ephemeral `system` message immediately before the last message in the outgoing list (or
+    /// appends if the list is empty). That message is not part of persisted conversation history.
+    ///
+    /// If the hook returns an empty or whitespace-only string, no user fragment is added; built-in
+    /// sections may still produce a reminder. If everything is empty after composition, no extra
+    /// message is inserted.
+    pub fn register_system_reminder<F, Fut>(&mut self, f: F) -> &mut Self
+    where
+        F: Fn(Vec<ChatMessage>) -> Fut + RuntimeBound + 'static,
+        Fut: Future<Output = Result<String, XlaiError>> + MaybeSend + 'static,
+    {
+        self.system_reminder = Some(Arc::new(
+            move |messages| -> BoxFuture<'static, Result<String, XlaiError>> {
+                Box::pin(f(messages))
+            },
+        ));
+        self
+    }
+
+    /// See [`Self::register_system_reminder`].
+    #[must_use]
+    pub fn with_system_reminder<F, Fut>(mut self, f: F) -> Self
+    where
+        F: Fn(Vec<ChatMessage>) -> Fut + RuntimeBound + 'static,
+        Fut: Future<Output = Result<String, XlaiError>> + MaybeSend + 'static,
+    {
+        self.register_system_reminder(f);
+        self
+    }
+
     #[must_use]
     pub fn mcp_registry(&mut self) -> McpRegistry<'_> {
         McpRegistry::new(&mut self.chat)
@@ -254,6 +308,41 @@ impl Agent {
     #[must_use]
     pub fn into_chat(self) -> Chat {
         self.chat
+    }
+
+    async fn prepare_outgoing_with_reminder(
+        &self,
+        messages: Vec<ChatMessage>,
+    ) -> Result<Vec<ChatMessage>, XlaiError> {
+        let messages = system_reminder::strip_internal_reminders(messages);
+
+        let user_fragment = match &self.system_reminder {
+            Some(cb) => {
+                let s = (cb)(messages.clone()).await?;
+                let t = s.trim();
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.to_owned())
+                }
+            }
+            None => None,
+        };
+
+        let body = system_reminder::compose_system_reminder_body(
+            self.runtime.as_ref(),
+            &messages,
+            user_fragment.as_deref(),
+        )
+        .await?;
+
+        let Some(body) = body else {
+            return Ok(messages);
+        };
+
+        Ok(system_reminder::insert_system_reminder_near_tail(
+            messages, body,
+        ))
     }
 
     /// Sends a single user prompt (one model call; no automatic tool execution).
@@ -302,6 +391,7 @@ impl Agent {
     ///
     /// Returns an error if the configured model request fails.
     pub async fn execute(&self, messages: Vec<ChatMessage>) -> Result<ChatResponse, XlaiError> {
+        let messages = self.prepare_outgoing_with_reminder(messages).await?;
         self.chat.execute(messages).await
     }
 
@@ -352,19 +442,29 @@ impl Agent {
         &self,
         messages: Vec<ChatMessage>,
     ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
-        if !self.agent_loop_enabled {
-            return self.chat.stream(messages);
+        let agent = self.clone();
+
+        if !agent.agent_loop_enabled {
+            return Box::pin(try_stream! {
+                let to_send = agent.prepare_outgoing_with_reminder(messages).await?;
+                let mut inner = agent.chat.stream(to_send);
+                while let Some(item) = inner.next().await {
+                    let item = item?;
+                    yield item;
+                }
+            });
         }
 
-        let chat = self.chat.clone();
-        let max = self.max_tool_round_trips;
-        let compressor = self.context_compressor.clone();
+        let chat = agent.chat.clone();
+        let max = agent.max_tool_round_trips;
+        let compressor = agent.context_compressor.clone();
 
         Box::pin(try_stream! {
             let mut messages = messages;
             for _ in 0..max {
-                let to_send =
+                let mut to_send =
                     prepare_messages_for_agent_round(&chat, &messages, &compressor).await?;
+                to_send = agent.prepare_outgoing_with_reminder(to_send).await?;
 
                 let mut final_response: Option<ChatResponse> = None;
                 let mut inner = chat.stream(to_send);
