@@ -84,6 +84,8 @@ fn json_str(v: &Value) -> Option<&str> {
 
 /// Build a QTS [`SynthesizeRequest`] from an xlai [`TtsRequest`].
 ///
+/// For 12Hz pipelining, prefer `xlai.qts.vocoder_chunk_size` = [`crate::QTS12HZ_RECOMMENDED_VOCODER_CHUNK_FRAMES`] when setting a non-zero chunk size.
+///
 /// # Errors
 ///
 /// Returns [`XlaiError`] if required metadata is invalid.

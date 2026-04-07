@@ -8,3 +8,4 @@ pub mod speaker_encoder;
 pub mod tokenizer;
 pub mod tts_transformer;
 pub mod vocoder;
+pub mod vocoder_streaming;

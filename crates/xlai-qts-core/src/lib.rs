@@ -43,6 +43,7 @@ pub use pipeline::tts_transformer::{
 pub use pipeline::vocoder::{
     Vocoder, VocoderConfig, VocoderExecutionProvider, VocoderGraphTemplate,
 };
+pub use pipeline::vocoder_streaming::QTS12HZ_RECOMMENDED_VOCODER_CHUNK_FRAMES;
 pub use synthesis_profile::SynthesisStageTimings;
 pub use voice_clone_builder::{
     VoiceCloneMode, build_icl_voice_clone_prompt, build_xvector_voice_clone_prompt,
@@ -625,11 +626,9 @@ impl Qwen3TtsEngine {
     /// parallel on CPU. When the transformer finishes the last chunk is flushed and
     /// all audio is concatenated.
     ///
-    /// To avoid audible clicks at chunk boundaries the vocoder thread uses
-    /// **overlap-and-add**: each chunk (after the first) is decoded with a few
-    /// extra context frames from the previous chunk prepended, then the
-    /// overlapping audio region is linearly crossfaded with the previous
-    /// chunk's tail.
+    /// Chunk boundaries use [`crate::pipeline::vocoder_streaming::OverlapAddChunkDecoder`]:
+    /// optional prefix frames are sent as `prefix_warmup_only` chunks (overlap state only, no output PCM).
+    /// Overlap width defaults to **1** codec frame; set `QWEN3_TTS_VOCODER_OVERLAP_FRAMES` for a stronger fallback (e.g. `3`).
     fn synthesize_pipelined(
         &self,
         req: &SynthesizeRequest,
@@ -648,91 +647,24 @@ impl Qwen3TtsEngine {
 
         let (chunk_tx, chunk_rx) = mpsc::sync_channel::<VocoderChunk>(2);
 
-        let prompt_chunk = if prepared.prefix_frame_count > 0 {
-            let codes = prepared
-                .prompt_frames
-                .iter()
-                .flat_map(|f| f.iter().copied())
-                .collect::<Vec<_>>();
-            Some(VocoderChunk {
-                codes,
-                n_frames: prepared.prefix_frame_count,
-            })
-        } else {
-            None
-        };
-
         let t_pipeline_start = Instant::now();
 
         std::thread::scope(|s| {
             let vocoder = &self.vocoder;
-            let n_codebooks = vocoder.config().n_codebooks as usize;
 
             let vocoder_handle = s.spawn(
                 move || -> Result<(Vec<f32>, std::time::Duration), Qwen3TtsError> {
-                    const OVERLAP_FRAMES: usize = 3;
-                    let standard_frames = OVERLAP_FRAMES + chunk_size;
-
                     let t_voc_start = Instant::now();
                     let mut all_pcm = Vec::<f32>::new();
-                    let mut prev_codes: Vec<i32> = Vec::new();
-                    let mut prev_n_frames: usize = 0;
-                    let mut template: Option<VocoderGraphTemplate> = None;
-
-                    if let Some(prompt_chunk) = prompt_chunk {
-                        let audio = vocoder.decode(
-                            &prompt_chunk.codes,
-                            prompt_chunk.n_frames,
+                    let mut decoder =
+                        crate::pipeline::vocoder_streaming::OverlapAddChunkDecoder::new(
+                            vocoder,
+                            chunk_size,
                             vocoder_thread_count,
-                        )?;
-                        all_pcm.extend_from_slice(&audio);
-                        prev_n_frames = prompt_chunk.n_frames;
-                        prev_codes = prompt_chunk.codes;
-                    }
+                        );
 
                     while let Ok(chunk) = chunk_rx.recv() {
-                        let ctx_frames = OVERLAP_FRAMES.min(prev_n_frames);
-
-                        let mut combined_buf = Vec::new();
-                        let (codes_slice, decode_frames) = if ctx_frames > 0 {
-                            combined_buf.reserve(ctx_frames * n_codebooks + chunk.codes.len());
-                            let ctx_start = prev_codes.len() - ctx_frames * n_codebooks;
-                            combined_buf.extend_from_slice(&prev_codes[ctx_start..]);
-                            combined_buf.extend_from_slice(&chunk.codes);
-                            (combined_buf.as_slice(), ctx_frames + chunk.n_frames)
-                        } else {
-                            (chunk.codes.as_slice(), chunk.n_frames)
-                        };
-
-                        let audio = if decode_frames == standard_frames {
-                            if template.is_none() {
-                                template = Some(vocoder.build_decode_template(standard_frames)?);
-                            }
-                            vocoder.decode_with_template(
-                                template.as_mut().unwrap(),
-                                codes_slice,
-                                vocoder_thread_count,
-                            )?
-                        } else {
-                            vocoder.decode(codes_slice, decode_frames, vocoder_thread_count)?
-                        };
-
-                        if ctx_frames > 0 && !all_pcm.is_empty() {
-                            let total_frames = ctx_frames + chunk.n_frames;
-                            let overlap_samples =
-                                (audio.len() * ctx_frames / total_frames).min(all_pcm.len());
-                            let start = all_pcm.len() - overlap_samples;
-                            for i in 0..overlap_samples {
-                                let t = (i as f32 + 0.5) / overlap_samples as f32;
-                                all_pcm[start + i] = all_pcm[start + i] * (1.0 - t) + audio[i] * t;
-                            }
-                            all_pcm.extend_from_slice(&audio[overlap_samples..]);
-                        } else {
-                            all_pcm.extend_from_slice(&audio);
-                        }
-
-                        prev_n_frames = chunk.n_frames;
-                        prev_codes = chunk.codes;
+                        decoder.process_generated_chunk(vocoder, &chunk, &mut all_pcm)?;
                     }
 
                     Ok((all_pcm, t_voc_start.elapsed()))
@@ -769,18 +701,8 @@ impl Qwen3TtsEngine {
             let pipeline_wall_clock = t_pipeline_start.elapsed();
 
             let t_trim = Instant::now();
-            let pcm_f32 = if prepared.prefix_frame_count == 0 || pcm_all.is_empty() {
-                pcm_all
-            } else {
-                let total_frames = prepared.prefix_frame_count + generated_frames;
-                let cut = prepared
-                    .prefix_frame_count
-                    .saturating_mul(pcm_all.len())
-                    .checked_div(total_frames)
-                    .unwrap_or(0)
-                    .min(pcm_all.len());
-                pcm_all[cut..].to_vec()
-            };
+            // Prefix audio is not accumulated when using prefix warmup chunks; output is generated-only.
+            let pcm_f32 = pcm_all;
             let post = t_trim.elapsed();
 
             let sample_rate_hz = self.vocoder.config().sample_rate as u32;
@@ -836,66 +758,31 @@ impl Qwen3TtsEngine {
 
         std::thread::scope(|s| {
             let vocoder = &self.vocoder;
-            let n_codebooks = vocoder.config().n_codebooks as usize;
 
             let vocoder_handle = s.spawn(
                 move || -> Result<(usize, std::time::Duration), Qwen3TtsError> {
-                    const OVERLAP_FRAMES: usize = 1;
-                    let standard_frames = OVERLAP_FRAMES + chunk_size;
                     let t_voc_start = Instant::now();
                     let mut total_samples = 0usize;
                     let mut all_pcm = Vec::<f32>::new();
                     let mut emitted_samples = 0usize;
-                    let mut prev_codes: Vec<i32> = Vec::new();
-                    let mut prev_n_frames: usize = 0;
-                    let mut template: Option<VocoderGraphTemplate> = None;
+                    let mut decoder =
+                        crate::pipeline::vocoder_streaming::OverlapAddChunkDecoder::new(
+                            vocoder,
+                            chunk_size,
+                            vocoder_thread_count,
+                        );
+                    let overlap_frames = decoder.overlap_frames();
 
                     while let Ok(chunk) = chunk_rx.recv() {
-                        let ctx_frames = OVERLAP_FRAMES.min(prev_n_frames);
+                        let len_before = all_pcm.len();
+                        decoder.process_generated_chunk(vocoder, &chunk, &mut all_pcm)?;
+                        if chunk.prefix_warmup_only {
+                            continue;
+                        }
 
-                        let mut combined_buf = Vec::new();
-                        let (codes_slice, decode_frames) = if ctx_frames > 0 {
-                            combined_buf.reserve(ctx_frames * n_codebooks + chunk.codes.len());
-                            let ctx_start = prev_codes.len() - ctx_frames * n_codebooks;
-                            combined_buf.extend_from_slice(&prev_codes[ctx_start..]);
-                            combined_buf.extend_from_slice(&chunk.codes);
-                            (combined_buf.as_slice(), ctx_frames + chunk.n_frames)
-                        } else {
-                            (chunk.codes.as_slice(), chunk.n_frames)
-                        };
+                        let current_chunk_samples = all_pcm.len().saturating_sub(len_before);
 
-                        let audio = if decode_frames == standard_frames {
-                            if template.is_none() {
-                                template = Some(vocoder.build_decode_template(standard_frames)?);
-                            }
-                            vocoder.decode_with_template(
-                                template.as_mut().unwrap(),
-                                codes_slice,
-                                vocoder_thread_count,
-                            )?
-                        } else {
-                            vocoder.decode(codes_slice, decode_frames, vocoder_thread_count)?
-                        };
-
-                        let current_chunk_samples = if ctx_frames > 0 && !all_pcm.is_empty() {
-                            let total_frames = ctx_frames + chunk.n_frames;
-                            let overlap_samples =
-                                (audio.len() * ctx_frames / total_frames).min(all_pcm.len());
-                            let start = all_pcm.len() - overlap_samples;
-                            for i in 0..overlap_samples {
-                                let t = (i as f32 + 0.5) / overlap_samples as f32;
-                                all_pcm[start + i] = all_pcm[start + i] * (1.0 - t) + audio[i] * t;
-                            }
-                            let appended = audio.len().saturating_sub(overlap_samples);
-                            all_pcm.extend_from_slice(&audio[overlap_samples..]);
-                            appended
-                        } else {
-                            let appended = audio.len();
-                            all_pcm.extend_from_slice(&audio);
-                            appended
-                        };
-
-                        let hold_back_frames = OVERLAP_FRAMES.min(chunk.n_frames);
+                        let hold_back_frames = overlap_frames.min(chunk.n_frames);
                         let hold_back_samples = if chunk.n_frames == 0 {
                             0
                         } else {
@@ -913,9 +800,6 @@ impl Qwen3TtsEngine {
                             sink.push_pcm_chunk(finalized)?;
                             emitted_samples = finalized_end;
                         }
-
-                        prev_n_frames = chunk.n_frames;
-                        prev_codes = chunk.codes;
                     }
 
                     if all_pcm.len() > emitted_samples {
@@ -1037,5 +921,10 @@ mod tests {
             TalkerKvMode::TurboQuant
         );
         assert_eq!(TalkerKvMode::parse("q8").unwrap(), TalkerKvMode::TurboQuant);
+    }
+
+    #[test]
+    fn recommended_vocoder_chunk_matches_paper_packet() {
+        assert_eq!(QTS12HZ_RECOMMENDED_VOCODER_CHUNK_FRAMES, 4);
     }
 }

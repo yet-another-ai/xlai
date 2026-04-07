@@ -1,4 +1,7 @@
 //! Wall-clock stage timings for one synthesis pass (tokenizer / transformer / vocoder, etc.).
+//!
+//! Pipelined vocoder overlap (codec frames) follows env `QWEN3_TTS_VOCODER_OVERLAP_FRAMES` (default `1`);
+//! see `docs/qts-vocoder-streaming.md`.
 
 use std::fmt::Write as _;
 use std::time::Duration;
