@@ -302,7 +302,14 @@ fn chat_request_deserializes_without_retry_policy() {
         "temperature": null,
         "max_output_tokens": null
     });
-    let req: ChatRequest = serde_json::from_value(v).expect("deserialize");
+    let parsed = serde_json::from_value::<ChatRequest>(v);
+    assert!(
+        parsed.is_ok(),
+        "deserialize ChatRequest without retry_policy"
+    );
+    let Ok(req) = parsed else {
+        return;
+    };
     assert!(req.retry_policy.is_none());
 }
 
@@ -323,7 +330,18 @@ fn chat_request_round_trips_retry_policy() {
                 .with_initial_backoff_ms(100),
         ),
     };
-    let v = serde_json::to_value(&req).expect("serialize");
-    let back: ChatRequest = serde_json::from_value(v).expect("deserialize");
+    let serialized = serde_json::to_value(&req);
+    assert!(
+        serialized.is_ok(),
+        "serialize ChatRequest with retry_policy"
+    );
+    let Ok(v) = serialized else {
+        return;
+    };
+    let parsed = serde_json::from_value::<ChatRequest>(v);
+    assert!(parsed.is_ok(), "deserialize ChatRequest with retry_policy");
+    let Ok(back) = parsed else {
+        return;
+    };
     assert_eq!(back, req);
 }
