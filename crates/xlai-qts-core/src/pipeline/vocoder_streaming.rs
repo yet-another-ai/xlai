@@ -4,9 +4,9 @@
 //! a small temporal overlap between chunks. See [`QTS12HZ_RECOMMENDED_VOCODER_CHUNK_FRAMES`] and
 //! `docs/qts-vocoder-streaming.md`.
 
+use crate::Qwen3TtsError;
 use crate::pipeline::tts_transformer::VocoderChunk;
 use crate::pipeline::vocoder::{Vocoder, VocoderGraphTemplate};
-use crate::Qwen3TtsError;
 
 /// Recommended vocoder packet size in codec frames for 12.5 Hz streaming (matches Qwen3-TTS paper: 4 tokens ≈ 320 ms).
 pub const QTS12HZ_RECOMMENDED_VOCODER_CHUNK_FRAMES: usize = 4;
@@ -40,11 +40,7 @@ impl OverlapAddChunkDecoder {
     }
 
     #[must_use]
-    pub fn new(
-        vocoder: &Vocoder,
-        chunk_size: usize,
-        vocoder_thread_count: usize,
-    ) -> Self {
+    pub fn new(vocoder: &Vocoder, chunk_size: usize, vocoder_thread_count: usize) -> Self {
         let overlap_frames = overlap_frames_for_qts12hz();
         let chunk_size = chunk_size.max(1);
         let standard_decode_frames = overlap_frames.saturating_add(chunk_size).max(1);
@@ -89,9 +85,11 @@ impl OverlapAddChunkDecoder {
             let ctx_start = self.prev_codes.len() - ctx_frames * self.n_codebooks;
             self.combined_scratch
                 .extend_from_slice(&self.prev_codes[ctx_start..]);
-            self.combined_scratch
-                .extend_from_slice(&chunk.codes);
-            (self.combined_scratch.as_slice(), ctx_frames + chunk.n_frames)
+            self.combined_scratch.extend_from_slice(&chunk.codes);
+            (
+                self.combined_scratch.as_slice(),
+                ctx_frames + chunk.n_frames,
+            )
         } else {
             (chunk.codes.as_slice(), chunk.n_frames)
         };
@@ -143,5 +141,4 @@ mod tests {
     fn recommended_chunk_is_four() {
         assert_eq!(QTS12HZ_RECOMMENDED_VOCODER_CHUNK_FRAMES, 4);
     }
-
 }
