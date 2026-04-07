@@ -4677,7 +4677,7 @@ dependencies = [
  "tokio",
  "tracing",
  "xlai-core",
- "xlai-runtime",
+ "xlai-local-common",
  "xlai-sys",
 ]
 
@@ -4710,7 +4710,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "xlai-core",
- "xlai-runtime",
+ "xlai-local-common",
 ]
 
 [[package]]
@@ -4727,10 +4727,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "xlai-facade"
+version = "0.1.0"
+dependencies = [
+ "xlai-backend-llama-cpp",
+ "xlai-backend-openai",
+ "xlai-backend-transformersjs",
+ "xlai-core",
+ "xlai-qts-core",
+ "xlai-runtime",
+]
+
+[[package]]
 name = "xlai-ffi"
 version = "0.1.0"
 dependencies = [
  "xlai-native",
+]
+
+[[package]]
+name = "xlai-local-common"
+version = "0.1.0"
+dependencies = [
+ "jsonschema",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "tera",
+ "xlai-core",
 ]
 
 [[package]]
@@ -4739,12 +4763,7 @@ version = "0.1.0"
 dependencies = [
  "tokio",
  "tracing-subscriber",
- "xlai-backend-llama-cpp",
- "xlai-backend-openai",
- "xlai-backend-transformersjs",
- "xlai-core",
- "xlai-qts-core",
- "xlai-runtime",
+ "xlai-facade",
 ]
 
 [[package]]
@@ -4783,8 +4802,17 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "xlai-core",
+ "xlai-qts-manifest",
  "xlai-runtime",
  "xlai-sys",
+]
+
+[[package]]
+name = "xlai-qts-manifest"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -4796,13 +4824,13 @@ dependencies = [
  "futures-util",
  "getrandom 0.2.17",
  "gray_matter",
- "jsonschema",
  "rust-embed",
  "serde",
  "serde_json",
  "tera",
  "tokio",
  "xlai-core",
+ "xlai-local-common",
 ]
 
 [[package]]
@@ -4832,6 +4860,8 @@ dependencies = [
  "xlai-backend-openai",
  "xlai-backend-transformersjs",
  "xlai-core",
+ "xlai-facade",
+ "xlai-qts-manifest",
  "xlai-runtime",
 ]
 

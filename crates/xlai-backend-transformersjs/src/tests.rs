@@ -8,7 +8,7 @@ use xlai_core::{
 
 use crate::TransformersJsChatModel;
 use crate::TransformersJsConfig;
-use xlai_runtime::local_common::{
+use xlai_local_common::{
     LocalChatPrepareOptions, PreparedLocalChatRequest, parse_tool_response, tool_response_schema,
     validate_structured_output,
 };
@@ -101,7 +101,7 @@ fn tool_envelope_roundtrip() {
     .to_string();
 
     match parse_tool_response(&raw, &tools).expect("parse") {
-        xlai_runtime::local_common::ToolResponse::ToolCalls(calls) => {
+        xlai_local_common::ToolResponse::ToolCalls(calls) => {
             assert_eq!(calls.len(), 1);
             assert_eq!(calls[0].tool_name, "get_weather");
         }

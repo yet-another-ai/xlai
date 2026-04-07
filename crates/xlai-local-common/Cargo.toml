@@ -1,0 +1,20 @@
+[package]
+name = "xlai-local-common"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared prompts, request prep, and tool JSON for local (non-API) chat backends"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+jsonschema.workspace = true
+rust-embed.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tera.workspace = true
+xlai-core.workspace = true

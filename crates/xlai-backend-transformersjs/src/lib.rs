@@ -52,7 +52,7 @@ mod wasm {
         BoxFuture, ChatContent, ChatMessage, ChatModel, ChatRequest, ChatResponse, ErrorKind,
         FinishReason, MessageRole, StructuredOutputFormat, TokenUsage, XlaiError,
     };
-    use xlai_runtime::local_common::{
+    use xlai_local_common::{
         LocalChatPrepareOptions, PreparedLocalChatRequest, ToolResponse, parse_tool_response,
         prompt_messages_with_constraints, render_manual_prompt, tool_response_schema,
         validate_structured_output,

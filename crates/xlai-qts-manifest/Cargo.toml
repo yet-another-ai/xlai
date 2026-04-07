@@ -1,0 +1,16 @@
+[package]
+name = "xlai-qts-manifest"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Serde types for QTS browser model manifests and capability snapshots (no GGML/ORT)"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+thiserror.workspace = true

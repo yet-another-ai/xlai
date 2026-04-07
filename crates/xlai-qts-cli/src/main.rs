@@ -1,3 +1,11 @@
+//! `xlai-qts` CLI: native Qwen3 TTS tooling.
+//!
+//! ## Execution modes
+//! - **Default synthesis** (`synthesize` without voice-clone flags): [`QtsTtsModel`] behind
+//!   [`xlai_runtime::RuntimeBuilder`] so output matches the unified `TtsRequest` / `TtsResponse` API.
+//! - **Voice clone / profiling** (`--voice-clone-prompt`, `--ref-audio`, or `profile`): uses
+//!   [`Qwen3TtsEngine`] directly for lower-level control and stage timings.
+
 #![allow(clippy::expect_used)]
 #![allow(clippy::unwrap_used)]
 

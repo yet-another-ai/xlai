@@ -1,6 +1,6 @@
 //! Qwen3 TTS (GGUF + GGML) — native inference library.
 //!
-//! The [`browser`] module holds serde types for WASM manifests (same source as `xlai-wasm` via `include!`).
+//! The [`browser`] module re-exports serde manifest types from `xlai-qts-manifest` (shared with `xlai-wasm`).
 #![allow(clippy::expect_used)]
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::panic)]
@@ -15,10 +15,7 @@ pub const SAMPLE_RATE_HZ: u32 = 24_000;
 
 mod error;
 pub mod browser {
-    include!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/browser_include.rs"
-    ));
+    pub use xlai_qts_manifest::*;
 }
 mod ggml;
 mod model;

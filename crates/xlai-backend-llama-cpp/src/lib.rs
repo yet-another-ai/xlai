@@ -18,7 +18,7 @@ mod tests;
 
 use prompt::{render_prompt, validate_structured_output};
 use request::{PreparedRequest, prepared_from_core_request, validate_prepared_for_llama};
-use xlai_runtime::local_common::{ToolResponse, parse_tool_response, tool_response_schema};
+use xlai_local_common::{ToolResponse, parse_tool_response, tool_response_schema};
 
 #[derive(Clone, Debug)]
 pub struct LlamaCppConfig {

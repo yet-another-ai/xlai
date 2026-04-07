@@ -1,18 +1,17 @@
 //! WebAssembly bindings for xlai (OpenAI-compatible chat, optional transformers.js).
+//!
+//! Public types match [`xlai_facade`] / [`xlai_native`]; internal modules also use `xlai_core` / `xlai_runtime` directly.
 
-pub use xlai_backend_openai::{
-    OpenAiChatModel, OpenAiConfig, OpenAiTranscriptionModel, OpenAiTtsModel,
+pub use xlai_facade::builder;
+pub use xlai_facade::core;
+pub use xlai_facade::{
+    Agent, Chat, ChatExecutionEvent, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath,
+    McpRegistry, MemoryFileSystem, OpenAiChatModel, OpenAiConfig, OpenAiTranscriptionModel,
+    OpenAiTtsModel, ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode, WritableFileSystem,
+    XlaiRuntime,
 };
 #[cfg(target_arch = "wasm32")]
-pub use xlai_backend_transformersjs::{
-    TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
-};
-pub use xlai_core as core;
-pub use xlai_runtime::{
-    Agent, Chat, ChatExecutionEvent, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath,
-    McpRegistry, MemoryFileSystem, ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode,
-    WritableFileSystem, XlaiRuntime,
-};
+pub use xlai_facade::{TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig};
 
 mod agent_session;
 mod api;
@@ -54,11 +53,6 @@ pub use chat_session::WasmChatSession;
 pub use memory_fs::WasmMemoryFileSystem;
 #[cfg(feature = "qts")]
 pub use tts_runtime::{WasmLocalTtsRuntime, create_local_tts_runtime};
-
-#[must_use]
-pub fn builder() -> RuntimeBuilder {
-    RuntimeBuilder::new()
-}
 
 #[cfg(test)]
 mod tests {

@@ -1,12 +1,12 @@
 use xlai_core::{ChatRequest, XlaiError};
 
 use crate::LlamaCppConfig;
-use xlai_runtime::local_common::{LocalChatPrepareOptions, PreparedLocalChatRequest};
+use xlai_local_common::{LocalChatPrepareOptions, PreparedLocalChatRequest};
 
 pub(crate) type PreparedRequest = PreparedLocalChatRequest;
 
 #[cfg(test)]
-pub(crate) use xlai_runtime::local_common::{PromptMessage, PromptRole, extract_text_content};
+pub(crate) use xlai_local_common::{PromptMessage, PromptRole, extract_text_content};
 
 pub(crate) fn prepared_from_core_request(
     config: &LlamaCppConfig,

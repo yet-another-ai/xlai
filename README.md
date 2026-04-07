@@ -30,10 +30,13 @@ xlai/
 │   ├── xlai-backend-openai/
 │   ├── xlai-backend-transformersjs/
 │   ├── xlai-core/
+│   ├── xlai-facade/
 │   ├── xlai-ffi/
+│   ├── xlai-local-common/
 │   ├── xlai-native/
 │   ├── xlai-qts-cli/
 │   ├── xlai-qts-core/
+│   ├── xlai-qts-manifest/
 │   ├── xlai-runtime/
 │   ├── xlai-sys/
 │   └── xlai-wasm/
@@ -42,7 +45,7 @@ xlai/
 └── .github/workflows/
 ```
 
-For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). For publish vs internal crates, see [docs/crates-taxonomy.md](docs/crates-taxonomy.md).
 
 ### Crates And Packages
 
@@ -50,10 +53,14 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md).
   Shared domain types and traits for chat, tools, embeddings, knowledge, and vector search.
 - `crates/xlai-ffi`
   Native C ABI facade crate for future FFI integrations.
+- `crates/xlai-local-common`
+  Local-backend prompt prep and tool JSON envelope; depended on by llama.cpp / transformers.js backends. Still exposed as `xlai_runtime::local_common` for compatibility.
 - `crates/xlai-runtime`
-  Runtime builder, chat session API, streaming, and tool-calling orchestration. Local-backend helpers (prompts, tool JSON) live under `xlai_runtime::local_common`.
+  Runtime builder, chat session API, streaming, and tool-calling orchestration.
+- `crates/xlai-facade`
+  Internal shared re-exports for native and wasm facades (OpenAI, transformers.js, optional llama + native QTS).
 - `crates/xlai-native`
-  Native Rust-facing facade crate that re-exports the runtime API.
+  Native Rust-facing facade crate (thin re-export of `xlai-facade`).
 - `crates/xlai-wasm`
   Browser-facing `wasm-bindgen` facade crate for web integration. Default Cargo feature `qts` enables local QTS entrypoints (`qtsBrowserTts`, manifest validation); the in-browser engine is still a stub until GGML/ORT WASM work lands (see `docs/qts-wasm-browser-runtime.md`).
 - `crates/xlai-backend-llama-cpp`
@@ -66,8 +73,10 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md).
   OpenAI-compatible backend implementation using `reqwest`.
 - `crates/xlai-backend-transformersjs`
   Browser chat backend that delegates generation to a JavaScript adapter (WASM).
+- `crates/xlai-qts-manifest`
+  Serde types for browser QTS model manifests and capability JSON (no GGML/ORT); used by `xlai-wasm` (feature `qts`) and re-exported as `xlai_qts_core::browser`.
 - `crates/xlai-qts-core`
-  Qwen3 TTS engine; links standalone `ggml` through `xlai-sys` (`qts-ggml`). Exposes native `TtsModel` (`QtsTtsModel`, WAV output; tuning via `TtsRequest` metadata `xlai.qts.*`). **`VoiceSpec::Clone`** uses the first reference sample (inline WAV only): x-vector and ICL prompts, with optional `xlai.qts.voice_clone_mode` (`xvector` \| `icl`). ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts-export-and-hf-publish.md`). Pipelined vocoder chunking and overlap are documented in `docs/qts-vocoder-streaming.md`. Module `xlai_qts_core::browser` holds serde manifest types shared with `xlai-wasm` via `browser_include.rs`.
+  Qwen3 TTS engine; links standalone `ggml` through `xlai-sys` (`qts-ggml`). Exposes native `TtsModel` (`QtsTtsModel`, WAV output; tuning via `TtsRequest` metadata `xlai.qts.*`). **`VoiceSpec::Clone`** uses the first reference sample (inline WAV only): x-vector and ICL prompts, with optional `xlai.qts.voice_clone_mode` (`xvector` \| `icl`). ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts-export-and-hf-publish.md`). Pipelined vocoder chunking and overlap are documented in `docs/qts-vocoder-streaming.md`. `xlai_qts_core::browser` re-exports `xlai-qts-manifest`.
 - `crates/xlai-qts-cli`
   Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without voice-clone flags, `synthesize` uses `xlai-runtime` + `xlai-qts-core` (`QtsTtsModel`). With `--voice-clone-prompt` or `--ref-audio`, it uses the direct engine path. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
 

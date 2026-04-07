@@ -62,56 +62,11 @@ jobs:
           if ($LASTEXITCODE -ge 8) { exit $LASTEXITCODE }
           $global:LASTEXITCODE = 0
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Run sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust toolchain and native dependencies
+        uses: ./.github/actions/setup-xlai-rust-native
         with:
-          workspaces: ${{ runner.os == 'Windows' && 'C:/w -> target' || '' }}
-
-      - name: Cache Windows vcpkg OpenBLAS
-        if: runner.os == 'Windows'
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.VCPKG_ROOT }}
-          key: vcpkg-openblas-${{ runner.os }}-${{ env.VCPKG_OPENBLAS_TRIPLET }}-v1
-
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libopenblas-dev \
-            libasound2-dev
-
-      - name: Install Windows prerequisites
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $vcpkgRoot = $env:VCPKG_ROOT
-
-          if (-not (Test-Path "$vcpkgRoot\vcpkg.exe")) {
-            if (-not (Test-Path $vcpkgRoot)) {
-              git clone https://github.com/microsoft/vcpkg $vcpkgRoot
-            }
-            & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
-          }
-
-          $env:VCPKG_INSTALLATION_ROOT = $vcpkgRoot
-          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_INSTALLATION_ROOT=$vcpkgRoot"
-          & "$vcpkgRoot\vcpkg.exe" install "openblas:$env:VCPKG_OPENBLAS_TRIPLET"
-
-          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake"
-          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_TARGET_TRIPLET=$env:VCPKG_OPENBLAS_TRIPLET"
-
-      - name: Install macOS prerequisites
-        if: runner.os == 'macOS'
-        run: |
-          brew install shaderc
+          rust-cache-shared-key: e2e-rust
+          rust-cache-workspaces: ${{ runner.os == 'Windows' && 'C:/w -> target' || '' }}
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -158,7 +113,7 @@ jobs:
           XLAI_QTS_MODEL_DIR: ${{ runner.os == 'Windows' && format('C:/w/{0}', env.QTS_FIXTURE_PATH) || format('{0}/{1}', github.workspace, env.QTS_FIXTURE_PATH) }}
           XLAI_QTS_REF_AUDIO_WAV: ${{ runner.os == 'Windows' && format('C:/w/{0}', env.ASR_FIXTURE_WAV_PATH) || format('{0}/{1}', github.workspace, env.ASR_FIXTURE_WAV_PATH) }}
         run: >-
-          cargo test --workspace -- --ignored --test-threads=1
+          cargo test --locked --workspace -- --ignored --test-threads=1
 
   e2e-javascript:
     name: JavaScript
@@ -212,7 +167,7 @@ jobs:
 
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: packages/xlai/playwright-report

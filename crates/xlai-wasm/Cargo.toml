@@ -20,7 +20,8 @@ workspace = true
 [features]
 default = ["qts"]
 # Local QTS in the browser (stub engine until GGML/ORT WASM integration; see docs/qts-wasm-browser-runtime.md).
-qts = []
+# Browser QTS stub: manifest types from `xlai-qts-manifest` only (no native `xlai-qts-core` / GGML+ORT).
+qts = ["dep:xlai-qts-manifest"]
 
 [dependencies]
 futures-util.workspace = true
@@ -31,9 +32,11 @@ serde-wasm-bindgen.workspace = true
 thiserror.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
+xlai-qts-manifest = { workspace = true, optional = true }
 xlai-backend-openai.workspace = true
 xlai-backend-transformersjs.workspace = true
 xlai-core.workspace = true
+xlai-facade.workspace = true
 xlai-runtime.workspace = true
 
 [dev-dependencies]

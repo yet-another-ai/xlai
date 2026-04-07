@@ -69,62 +69,18 @@ jobs:
           if ($LASTEXITCODE -ge 8) { exit $LASTEXITCODE }
           $global:LASTEXITCODE = 0
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust toolchain and native dependencies
+        uses: ./.github/actions/setup-xlai-rust-native
         with:
-          targets: ${{ matrix.target }}
+          rust-targets: ${{ matrix.target }}
+          rust-cache-shared-key: build-native
+          rust-cache-workspaces: ${{ runner.os == 'Windows' && 'C:/w -> target' || '' }}
 
-      - name: Run sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ${{ runner.os == 'Windows' && 'C:/w -> target' || '' }}
-
-      - name: Cache Windows vcpkg OpenBLAS
-        if: runner.os == 'Windows'
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.VCPKG_ROOT }}
-          key: vcpkg-openblas-${{ runner.os }}-${{ env.VCPKG_OPENBLAS_TRIPLET }}-v1
-
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libopenblas-dev libasound2-dev
-
-      - name: Install Windows OpenBLAS prerequisites
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $vcpkgRoot = $env:VCPKG_ROOT
-
-          if (-not (Test-Path "$vcpkgRoot\vcpkg.exe")) {
-            if (-not (Test-Path $vcpkgRoot)) {
-              git clone https://github.com/microsoft/vcpkg $vcpkgRoot
-            }
-            & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
-          }
-
-          $env:VCPKG_INSTALLATION_ROOT = $vcpkgRoot
-          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_INSTALLATION_ROOT=$vcpkgRoot"
-          & "$vcpkgRoot\vcpkg.exe" install "openblas:$env:VCPKG_OPENBLAS_TRIPLET"
-
-          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake"
-          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_TARGET_TRIPLET=$env:VCPKG_OPENBLAS_TRIPLET"
-
-      - name: Install Linux prerequisites
+      - name: Install Linux prerequisites (Vulkan)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y glslc libvulkan-dev
-
-      - name: Install macOS prerequisites
-        if: runner.os == 'macOS'
-        run: |
-          brew install shaderc
 
       - name: Install Vulkan SDK
         uses: jakoch/install-vulkan-sdk-action@v1

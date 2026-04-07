@@ -1,12 +1,10 @@
-// Browser-side QTS manifest and capability types (shared by `xlai-qts-core::browser` and `xlai-wasm` via `include!`).
-//
-// This file intentionally avoids `xlai-sys`, `ort`, or filesystem GGUF loading.
-
-use serde::{Deserialize, Serialize};
+//! Browser-side QTS manifest and capability types.
+//!
+//! Shared by `xlai-qts-core` (as `xlai_qts_core::browser`) and `xlai-wasm`. No `xlai-sys`, ORT, or disk GGUF.
 
 /// Logical names for artifacts referenced by a [`QtsModelManifest`].
 ///
-/// Not every consumer references all keys; `include!` sites (e.g. `xlai-wasm`) may only use a subset.
+/// Not every consumer references all keys.
 #[allow(dead_code)]
 pub mod logical_names {
     pub const MAIN_GGUF: &str = "main_gguf";
@@ -16,7 +14,7 @@ pub mod logical_names {
 }
 
 /// One file in a QTS model bundle (see `docs/qts-wasm-model-manifest.md`).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct QtsModelFileEntry {
     pub logical_name: String,
     pub filename: String,
@@ -29,7 +27,7 @@ pub struct QtsModelFileEntry {
 }
 
 /// Versioned manifest for fetch/cache and validation.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct QtsModelManifest {
     pub schema_version: u32,
     pub model_id: String,
@@ -69,7 +67,7 @@ impl QtsModelManifest {
 }
 
 /// Reported engine / GPU tier for browser UIs (see `docs/qts-wasm-browser-runtime.md`).
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum QtsBrowserGpuTier {
     /// No WebGPU or not yet probed.
@@ -81,7 +79,7 @@ pub enum QtsBrowserGpuTier {
 }
 
 /// WASM-facing capability snapshot (stable JSON for JS).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct QtsBrowserCapabilities {
     /// Engine can run local synthesis in this build.
     pub engine_available: bool,
@@ -110,7 +108,7 @@ impl QtsBrowserCapabilities {
 }
 
 #[cfg(test)]
-mod browser_include_tests {
+mod tests {
     use super::*;
 
     #[test]
