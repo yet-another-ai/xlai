@@ -1,4 +1,4 @@
-//! Shared public surface for [`xlai_native`] and [`xlai_wasm`].
+//! Shared public surface for `xlai-native` and `xlai-wasm`.
 //!
 //! Keeps re-exports and [`RuntimeBuilder::new`] wiring in one place so facades stay thin.
 

@@ -1,6 +1,6 @@
 //! WebAssembly bindings for xlai (OpenAI-compatible chat, optional transformers.js).
 //!
-//! Public types match [`xlai_facade`] / [`xlai_native`]; internal modules also use `xlai_core` / `xlai_runtime` directly.
+//! Public types match `xlai-facade` / `xlai-native`; internal modules also use `xlai_core` / `xlai_runtime` directly.
 
 pub use xlai_facade::builder;
 pub use xlai_facade::core;
