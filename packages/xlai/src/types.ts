@@ -129,6 +129,14 @@ export type AgentContextCompressor = (
   estimatedInputTokens: number | null,
 ) => Promise<ChatMessage[]>;
 
+/**
+ * Async hook before every agent model call; returned text is merged into the ephemeral system
+ * reminder. `messages` is the user transcript only (internal reminder rows are never passed in).
+ */
+export type AgentSystemReminder = (
+  messages: ChatMessage[],
+) => Promise<string> | string;
+
 export type ToolParameterType =
   | 'string'
   | 'number'

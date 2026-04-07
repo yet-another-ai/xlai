@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::chat::{ToolCall, ToolResult};
-use crate::error::XlaiError;
+use crate::error::{ErrorKind, XlaiError};
 use crate::filesystem::SkillFileSystem;
 use crate::metadata::{ChunkId, DocumentId, Metadata, SkillId};
 use crate::runtime::{BoxFuture, RuntimeBound};
@@ -84,6 +84,18 @@ pub trait SkillStore: SkillFileSystem {
         &'a self,
         ids: &'a [SkillId],
     ) -> BoxFuture<'a, Result<Vec<Skill>, XlaiError>>;
+
+    /// Lists all skills discoverable by this store when supported.
+    ///
+    /// Default implementation returns [`ErrorKind::Unsupported`].
+    fn list_skills<'a>(&'a self) -> BoxFuture<'a, Result<Vec<Skill>, XlaiError>> {
+        Box::pin(async {
+            Err(XlaiError::new(
+                ErrorKind::Unsupported,
+                "this skill store does not support listing skills",
+            ))
+        })
+    }
 }
 
 pub trait KnowledgeStore: RuntimeBound {

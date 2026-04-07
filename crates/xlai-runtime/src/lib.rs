@@ -349,6 +349,17 @@ impl XlaiRuntime {
         skill_store.resolve_skills(ids).await
     }
 
+    /// Lists discoverable skills when the configured [`SkillStore`] supports it.
+    ///
+    /// Returns an empty list when no skill store is configured.
+    pub async fn list_skills(&self) -> Result<Vec<Skill>, XlaiError> {
+        let Some(skill_store) = self.skill_store.as_ref() else {
+            return Ok(Vec::new());
+        };
+
+        skill_store.list_skills().await
+    }
+
     /// Searches the configured knowledge store.
     ///
     /// # Errors

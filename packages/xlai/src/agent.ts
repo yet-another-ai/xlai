@@ -2,6 +2,7 @@ import type {
   AgentContextCompressor,
   AgentOptions,
   AgentSessionOptions,
+  AgentSystemReminder,
   ChatContent,
   ChatExecutionEvent,
   ChatMessage,
@@ -85,6 +86,26 @@ export class AgentSession extends ToolSession {
         return callback(normalizeInlineData(messages) as ChatMessage[], est);
       },
     );
+  }
+
+  /**
+   * Registers a JS async callback run before **every** agent model call (`prompt`, `streamPrompt`, …).
+   * Return additional reminder text; the runtime merges it with built-in sections and inserts one
+   * ephemeral `system` message before the last outgoing message. That row is internal to the
+   * request (not part of the conversation you should persist from stream events or responses).
+   */
+  registerSystemReminder(callback: AgentSystemReminder): void {
+    if (this.inner.registerSystemReminder === undefined) {
+      throw new Error(
+        'registerSystemReminder is not available in this xlai WASM build',
+      );
+    }
+    this.inner.registerSystemReminder(async (messages: unknown) => {
+      const result = await callback(
+        normalizeInlineData(messages) as ChatMessage[],
+      );
+      return typeof result === 'string' ? result : String(result);
+    });
   }
 
   /** Agent streaming loop; collects all execution events (model chunks, tool call/result). */

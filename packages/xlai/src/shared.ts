@@ -61,6 +61,7 @@ export type WasmToolSessionInstance = {
   registerContextCompressor?: (
     callback: (messages: unknown, estimatedInputTokens: unknown) => unknown,
   ) => void;
+  registerSystemReminder?: (callback: (messages: unknown) => unknown) => void;
   streamPrompt?: (content: string) => Promise<unknown>;
   streamPromptWithContent?: (content: ChatContent) => Promise<unknown>;
 };

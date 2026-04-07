@@ -41,6 +41,10 @@ impl SkillStore for MarkdownSkillStore {
             Ok(resolved)
         })
     }
+
+    fn list_skills<'a>(&'a self) -> BoxFuture<'a, Result<Vec<Skill>, XlaiError>> {
+        Box::pin(async move { discover_skills(self.file_system.as_ref(), &self.roots).await })
+    }
 }
 
 impl ReadableFileSystem for MarkdownSkillStore {
