@@ -736,8 +736,8 @@ async fn agent_system_reminder_unary_inserts_before_user() -> Result<(), XlaiErr
         reqs[0].messages[0]
             .content
             .as_single_text()
-            .unwrap()
-            .contains("remember: be brief")
+            .is_some_and(|t| t.contains("remember: be brief")),
+        "expected reminder to include user hook text"
     );
     assert_eq!(reqs[0].messages[1].role, MessageRole::User);
     Ok(())
@@ -788,7 +788,12 @@ async fn agent_system_reminder_strips_inbound_internal_rows_from_history() -> Re
 
     let reqs = lock_unpoisoned(&requests);
     assert_eq!(reqs[0].messages.len(), 2);
-    let reminder_text = reqs[0].messages[0].content.as_single_text().unwrap();
+    let Some(reminder_text) = reqs[0].messages[0].content.as_single_text() else {
+        return Err(XlaiError::new(
+            ErrorKind::Provider,
+            "expected plain-text system reminder",
+        ));
+    };
     assert!(
         reminder_text.contains("new-reminder"),
         "expected fresh composed reminder"
@@ -833,8 +838,8 @@ async fn agent_system_reminder_inserts_before_non_user_tail() -> Result<(), Xlai
         reqs[0].messages[1]
             .content
             .as_single_text()
-            .unwrap()
-            .contains("reminder-body")
+            .is_some_and(|t| t.contains("reminder-body")),
+        "expected reminder before non-user tail"
     );
     assert_eq!(reqs[0].messages[2].role, MessageRole::Assistant);
     Ok(())
@@ -961,7 +966,12 @@ async fn agent_system_reminder_includes_available_skills_from_store() -> Result<
     let reqs = lock_unpoisoned(&requests);
     assert_eq!(reqs[0].messages.len(), 2);
     assert_eq!(reqs[0].messages[0].role, MessageRole::System);
-    let text = reqs[0].messages[0].content.as_single_text().unwrap();
+    let Some(text) = reqs[0].messages[0].content.as_single_text() else {
+        return Err(XlaiError::new(
+            ErrorKind::Provider,
+            "expected plain-text available-skills reminder",
+        ));
+    };
     assert!(
         text.contains("review.code"),
         "expected available-skills reminder, got: {text:?}"
@@ -1011,10 +1021,13 @@ async fn agent_system_reminder_includes_invoked_skills_section() -> Result<(), X
         .await?;
 
     let reqs = lock_unpoisoned(&requests);
-    let text = reqs[0].messages[reqs[0].messages.len() - 2]
-        .content
-        .as_single_text()
-        .unwrap();
+    let reminder_idx = reqs[0].messages.len() - 2;
+    let Some(text) = reqs[0].messages[reminder_idx].content.as_single_text() else {
+        return Err(XlaiError::new(
+            ErrorKind::Provider,
+            "expected plain-text invoked-skills reminder",
+        ));
+    };
     assert!(
         text.contains("were invoked"),
         "expected invoked-skills section, got: {text:?}"
