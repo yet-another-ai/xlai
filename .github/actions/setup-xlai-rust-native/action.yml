@@ -1,0 +1,85 @@
+# Shared steps for native Rust jobs: toolchain, sccache, rust-cache, OpenBLAS / vcpkg / shaderc.
+# Call after `actions/checkout` (with `submodules: true` when building xlai-sys).
+
+name: XLAI Rust native setup
+description: Rust toolchain, sccache, cache, and OS-specific native dependencies
+
+inputs:
+  rust-targets:
+    description: Comma-separated extra rustup targets (e.g. wasm32-unknown-unknown,x86_64-pc-windows-msvc)
+    required: false
+    default: ''
+  rust-cache-shared-key:
+    description: Suffix appended to rust-cache shared-key
+    required: false
+    default: xlai
+  rust-cache-target-dir:
+    description: If set, passed to rust-cache target-dir input
+    required: false
+    default: ''
+  rust-cache-workspaces:
+    description: If set, passed to rust-cache workspaces input (e.g. Windows short-path mirror)
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Install Rust toolchain
+      if: inputs.rust-targets == ''
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install Rust toolchain (extra targets)
+      if: inputs.rust-targets != ''
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.rust-targets }}
+
+    - name: Run sccache
+      uses: mozilla-actions/sccache-action@v0.0.9
+
+    - name: Cache Rust build artifacts
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: ${{ inputs.rust-cache-shared-key }}
+        target-dir: ${{ inputs.rust-cache-target-dir }}
+        workspaces: ${{ inputs.rust-cache-workspaces }}
+
+    - name: Cache Windows vcpkg OpenBLAS
+      if: runner.os == 'Windows'
+      uses: actions/cache@v5
+      with:
+        path: ${{ env.VCPKG_ROOT }}
+        key: vcpkg-openblas-${{ runner.os }}-${{ env.VCPKG_OPENBLAS_TRIPLET }}-v1
+
+    - name: Install Linux build dependencies
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libopenblas-dev libasound2-dev
+
+    - name: Install Windows OpenBLAS (vcpkg)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $vcpkgRoot = $env:VCPKG_ROOT
+
+        if (-not (Test-Path "$vcpkgRoot\vcpkg.exe")) {
+          if (-not (Test-Path $vcpkgRoot)) {
+            git clone https://github.com/microsoft/vcpkg $vcpkgRoot
+          }
+          & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
+        }
+
+        $env:VCPKG_INSTALLATION_ROOT = $vcpkgRoot
+        Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_INSTALLATION_ROOT=$vcpkgRoot"
+        & "$vcpkgRoot\vcpkg.exe" install "openblas:$env:VCPKG_OPENBLAS_TRIPLET"
+
+        Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake"
+        Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_TARGET_TRIPLET=$env:VCPKG_OPENBLAS_TRIPLET"
+
+    - name: Install macOS prerequisites (shaderc)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: brew install shaderc

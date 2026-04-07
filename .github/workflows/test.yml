@@ -37,9 +37,6 @@ jobs:
         with:
           submodules: true
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
       - name: Short Cargo target dir (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -47,68 +44,28 @@ jobs:
           New-Item -ItemType Directory -Force -Path C:\t | Out-Null
           Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_DIR=C:\t"
 
-      - name: Run sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust toolchain and native dependencies
+        uses: ./.github/actions/setup-xlai-rust-native
         with:
-          target-dir: ${{ runner.os == 'Windows' && 'C:\\t' || '' }}
-
-      - name: Cache Windows vcpkg OpenBLAS
-        if: runner.os == 'Windows'
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.VCPKG_ROOT }}
-          key: vcpkg-openblas-${{ runner.os }}-${{ env.VCPKG_OPENBLAS_TRIPLET }}-v1
-
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libopenblas-dev libasound2-dev
-
-      - name: Install Windows prerequisites
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $vcpkgRoot = $env:VCPKG_ROOT
-
-          if (-not (Test-Path "$vcpkgRoot\vcpkg.exe")) {
-            if (-not (Test-Path $vcpkgRoot)) {
-              git clone https://github.com/microsoft/vcpkg $vcpkgRoot
-            }
-            & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
-          }
-
-          $env:VCPKG_INSTALLATION_ROOT = $vcpkgRoot
-          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_INSTALLATION_ROOT=$vcpkgRoot"
-          & "$vcpkgRoot\vcpkg.exe" install "openblas:$env:VCPKG_OPENBLAS_TRIPLET"
-
-          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake"
-          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_TARGET_TRIPLET=$env:VCPKG_OPENBLAS_TRIPLET"
-
-      - name: Install macOS prerequisites
-        if: runner.os == 'macOS'
-        run: |
-          brew install shaderc
+          rust-cache-shared-key: unit-rust
+          rust-cache-target-dir: ${{ runner.os == 'Windows' && 'C:\\t' || '' }}
 
       - name: Check formatting
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
       - name: Run default workspace tests
-        run: cargo test --workspace
+        run: cargo test --locked --workspace
 
       - name: Check Rust documentation
         env:
           RUSTDOCFLAGS: '-D warnings'
-        run: cargo doc --workspace --no-deps
+        run: cargo doc --locked --workspace --no-deps
 
       - name: Build native examples
-        run: cargo build -p xlai-native --examples
+        run: cargo build --locked -p xlai-native --examples
 
   javascript:
     name: JavaScript

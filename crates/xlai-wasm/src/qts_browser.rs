@@ -1,6 +1,3 @@
-//! QTS browser manifest types (shared with `xlai-qts-core` via `browser_include.rs`).
+//! QTS browser manifest types from [`xlai_qts_manifest`] (same contract as `xlai_qts_core::browser`).
 
-include!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../xlai-qts-core/src/browser_include.rs"
-));
+pub use xlai_qts_manifest::*;

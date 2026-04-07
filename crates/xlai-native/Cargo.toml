@@ -10,20 +10,11 @@ publish = false
 
 [features]
 default = ["openblas"]
-openblas = [
-    "xlai-backend-llama-cpp/openblas",
-    "xlai-qts-core?/openblas",
-]
-metal = [
-    "xlai-backend-llama-cpp/metal",
-    "xlai-qts-core?/metal",
-]
-vulkan = [
-    "xlai-backend-llama-cpp/vulkan",
-    "xlai-qts-core?/vulkan",
-]
+openblas = ["xlai-facade/openblas"]
+metal = ["xlai-facade/metal"]
+vulkan = ["xlai-facade/vulkan"]
 # Optional: avoid linking QTS (standalone GGML) unless you need native TTS in the aggregate crate.
-qts = ["dep:xlai-qts-core"]
+qts = ["xlai-facade/qts"]
 
 [lints]
 workspace = true
@@ -38,9 +29,4 @@ tracing-subscriber = { workspace = true, default-features = false, features = [
 ] }
 
 [dependencies]
-xlai-backend-llama-cpp.workspace = true
-xlai-backend-openai.workspace = true
-xlai-qts-core = { workspace = true, optional = true }
-xlai-backend-transformersjs.workspace = true
-xlai-core.workspace = true
-xlai-runtime.workspace = true
+xlai-facade = { workspace = true, features = ["llama"] }

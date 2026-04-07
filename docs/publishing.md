@@ -64,8 +64,9 @@ These workspace members are **`publish = false`** (Cargo will refuse `cargo publ
 | `xlai-sys` | Vendored native build; not on crates.io |
 | `xlai-backend-llama-cpp` | Depends on `xlai-sys` |
 | `xlai-native`, `xlai-ffi` | Depend on `xlai-backend-llama-cpp` / aggregate of internal backends |
-| `xlai-wasm` | Built for the npm package; default `qts` feature pulls unpublished QTS WASM/browser crates |
-| `xlai-qts-core`, `xlai-qts-cli` | QTS stack / internal (engine + `TtsModel` bridge live in `xlai-qts-core`; browser manifest types in `xlai_qts_core::browser`; WASM QTS stub in `xlai-wasm`) |
+| `xlai-wasm` | Built for the npm package; not published as its own crate |
+| `xlai-facade`, `xlai-local-common` | Internal composition / local-backend helpers; `publish = false` |
+| `xlai-qts-core`, `xlai-qts-cli`, `xlai-qts-manifest` | QTS stack / internal (engine in `xlai-qts-core`; browser manifest serde in `xlai-qts-manifest`; WASM QTS stub uses manifest crate only, not the GGML engine) |
 
 To publish more crates later: remove or relax `publish = false`, ensure every dependency is either on crates.io with a version pin or optional behind features, add `description` / `repository.workspace = true` as needed, extend `[workspace.dependencies]` and `.github/workflows/publish.yml` `PUBLISH_CRATES_ORDER`.
 

@@ -14,12 +14,12 @@ workspace = true
 async-stream.workspace = true
 futures-util.workspace = true
 gray_matter.workspace = true
-jsonschema.workspace = true
 rust-embed.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tera.workspace = true
 xlai-core.workspace = true
+xlai-local-common.workspace = true
 
 [dev-dependencies]
 base64.workspace = true

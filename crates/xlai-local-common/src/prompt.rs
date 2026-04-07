@@ -114,15 +114,13 @@ pub fn structured_output_instruction(
 #[allow(clippy::expect_used, clippy::panic)]
 mod tests {
     use super::{prompt_messages_with_constraints, render_manual_prompt};
-    use crate::local_common::request::{PromptMessage, PromptRole};
+    use crate::request::{PreparedLocalChatRequest, PromptMessage, PromptRole};
     use xlai_core::{
         StructuredOutput, ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType,
     };
 
-    fn prepared_request(
-        messages: Vec<PromptMessage>,
-    ) -> crate::local_common::request::PreparedLocalChatRequest {
-        crate::local_common::request::PreparedLocalChatRequest {
+    fn prepared_request(messages: Vec<PromptMessage>) -> PreparedLocalChatRequest {
+        PreparedLocalChatRequest {
             messages,
             available_tools: Vec::new(),
             structured_output: None,

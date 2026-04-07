@@ -31,7 +31,7 @@ Align with native `ModelPaths` / export docs:
 - `vocoder_onnx` — `qwen3-tts-vocoder.onnx`.
 - For ICL voice clone: `reference_codec_onnx`, `reference_codec_preprocess_json` (filename `qwen3-tts-reference-codec-preprocess.json`).
 
-Tokenizer / `config.json` are typically embedded in GGUF for this stack; if split artifacts are added later, extend `logical_name` enums in `browser_include.rs` (shared by `xlai_qts_core::browser` and `xlai-wasm`).
+Tokenizer / `config.json` are typically embedded in GGUF for this stack; if split artifacts are added later, extend `logical_name` enums in `xlai-qts-manifest` (shared by `xlai_qts_core::browser` and `xlai-wasm`).
 
 ## Caching recommendations
 
@@ -41,4 +41,4 @@ Tokenizer / `config.json` are typically embedded in GGUF for this stack; if spli
 
 ## Rust types
 
-See `xlai_qts_core::browser` for serde-compatible structs and `validate_required_files`; the `xlai-wasm` crate (feature `qts`) includes the same definitions via shared `browser_include.rs` for WASM builds.
+See `xlai_qts_manifest` / `xlai_qts_core::browser` for serde-compatible structs and `validate_required_files`; the `xlai-wasm` crate (feature `qts`) depends on `xlai-qts-manifest` for the same types.
