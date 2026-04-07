@@ -4678,6 +4678,7 @@ dependencies = [
  "tracing",
  "xlai-core",
  "xlai-local-common",
+ "xlai-runtime",
  "xlai-sys",
 ]
 

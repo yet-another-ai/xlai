@@ -25,6 +25,7 @@ xlai-sys = { workspace = true, features = ["llama"] }
 
 [dev-dependencies]
 tokio.workspace = true
+xlai-runtime.workspace = true
 
 [lints]
 workspace = true
