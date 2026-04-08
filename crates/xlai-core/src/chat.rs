@@ -111,6 +111,15 @@ pub enum FinishReason {
     Stopped,
 }
 
+/// Advisory reasoning budget hint for providers that support explicit effort control.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReasoningEffort {
+    Low,
+    Medium,
+    High,
+}
+
 /// Structured output request for providers that can honor it.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -262,6 +271,8 @@ pub struct ChatRequest {
     pub metadata: Metadata,
     pub temperature: Option<f32>,
     pub max_output_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<ReasoningEffort>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_policy: Option<ChatRetryPolicy>,
 }

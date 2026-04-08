@@ -10,7 +10,7 @@ use serde_json::Value;
 use tera::Context;
 use xlai_core::{
     BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatRequest, ChatResponse,
-    ChatRetryPolicy, ContentPart, ErrorKind, MaybeSend, MessageRole, RuntimeBound,
+    ChatRetryPolicy, ContentPart, ErrorKind, MaybeSend, MessageRole, ReasoningEffort, RuntimeBound,
     StructuredOutput, ToolCall, ToolCallExecutionMode, ToolDefinition, ToolResult, XlaiError,
 };
 
@@ -60,6 +60,7 @@ pub struct Chat {
     system_prompt: Option<String>,
     temperature: Option<f32>,
     max_output_tokens: Option<u32>,
+    reasoning_effort: Option<ReasoningEffort>,
     structured_output: Option<StructuredOutput>,
     retry_policy: Option<ChatRetryPolicy>,
     tools: BTreeMap<String, RegisteredTool>,
@@ -74,6 +75,7 @@ impl Chat {
             system_prompt: None,
             temperature: None,
             max_output_tokens: None,
+            reasoning_effort: None,
             structured_output: None,
             retry_policy: None,
             tools: BTreeMap::new(),
@@ -130,6 +132,12 @@ impl Chat {
     #[must_use]
     pub fn with_max_output_tokens(mut self, max_output_tokens: u32) -> Self {
         self.max_output_tokens = Some(max_output_tokens);
+        self
+    }
+
+    #[must_use]
+    pub fn with_reasoning_effort(mut self, reasoning_effort: ReasoningEffort) -> Self {
+        self.reasoning_effort = Some(reasoning_effort);
         self
     }
 
@@ -335,6 +343,7 @@ impl Chat {
             metadata: BTreeMap::new(),
             temperature: self.temperature,
             max_output_tokens: self.max_output_tokens,
+            reasoning_effort: self.reasoning_effort,
             retry_policy: self.retry_policy.clone(),
         }
     }

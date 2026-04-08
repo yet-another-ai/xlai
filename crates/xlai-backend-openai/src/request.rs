@@ -17,6 +17,8 @@ pub(crate) struct OpenAiChatRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAiTool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<&'static str>,
@@ -78,6 +80,7 @@ impl OpenAiChatRequest {
                 .collect(),
             temperature: request.temperature,
             max_tokens: request.max_output_tokens,
+            reasoning_effort: request.reasoning_effort.map(reasoning_effort_openai),
             tool_choice: tools.as_ref().map(|_| "auto"),
             tools,
             response_format,
@@ -341,5 +344,13 @@ const fn tool_parameter_kind(kind: ToolParameterType) -> &'static str {
         ToolParameterType::Boolean => "boolean",
         ToolParameterType::Array => "array",
         ToolParameterType::Object => "object",
+    }
+}
+
+const fn reasoning_effort_openai(effort: xlai_core::ReasoningEffort) -> &'static str {
+    match effort {
+        xlai_core::ReasoningEffort::Low => "low",
+        xlai_core::ReasoningEffort::Medium => "medium",
+        xlai_core::ReasoningEffort::High => "high",
     }
 }

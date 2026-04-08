@@ -24,6 +24,7 @@ pub(crate) fn create_transformers_chat_session_with_dyn_file_system(
         system_prompt,
         temperature,
         max_output_tokens,
+        reasoning_effort: _,
         agent_loop: _,
         retry_policy,
         #[cfg(feature = "qts")]
@@ -83,6 +84,7 @@ pub(crate) fn create_transformers_agent_session_with_dyn_file_system(
         system_prompt,
         temperature,
         max_output_tokens,
+        reasoning_effort: _,
         agent_loop,
         retry_policy,
         #[cfg(feature = "qts")]

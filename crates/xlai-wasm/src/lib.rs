@@ -61,7 +61,7 @@ mod tests {
     use serde_json::json;
     use xlai_core::{
         ChatContent, ChatMessage, FinishReason, FsEntry, FsEntryKind, FsPath, MessageRole,
-        TokenUsage,
+        ReasoningEffort, TokenUsage,
     };
 
     use crate::factory::create_agent_session_inner;
@@ -157,6 +157,7 @@ mod tests {
             system_prompt: Some("Be concise.".to_owned()),
             temperature: Some(0.2),
             max_output_tokens: Some(512),
+            reasoning_effort: Some(ReasoningEffort::Medium),
             content: None,
             agent_loop: Some(false),
             retry_policy: None,
@@ -168,6 +169,7 @@ mod tests {
         assert_eq!(options.system_prompt.as_deref(), Some("Be concise."));
         assert_eq!(options.temperature, Some(0.2));
         assert_eq!(options.max_output_tokens, Some(512));
+        assert_eq!(options.reasoning_effort, Some(ReasoningEffort::Medium));
         assert_eq!(options.agent_loop, Some(false));
     }
 
@@ -181,6 +183,7 @@ mod tests {
                 system_prompt: Some("Use tools.".to_owned()),
                 temperature: Some(0.1),
                 max_output_tokens: Some(256),
+                reasoning_effort: Some(ReasoningEffort::Low),
                 agent_loop: None,
                 retry_policy: None,
                 #[cfg(feature = "qts")]
@@ -203,6 +206,7 @@ mod tests {
                 system_prompt: None,
                 temperature: None,
                 max_output_tokens: None,
+                reasoning_effort: None,
                 agent_loop: None,
                 retry_policy: None,
                 qts: Some(WasmQtsSessionConfig::default()),

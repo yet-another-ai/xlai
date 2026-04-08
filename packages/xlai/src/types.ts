@@ -60,6 +60,8 @@ export interface ChatRetryPolicy {
   maxBackoffMs?: number;
 }
 
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+
 export interface ChatOptions {
   prompt?: string;
   content?: ChatContent;
@@ -69,6 +71,7 @@ export interface ChatOptions {
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  reasoningEffort?: ReasoningEffort;
   retryPolicy?: ChatRetryPolicy;
 }
 
@@ -202,6 +205,7 @@ export interface ChatSessionOptions {
   systemPrompt?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  reasoningEffort?: ReasoningEffort;
   retryPolicy?: ChatRetryPolicy;
   fileSystem?: FileSystemApi;
   /** When set, the WASM runtime behind the session includes local QTS. */

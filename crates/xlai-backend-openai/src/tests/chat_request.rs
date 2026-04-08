@@ -4,7 +4,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 use xlai_core::{
     ChatContent, ChatMessage, ChatRequest, ContentPart, ErrorKind, MediaSource, MessageRole,
-    StructuredOutput, StructuredOutputFormat, ToolCall, XlaiError,
+    ReasoningEffort, StructuredOutput, StructuredOutputFormat, ToolCall, XlaiError,
 };
 
 use crate::request::OpenAiChatRequest;
@@ -40,6 +40,7 @@ fn serializes_multimodal_user_message_as_content_array() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        reasoning_effort: None,
         retry_policy: None,
     };
 
@@ -77,6 +78,7 @@ fn serializes_plain_text_user_message_as_string_content() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        reasoning_effort: None,
         retry_policy: None,
     };
 
@@ -122,6 +124,7 @@ fn serializes_inline_audio_as_file_content_part() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        reasoning_effort: None,
         retry_policy: None,
     };
 
@@ -167,6 +170,7 @@ fn serializes_json_schema_structured_output_as_response_format() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        reasoning_effort: None,
         retry_policy: None,
     };
 
@@ -213,6 +217,7 @@ fn json_schema_structured_output_defaults_response_format_name() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        reasoning_effort: None,
         retry_policy: None,
     };
 
@@ -258,6 +263,7 @@ fn rejects_lark_structured_output_for_openai_compatible_backend() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        reasoning_effort: None,
         retry_policy: None,
     };
 
@@ -304,6 +310,7 @@ fn serializes_assistant_tool_calls_for_follow_up_rounds() {
         metadata: BTreeMap::new(),
         temperature: None,
         max_output_tokens: None,
+        reasoning_effort: None,
         retry_policy: None,
     };
 
@@ -331,4 +338,39 @@ fn serializes_assistant_tool_calls_for_follow_up_rounds() {
     );
     assert_eq!(v["messages"][1]["role"], json!("tool"));
     assert_eq!(v["messages"][1]["tool_call_id"], json!("call_1"));
+}
+
+#[test]
+fn serializes_reasoning_effort_for_openai_requests() {
+    let config = test_config();
+    let request = ChatRequest {
+        model: None,
+        system_prompt: None,
+        messages: vec![ChatMessage {
+            role: MessageRole::User,
+            content: ChatContent::text("Think carefully."),
+            tool_name: None,
+            tool_call_id: None,
+            metadata: BTreeMap::new(),
+        }],
+        available_tools: Vec::new(),
+        structured_output: None,
+        metadata: BTreeMap::new(),
+        temperature: None,
+        max_output_tokens: None,
+        reasoning_effort: Some(ReasoningEffort::High),
+        retry_policy: None,
+    };
+
+    let payload = OpenAiChatRequest::from_core_request(&config, request, false);
+    assert!(payload.is_ok(), "build payload");
+    let Ok(payload) = payload else {
+        return;
+    };
+    let serialized = serde_json::to_value(&payload);
+    assert!(serialized.is_ok(), "serialize payload");
+    let Ok(v) = serialized else {
+        return;
+    };
+    assert_eq!(v["reasoning_effort"], json!("high"));
 }

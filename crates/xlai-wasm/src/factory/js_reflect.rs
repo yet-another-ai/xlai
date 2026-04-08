@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use js_sys::Reflect;
 use wasm_bindgen::JsValue;
+use xlai_core::ReasoningEffort;
 use xlai_runtime::FileSystem;
 
 use crate::js_file_system::JsFileSystem;
@@ -51,6 +52,15 @@ pub(crate) fn parse_transformers_session_options(
             Some(serde_wasm_bindgen::from_value::<WasmChatRetryPolicy>(v).map_err(js_error)?)
         }
     };
+    let reasoning_effort = {
+        let v = Reflect::get(&options, &JsValue::from_str("reasoningEffort"))
+            .map_err(|e| js_error(format!("failed to read reasoningEffort: {e:?}")))?;
+        if v.is_null() || v.is_undefined() {
+            None
+        } else {
+            Some(serde_wasm_bindgen::from_value::<ReasoningEffort>(v).map_err(js_error)?)
+        }
+    };
 
     Ok(WasmTransformersSessionOptions {
         model_id,
@@ -58,6 +68,7 @@ pub(crate) fn parse_transformers_session_options(
         system_prompt: optional_js_string_field(&options, "systemPrompt")?,
         temperature: optional_js_f32_field(&options, "temperature")?,
         max_output_tokens: optional_js_u32_field(&options, "maxOutputTokens")?,
+        reasoning_effort,
         agent_loop: optional_js_bool_field(&options, "agentLoop")?,
         retry_policy,
         #[cfg(feature = "qts")]

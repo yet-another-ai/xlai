@@ -67,6 +67,10 @@ pub(crate) fn create_chat_session_with_dyn_file_system(
         chat = chat.with_max_output_tokens(max_output_tokens);
     }
 
+    if let Some(reasoning_effort) = options.reasoning_effort {
+        chat = chat.with_reasoning_effort(reasoning_effort);
+    }
+
     if let Some(ref rp) = options.retry_policy {
         chat = chat.with_retry_policy(Some(rp.clone().into()));
     }
@@ -114,6 +118,10 @@ pub(crate) fn create_agent_session_with_dyn_file_system(
 
     if let Some(max_output_tokens) = options.max_output_tokens {
         agent = agent.with_max_output_tokens(max_output_tokens);
+    }
+
+    if let Some(reasoning_effort) = options.reasoning_effort {
+        agent = agent.with_reasoning_effort(reasoning_effort);
     }
 
     if options.agent_loop == Some(false) {

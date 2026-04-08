@@ -9,6 +9,7 @@ import type {
   AgentSessionOptions,
   ChatContent,
   ChatOptions,
+  ReasoningEffort,
   ChatResponse,
   ChatRetryPolicy,
   ChatSessionOptions,
@@ -29,6 +30,7 @@ export type ResolvedRequestOptions = {
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  reasoningEffort?: ReasoningEffort;
   retryPolicy?: ChatRetryPolicy;
   /** Streaming agent loop toggle when the WASM layer supports it; unary `agent()` is always one model call. */
   agentLoop?: boolean;
@@ -156,6 +158,7 @@ export function resolveRequestOptions(
     model: options.model ?? envValue('OPENAI_MODEL'),
     temperature: options.temperature,
     maxOutputTokens: options.maxOutputTokens,
+    reasoningEffort: options.reasoningEffort,
     ...(options.retryPolicy !== undefined
       ? { retryPolicy: options.retryPolicy }
       : {}),
@@ -181,6 +184,7 @@ export function resolveSessionOptions(
     model: options.model ?? envValue('OPENAI_MODEL'),
     temperature: options.temperature,
     maxOutputTokens: options.maxOutputTokens,
+    reasoningEffort: options.reasoningEffort,
     ...(options.retryPolicy !== undefined
       ? { retryPolicy: options.retryPolicy }
       : {}),

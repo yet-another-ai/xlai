@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use xlai_core::{
     ChatContent, ChatResponse, ChatRetryPolicy, FinishReason, FsEntry, FsEntryKind, MessageRole,
-    TokenUsage, TtsAudioFormat, TtsDeliveryMode, VoiceSpec,
+    ReasoningEffort, TokenUsage, TtsAudioFormat, TtsDeliveryMode, VoiceSpec,
 };
 
 pub(crate) const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
@@ -58,6 +58,8 @@ pub(crate) struct WasmChatRequest {
     pub(crate) temperature: Option<f32>,
     #[serde(default)]
     pub(crate) max_output_tokens: Option<u32>,
+    #[serde(default)]
+    pub(crate) reasoning_effort: Option<ReasoningEffort>,
     /// When set, used as the user message body instead of plain-text [`Self::prompt`].
     #[serde(default)]
     pub(crate) content: Option<ChatContent>,
@@ -80,6 +82,8 @@ pub(crate) struct WasmAgentRequest {
     pub(crate) temperature: Option<f32>,
     #[serde(default)]
     pub(crate) max_output_tokens: Option<u32>,
+    #[serde(default)]
+    pub(crate) reasoning_effort: Option<ReasoningEffort>,
     #[serde(default)]
     pub(crate) content: Option<ChatContent>,
     /// When `Some(false)`, the agent performs one model call and does not execute tools.
@@ -112,6 +116,8 @@ pub(crate) struct WasmChatSessionOptions {
     pub(crate) temperature: Option<f32>,
     #[serde(default)]
     pub(crate) max_output_tokens: Option<u32>,
+    #[serde(default)]
+    pub(crate) reasoning_effort: Option<ReasoningEffort>,
     /// When `Some(false)`, agent sessions disable automatic tool round-trips (single model turn).
     #[serde(default)]
     pub(crate) agent_loop: Option<bool>,
@@ -169,6 +175,7 @@ impl From<WasmChatRequest> for WasmChatSessionOptions {
             system_prompt: value.system_prompt,
             temperature: value.temperature,
             max_output_tokens: value.max_output_tokens,
+            reasoning_effort: value.reasoning_effort,
             agent_loop: None,
             retry_policy: value.retry_policy,
             #[cfg(feature = "qts")]
@@ -186,6 +193,7 @@ impl From<WasmAgentRequest> for WasmChatSessionOptions {
             system_prompt: value.system_prompt,
             temperature: value.temperature,
             max_output_tokens: value.max_output_tokens,
+            reasoning_effort: value.reasoning_effort,
             agent_loop: value.agent_loop,
             retry_policy: value.retry_policy,
             #[cfg(feature = "qts")]
@@ -204,6 +212,7 @@ pub(crate) struct WasmTransformersSessionOptions {
     pub(crate) system_prompt: Option<String>,
     pub(crate) temperature: Option<f32>,
     pub(crate) max_output_tokens: Option<u32>,
+    pub(crate) reasoning_effort: Option<ReasoningEffort>,
     pub(crate) agent_loop: Option<bool>,
     pub(crate) retry_policy: Option<WasmChatRetryPolicy>,
     #[cfg(feature = "qts")]

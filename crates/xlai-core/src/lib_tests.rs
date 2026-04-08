@@ -3,8 +3,8 @@ use serde_json::json;
 
 use crate::{
     ChatContent, ChatMessage, ChatRequest, ChatRetryPolicy, ContentPart, ErrorKind, MediaSource,
-    MessageRole, StructuredOutput, StructuredOutputFormat, ToolCall, TtsChunk, TtsResponse,
-    XlaiError,
+    MessageRole, ReasoningEffort, StructuredOutput, StructuredOutputFormat, ToolCall, TtsChunk,
+    TtsResponse, XlaiError,
 };
 
 #[test]
@@ -209,6 +209,23 @@ fn structured_output_round_trips_lark_grammar_format() {
 }
 
 #[test]
+fn reasoning_effort_round_trips_snake_case_json() {
+    let serialized = serde_json::to_value(ReasoningEffort::Medium);
+    assert!(serialized.is_ok(), "serialize");
+    let Ok(v) = serialized else {
+        return;
+    };
+    assert_eq!(v, json!("medium"));
+
+    let deserialized: Result<ReasoningEffort, _> = serde_json::from_value(v);
+    assert!(deserialized.is_ok(), "deserialize");
+    let Ok(back) = deserialized else {
+        return;
+    };
+    assert_eq!(back, ReasoningEffort::Medium);
+}
+
+#[test]
 fn xlai_error_deserializes_legacy_json_without_optional_fields() {
     let v = json!({"kind": "Provider", "message": "bad"});
     let result: Result<XlaiError, _> = serde_json::from_value(v);
@@ -357,6 +374,7 @@ fn chat_request_round_trips_retry_policy() {
         metadata: Default::default(),
         temperature: None,
         max_output_tokens: None,
+        reasoning_effort: None,
         retry_policy: Some(
             ChatRetryPolicy::default()
                 .with_max_retries(1)

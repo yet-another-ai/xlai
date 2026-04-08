@@ -26,10 +26,10 @@ pub use skill_store::MarkdownSkillStore;
 pub use tera::Context as PromptContext;
 pub use xlai_core::{
     ChatBackend, ChatContent, ChatRetryPolicy, ContentPart, DirectoryFileSystem, FileSystem,
-    FsEntry, FsEntryKind, FsPath, ImageDetail, MediaSource, ReadableFileSystem, StreamTextDelta,
-    ToolCallExecutionMode, TranscriptionBackend, TranscriptionRequest, TranscriptionResponse,
-    TtsAudioFormat, TtsBackend, TtsChunk, TtsDeliveryMode, TtsRequest, TtsResponse,
-    VoiceReferenceSample, VoiceSpec, WritableFileSystem,
+    FsEntry, FsEntryKind, FsPath, ImageDetail, MediaSource, ReadableFileSystem, ReasoningEffort,
+    StreamTextDelta, ToolCallExecutionMode, TranscriptionBackend, TranscriptionRequest,
+    TranscriptionResponse, TtsAudioFormat, TtsBackend, TtsChunk, TtsDeliveryMode, TtsRequest,
+    TtsResponse, VoiceReferenceSample, VoiceSpec, WritableFileSystem,
 };
 
 #[derive(Clone, Default)]

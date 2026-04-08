@@ -12,8 +12,8 @@ use serde_json::Value;
 use tera::Context;
 use xlai_core::{
     BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatResponse, ContentPart,
-    ErrorKind, MaybeSend, MessageRole, RuntimeBound, StructuredOutput, ToolDefinition, ToolResult,
-    XlaiError,
+    ErrorKind, MaybeSend, MessageRole, ReasoningEffort, RuntimeBound, StructuredOutput,
+    ToolDefinition, ToolResult, XlaiError,
 };
 
 use crate::chat::Chat;
@@ -155,6 +155,12 @@ impl Agent {
     #[must_use]
     pub fn with_max_output_tokens(mut self, max_output_tokens: u32) -> Self {
         self.chat = self.chat.with_max_output_tokens(max_output_tokens);
+        self
+    }
+
+    #[must_use]
+    pub fn with_reasoning_effort(mut self, reasoning_effort: ReasoningEffort) -> Self {
+        self.chat = self.chat.with_reasoning_effort(reasoning_effort);
         self
     }
 

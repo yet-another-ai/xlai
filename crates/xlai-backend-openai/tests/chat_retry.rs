@@ -38,6 +38,7 @@ fn minimal_chat_request(retry_policy: Option<ChatRetryPolicy>) -> ChatRequest {
         metadata: Default::default(),
         temperature: None,
         max_output_tokens: None,
+        reasoning_effort: None,
         retry_policy,
     }
 }
