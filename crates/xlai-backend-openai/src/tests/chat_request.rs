@@ -54,10 +54,12 @@ fn serializes_multimodal_user_message_as_content_array() {
     let Ok(v) = serialized else {
         return;
     };
-    let content = &v["messages"][0]["content"];
+    let content = &v["input"][0]["content"];
     assert!(content.is_array());
-    assert_eq!(content[0]["type"], json!("text"));
-    assert_eq!(content[1]["type"], json!("image_url"));
+    assert_eq!(v["input"][0]["type"], json!("message"));
+    assert_eq!(v["input"][0]["role"], json!("user"));
+    assert_eq!(content[0]["type"], json!("input_text"));
+    assert_eq!(content[1]["type"], json!("input_image"));
 }
 
 #[test]
@@ -92,7 +94,10 @@ fn serializes_plain_text_user_message_as_string_content() {
     let Ok(v) = serialized else {
         return;
     };
-    assert_eq!(v["messages"][0]["content"], json!("hello"));
+    assert_eq!(v["input"][0]["type"], json!("message"));
+    assert_eq!(v["input"][0]["role"], json!("user"));
+    assert_eq!(v["input"][0]["content"][0]["type"], json!("input_text"));
+    assert_eq!(v["input"][0]["content"][0]["text"], json!("hello"));
 }
 
 #[test]
@@ -138,11 +143,11 @@ fn serializes_inline_audio_as_file_content_part() {
     let Ok(v) = serialized else {
         return;
     };
-    assert_eq!(v["messages"][0]["content"][0]["type"], json!("file"));
+    assert_eq!(v["input"][0]["content"][0]["type"], json!("input_file"));
 }
 
 #[test]
-fn serializes_json_schema_structured_output_as_response_format() {
+fn serializes_json_schema_structured_output_as_text_format() {
     let config = test_config();
     let request = ChatRequest {
         model: None,
@@ -184,12 +189,9 @@ fn serializes_json_schema_structured_output_as_response_format() {
     let Ok(v) = serialized else {
         return;
     };
-    assert_eq!(v["response_format"]["type"], json!("json_schema"));
-    assert_eq!(v["response_format"]["json_schema"]["name"], json!("person"));
-    assert_eq!(
-        v["response_format"]["json_schema"]["schema"]["type"],
-        json!("object")
-    );
+    assert_eq!(v["text"]["format"]["type"], json!("json_schema"));
+    assert_eq!(v["text"]["format"]["name"], json!("person"));
+    assert_eq!(v["text"]["format"]["schema"]["type"], json!("object"));
 }
 
 #[test]
@@ -232,11 +234,11 @@ fn json_schema_structured_output_defaults_response_format_name() {
         return;
     };
     assert_eq!(
-        v["response_format"]["json_schema"]["name"],
+        v["text"]["format"]["name"],
         json!("structured_output")
     );
-    assert!(v["response_format"]["json_schema"]["description"].is_null());
-    assert_eq!(v["response_format"]["json_schema"]["strict"], json!(true));
+    assert!(v["text"]["format"]["description"].is_null());
+    assert_eq!(v["text"]["format"]["strict"], json!(true));
 }
 
 #[test]
@@ -325,19 +327,13 @@ fn serializes_assistant_tool_calls_for_follow_up_rounds() {
         return;
     };
 
-    assert_eq!(v["messages"][0]["role"], json!("assistant"));
-    assert_eq!(v["messages"][0]["content"], serde_json::Value::Null);
-    assert_eq!(v["messages"][0]["tool_calls"][0]["id"], json!("call_1"));
-    assert_eq!(
-        v["messages"][0]["tool_calls"][0]["function"]["name"],
-        json!("skill")
-    );
-    assert_eq!(
-        v["messages"][0]["tool_calls"][0]["function"]["arguments"],
-        json!(r#"{"skill_id":"review.code"}"#)
-    );
-    assert_eq!(v["messages"][1]["role"], json!("tool"));
-    assert_eq!(v["messages"][1]["tool_call_id"], json!("call_1"));
+    assert_eq!(v["input"][0]["type"], json!("function_call"));
+    assert_eq!(v["input"][0]["call_id"], json!("call_1"));
+    assert_eq!(v["input"][0]["name"], json!("skill"));
+    assert_eq!(v["input"][0]["arguments"], json!(r#"{"skill_id":"review.code"}"#));
+    assert_eq!(v["input"][1]["type"], json!("function_call_output"));
+    assert_eq!(v["input"][1]["call_id"], json!("call_1"));
+    assert_eq!(v["input"][1]["output"], json!("resolved"));
 }
 
 #[test]
@@ -372,5 +368,5 @@ fn serializes_reasoning_effort_for_openai_requests() {
     let Ok(v) = serialized else {
         return;
     };
-    assert_eq!(v["reasoning_effort"], json!("high"));
+    assert_eq!(v["reasoning"]["effort"], json!("high"));
 }
