@@ -233,10 +233,7 @@ fn json_schema_structured_output_defaults_response_format_name() {
     let Ok(v) = serialized else {
         return;
     };
-    assert_eq!(
-        v["text"]["format"]["name"],
-        json!("structured_output")
-    );
+    assert_eq!(v["text"]["format"]["name"], json!("structured_output"));
     assert!(v["text"]["format"]["description"].is_null());
     assert_eq!(v["text"]["format"]["strict"], json!(true));
 }
@@ -330,7 +327,10 @@ fn serializes_assistant_tool_calls_for_follow_up_rounds() {
     assert_eq!(v["input"][0]["type"], json!("function_call"));
     assert_eq!(v["input"][0]["call_id"], json!("call_1"));
     assert_eq!(v["input"][0]["name"], json!("skill"));
-    assert_eq!(v["input"][0]["arguments"], json!(r#"{"skill_id":"review.code"}"#));
+    assert_eq!(
+        v["input"][0]["arguments"],
+        json!(r#"{"skill_id":"review.code"}"#)
+    );
     assert_eq!(v["input"][1]["type"], json!("function_call_output"));
     assert_eq!(v["input"][1]["call_id"], json!("call_1"));
     assert_eq!(v["input"][1]["output"], json!("resolved"));

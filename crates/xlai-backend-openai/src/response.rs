@@ -43,7 +43,9 @@ impl OpenAiChatResponse {
             usage: self.usage.map(Into::into),
             finish_reason: finish_reason_from_api(
                 self.status.as_deref(),
-                self.incomplete_details.as_ref().and_then(|d| d.reason.as_deref()),
+                self.incomplete_details
+                    .as_ref()
+                    .and_then(|d| d.reason.as_deref()),
                 has_tool_calls,
             ),
             metadata: BTreeMap::new(),
@@ -73,7 +75,10 @@ pub(crate) struct OpenAiIncompleteDetails {
     reason: Option<String>,
 }
 
-pub(crate) fn attach_response_output_items(mut message: ChatMessage, output: &[Value]) -> ChatMessage {
+pub(crate) fn attach_response_output_items(
+    mut message: ChatMessage,
+    output: &[Value],
+) -> ChatMessage {
     if !output.is_empty() {
         message.metadata.insert(
             OPENAI_RESPONSE_OUTPUT_METADATA_KEY.to_owned(),
@@ -84,12 +89,15 @@ pub(crate) fn attach_response_output_items(mut message: ChatMessage, output: &[V
 }
 
 pub(crate) fn response_output_items_from_message(message: &ChatMessage) -> Option<Vec<Value>> {
-    message.metadata.get(OPENAI_RESPONSE_OUTPUT_METADATA_KEY).and_then(|value| {
-        let Value::Array(items) = value else {
-            return None;
-        };
-        Some(items.clone())
-    })
+    message
+        .metadata
+        .get(OPENAI_RESPONSE_OUTPUT_METADATA_KEY)
+        .and_then(|value| {
+            let Value::Array(items) = value else {
+                return None;
+            };
+            Some(items.clone())
+        })
 }
 
 pub(crate) fn openai_response_output_to_chat(
@@ -156,10 +164,7 @@ fn parse_openai_response_content_part(value: &Value) -> Option<ContentPart> {
 fn parse_openai_function_call_item(
     obj: &serde_json::Map<String, Value>,
 ) -> Result<ToolCall, XlaiError> {
-    let arguments_raw = obj
-        .get("arguments")
-        .and_then(Value::as_str)
-        .unwrap_or("{}");
+    let arguments_raw = obj.get("arguments").and_then(Value::as_str).unwrap_or("{}");
     let arguments = serde_json::from_str(arguments_raw).map_err(|error| {
         XlaiError::new(
             ErrorKind::Provider,

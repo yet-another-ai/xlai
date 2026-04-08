@@ -37,7 +37,11 @@ impl OpenAiChatRequest {
         request: ChatRequest,
         stream: bool,
     ) -> Result<Self, XlaiError> {
-        let text = match request.structured_output.as_ref().map(|output| &output.format) {
+        let text = match request
+            .structured_output
+            .as_ref()
+            .map(|output| &output.format)
+        {
             None => None,
             Some(StructuredOutputFormat::JsonSchema { schema }) => Some(OpenAiTextConfig {
                 format: Some(OpenAiTextFormat::JsonSchema {
@@ -79,9 +83,11 @@ impl OpenAiChatRequest {
                 .collect(),
             temperature: request.temperature,
             max_output_tokens: request.max_output_tokens,
-            reasoning: request.reasoning_effort.map(|effort| OpenAiReasoningConfig {
-                effort: reasoning_effort_openai(effort),
-            }),
+            reasoning: request
+                .reasoning_effort
+                .map(|effort| OpenAiReasoningConfig {
+                    effort: reasoning_effort_openai(effort),
+                }),
             tool_choice: tools.as_ref().map(|_| "auto"),
             tools,
             text,
@@ -96,7 +102,11 @@ fn openai_request_input_items(message: ChatMessage) -> Vec<Value> {
     }
 
     match message.role {
-        MessageRole::System => vec![openai_request_message_item("system", &message.content, false)],
+        MessageRole::System => vec![openai_request_message_item(
+            "system",
+            &message.content,
+            false,
+        )],
         MessageRole::User => vec![openai_request_message_item("user", &message.content, false)],
         MessageRole::Assistant => {
             if let Some(tool_calls) = message.assistant_tool_calls()
@@ -104,7 +114,11 @@ fn openai_request_input_items(message: ChatMessage) -> Vec<Value> {
             {
                 return openai_request_function_calls(&tool_calls);
             }
-            vec![openai_request_message_item("assistant", &message.content, true)]
+            vec![openai_request_message_item(
+                "assistant",
+                &message.content,
+                true,
+            )]
         }
         MessageRole::Tool => vec![serde_json::json!({
             "type": "function_call_output",
