@@ -3,7 +3,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use xlai_core::{
     ChatContent, ChatMessage, ChatRequest, ContentPart, ErrorKind, ImageDetail, MediaSource,
-    MessageRole, StructuredOutputFormat, ToolDefinition, ToolParameterType, XlaiError,
+    MessageRole, StructuredOutputFormat, ToolCall, ToolDefinition, ToolParameterType, XlaiError,
 };
 
 use crate::OpenAiConfig;
@@ -112,10 +112,15 @@ struct OpenAiRequestMessage {
     name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<OpenAiRequestToolCall>>,
 }
 
 impl From<ChatMessage> for OpenAiRequestMessage {
     fn from(message: ChatMessage) -> Self {
+        let assistant_tool_calls = (message.role == MessageRole::Assistant)
+            .then(|| message.assistant_tool_calls())
+            .flatten();
         let role = match message.role {
             MessageRole::System => "system",
             MessageRole::User => "user",
@@ -125,18 +130,58 @@ impl From<ChatMessage> for OpenAiRequestMessage {
 
         Self {
             role,
-            content: openai_request_content_value(&message),
+            content: openai_request_content_value(&message, assistant_tool_calls.as_deref()),
             name: message.tool_name,
             tool_call_id: message.tool_call_id,
+            tool_calls: assistant_tool_calls
+                .as_deref()
+                .map(openai_request_tool_calls),
         }
     }
 }
 
-fn openai_request_content_value(message: &ChatMessage) -> Value {
+fn openai_request_content_value(
+    message: &ChatMessage,
+    assistant_tool_calls: Option<&[ToolCall]>,
+) -> Value {
     if message.role == MessageRole::Tool {
         return Value::String(message.content.text_parts_concatenated());
     }
+    if message.role == MessageRole::Assistant
+        && assistant_tool_calls.is_some_and(|tool_calls| !tool_calls.is_empty())
+        && message.content.is_empty()
+    {
+        return Value::Null;
+    }
     chat_content_to_openai_request_value(&message.content)
+}
+
+#[derive(Serialize)]
+struct OpenAiRequestToolCall {
+    id: String,
+    #[serde(rename = "type")]
+    kind: &'static str,
+    function: OpenAiRequestFunctionCall,
+}
+
+#[derive(Serialize)]
+struct OpenAiRequestFunctionCall {
+    name: String,
+    arguments: String,
+}
+
+fn openai_request_tool_calls(tool_calls: &[ToolCall]) -> Vec<OpenAiRequestToolCall> {
+    tool_calls
+        .iter()
+        .map(|tool_call| OpenAiRequestToolCall {
+            id: tool_call.id.clone(),
+            kind: "function",
+            function: OpenAiRequestFunctionCall {
+                name: tool_call.tool_name.clone(),
+                arguments: tool_call.arguments.to_string(),
+            },
+        })
+        .collect()
 }
 
 fn chat_content_to_openai_request_value(content: &ChatContent) -> Value {

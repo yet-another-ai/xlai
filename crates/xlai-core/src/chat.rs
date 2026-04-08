@@ -1,6 +1,6 @@
 use futures_util::stream;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::content::{ChatContent, MessageRole, StreamTextDelta};
 use crate::error::XlaiError;
@@ -15,6 +15,30 @@ pub struct ChatMessage {
     pub tool_call_id: Option<String>,
     #[serde(default)]
     pub metadata: Metadata,
+}
+
+pub const XLAI_ASSISTANT_TOOL_CALLS_METADATA_KEY: &str = "xlai_assistant_tool_calls";
+
+impl ChatMessage {
+    #[must_use]
+    pub fn with_assistant_tool_calls(mut self, tool_calls: &[ToolCall]) -> Self {
+        if tool_calls.is_empty() {
+            self.metadata.remove(XLAI_ASSISTANT_TOOL_CALLS_METADATA_KEY);
+        } else {
+            self.metadata.insert(
+                XLAI_ASSISTANT_TOOL_CALLS_METADATA_KEY.to_owned(),
+                json!(tool_calls),
+            );
+        }
+        self
+    }
+
+    #[must_use]
+    pub fn assistant_tool_calls(&self) -> Option<Vec<ToolCall>> {
+        self.metadata
+            .get(XLAI_ASSISTANT_TOOL_CALLS_METADATA_KEY)
+            .and_then(|value| serde_json::from_value(value.clone()).ok())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]

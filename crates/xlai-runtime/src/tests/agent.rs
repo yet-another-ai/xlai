@@ -847,6 +847,69 @@ async fn agent_system_reminder_inserts_before_non_user_tail() -> Result<(), Xlai
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
+async fn agent_system_reminder_does_not_split_assistant_tool_block() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![ChatResponse {
+            message: assistant_message("ok"),
+            tool_calls: Vec::new(),
+            usage: None,
+            finish_reason: FinishReason::Completed,
+            metadata: empty_metadata(),
+        }],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let agent = runtime
+        .agent_session()?
+        .with_system_reminder(|_| async { Ok("reminder-body".to_owned()) });
+
+    agent
+        .execute(vec![
+            user_message("u"),
+            assistant_message("").with_assistant_tool_calls(&[ToolCall {
+                id: "call_1".to_owned(),
+                tool_name: "skill".to_owned(),
+                arguments: json!({ "skill_id": "review.code" }),
+            }]),
+            {
+                let mut metadata = empty_metadata();
+                metadata.insert("skill_id".to_owned(), json!("review.code"));
+                metadata.insert("skill_name".to_owned(), json!("Code Review"));
+                ChatMessage {
+                    role: MessageRole::Tool,
+                    content: ChatContent::text("resolved"),
+                    tool_name: Some("skill".to_owned()),
+                    tool_call_id: Some("call_1".to_owned()),
+                    metadata,
+                }
+            },
+        ])
+        .await?;
+
+    let reqs = lock_unpoisoned(&requests);
+    assert_eq!(reqs[0].messages.len(), 4);
+    assert_eq!(reqs[0].messages[0].role, MessageRole::User);
+    assert_eq!(reqs[0].messages[1].role, MessageRole::System);
+    assert_eq!(reqs[0].messages[2].role, MessageRole::Assistant);
+    assert_eq!(reqs[0].messages[3].role, MessageRole::Tool);
+    assert!(
+        reqs[0].messages[1]
+            .content
+            .as_single_text()
+            .is_some_and(|t| t.contains("reminder-body")),
+        "expected reminder before assistant+tool tail block"
+    );
+    assert!(
+        reqs[0].messages[2].assistant_tool_calls().is_some(),
+        "expected assistant tool calls metadata to be preserved"
+    );
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
 async fn agent_system_reminder_skips_when_nothing_to_add() -> Result<(), XlaiError> {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let model = Arc::new(RecordingChatModel::new(

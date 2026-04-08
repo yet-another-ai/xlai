@@ -4,7 +4,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 use xlai_core::{
     ChatContent, ChatMessage, ChatRequest, ContentPart, ErrorKind, MediaSource, MessageRole,
-    StructuredOutput, StructuredOutputFormat, XlaiError,
+    StructuredOutput, StructuredOutputFormat, ToolCall, XlaiError,
 };
 
 use crate::request::OpenAiChatRequest;
@@ -270,4 +270,65 @@ fn rejects_lark_structured_output_for_openai_compatible_backend() {
             ..
         }) if message.contains("Lark grammar")
     ));
+}
+
+#[test]
+fn serializes_assistant_tool_calls_for_follow_up_rounds() {
+    let config = test_config();
+    let request = ChatRequest {
+        model: None,
+        system_prompt: None,
+        messages: vec![
+            ChatMessage {
+                role: MessageRole::Assistant,
+                content: ChatContent::empty(),
+                tool_name: None,
+                tool_call_id: None,
+                metadata: BTreeMap::new(),
+            }
+            .with_assistant_tool_calls(&[ToolCall {
+                id: "call_1".to_owned(),
+                tool_name: "skill".to_owned(),
+                arguments: json!({ "skill_id": "review.code" }),
+            }]),
+            ChatMessage {
+                role: MessageRole::Tool,
+                content: ChatContent::text("resolved"),
+                tool_name: Some("skill".to_owned()),
+                tool_call_id: Some("call_1".to_owned()),
+                metadata: BTreeMap::new(),
+            },
+        ],
+        available_tools: Vec::new(),
+        structured_output: None,
+        metadata: BTreeMap::new(),
+        temperature: None,
+        max_output_tokens: None,
+        retry_policy: None,
+    };
+
+    let payload = OpenAiChatRequest::from_core_request(&config, request, false);
+    assert!(payload.is_ok(), "build payload");
+    let Ok(payload) = payload else {
+        return;
+    };
+    let serialized = serde_json::to_value(&payload);
+    assert!(serialized.is_ok(), "serialize payload");
+    let Ok(v) = serialized else {
+        return;
+    };
+
+    assert_eq!(v["messages"][0]["role"], json!("assistant"));
+    assert_eq!(v["messages"][0]["content"], serde_json::Value::Null);
+    assert_eq!(v["messages"][0]["tool_calls"][0]["id"], json!("call_1"));
+    assert_eq!(
+        v["messages"][0]["tool_calls"][0]["function"]["name"],
+        json!("skill")
+    );
+    assert_eq!(
+        v["messages"][0]["tool_calls"][0]["function"]["arguments"],
+        json!(r#"{"skill_id":"review.code"}"#)
+    );
+    assert_eq!(v["messages"][1]["role"], json!("tool"));
+    assert_eq!(v["messages"][1]["tool_call_id"], json!("call_1"));
 }

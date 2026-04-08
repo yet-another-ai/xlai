@@ -31,7 +31,7 @@ pub(crate) fn strip_internal_reminders(messages: Vec<ChatMessage>) -> Vec<ChatMe
 const AVAILABLE_SKILLS_TEMPLATE: &str = "system/system-reminder-available-skills.md";
 const INVOKED_SKILLS_TEMPLATE: &str = "system/system-reminder-invoked-skills.md";
 
-/// Inserts a `system` reminder immediately before the last message, or appends if empty.
+/// Inserts a `system` reminder near the tail without splitting assistant→tool groups.
 #[must_use]
 pub(crate) fn insert_system_reminder_near_tail(
     mut messages: Vec<ChatMessage>,
@@ -42,7 +42,16 @@ pub(crate) fn insert_system_reminder_near_tail(
         messages.push(reminder);
         return messages;
     }
-    let insert_at = messages.len() - 1;
+    let mut insert_at = messages.len() - 1;
+    while insert_at > 0 && messages[insert_at].role == MessageRole::Tool {
+        insert_at -= 1;
+    }
+    if messages[insert_at].role != MessageRole::Assistant
+        && insert_at + 1 < messages.len()
+        && messages[insert_at + 1].role == MessageRole::Tool
+    {
+        insert_at += 1;
+    }
     messages.insert(insert_at, reminder);
     messages
 }

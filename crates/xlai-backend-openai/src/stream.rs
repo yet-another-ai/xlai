@@ -76,7 +76,8 @@ impl StreamState {
                 tool_name: None,
                 tool_call_id: None,
                 metadata: BTreeMap::new(),
-            },
+            }
+            .with_assistant_tool_calls(&tool_calls),
             tool_calls,
             usage: None,
             finish_reason: self.finish_reason,

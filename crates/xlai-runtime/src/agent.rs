@@ -483,7 +483,11 @@ impl Agent {
                     )
                 })?;
 
-                messages.push(response.message.clone());
+                let assistant_message = response
+                    .message
+                    .clone()
+                    .with_assistant_tool_calls(&response.tool_calls);
+                messages.push(assistant_message);
 
                 if response.tool_calls.is_empty() {
                     return;

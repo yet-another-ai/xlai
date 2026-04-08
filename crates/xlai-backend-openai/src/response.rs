@@ -23,14 +23,6 @@ impl OpenAiChatResponse {
             )
         })?;
 
-        let message = ChatMessage {
-            role: MessageRole::Assistant,
-            content: openai_response_content_to_chat_content(choice.message.content.as_ref()),
-            tool_name: None,
-            tool_call_id: None,
-            metadata: BTreeMap::new(),
-        };
-
         let tool_calls = choice
             .message
             .tool_calls
@@ -38,6 +30,14 @@ impl OpenAiChatResponse {
             .into_iter()
             .map(ToolCall::try_from)
             .collect::<Result<Vec<_>, _>>()?;
+        let message = ChatMessage {
+            role: MessageRole::Assistant,
+            content: openai_response_content_to_chat_content(choice.message.content.as_ref()),
+            tool_name: None,
+            tool_call_id: None,
+            metadata: BTreeMap::new(),
+        }
+        .with_assistant_tool_calls(&tool_calls);
 
         Ok(ChatResponse {
             message,

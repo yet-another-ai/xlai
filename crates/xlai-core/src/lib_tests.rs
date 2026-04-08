@@ -3,7 +3,8 @@ use serde_json::json;
 
 use crate::{
     ChatContent, ChatMessage, ChatRequest, ChatRetryPolicy, ContentPart, ErrorKind, MediaSource,
-    MessageRole, StructuredOutput, StructuredOutputFormat, TtsChunk, TtsResponse, XlaiError,
+    MessageRole, StructuredOutput, StructuredOutputFormat, ToolCall, TtsChunk, TtsResponse,
+    XlaiError,
 };
 
 #[test]
@@ -52,6 +53,38 @@ fn chat_message_supports_structured_metadata_values() {
             "editable": true,
             "tags": ["session", "mutable"]
         }))
+    );
+}
+
+#[test]
+fn chat_message_round_trips_assistant_tool_calls_via_metadata() {
+    let message = ChatMessage {
+        role: MessageRole::Assistant,
+        content: ChatContent::empty(),
+        tool_name: None,
+        tool_call_id: None,
+        metadata: Default::default(),
+    }
+    .with_assistant_tool_calls(&[ToolCall {
+        id: "call_1".to_owned(),
+        tool_name: "skill".to_owned(),
+        arguments: json!({ "skill_id": "review.code" }),
+    }]);
+
+    let tool_calls = message.assistant_tool_calls();
+    assert!(
+        tool_calls.is_some(),
+        "expected assistant tool calls metadata"
+    );
+    let Some(tool_calls) = tool_calls else {
+        return;
+    };
+    assert_eq!(tool_calls.len(), 1);
+    assert_eq!(tool_calls[0].id, "call_1");
+    assert_eq!(tool_calls[0].tool_name, "skill");
+    assert_eq!(
+        tool_calls[0].arguments,
+        json!({ "skill_id": "review.code" })
     );
 }
 
