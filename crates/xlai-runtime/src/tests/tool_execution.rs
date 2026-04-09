@@ -41,6 +41,13 @@ async fn agent_executes_multiple_tool_calls_concurrently_by_default() -> Result<
                 finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
+            ChatResponse {
+                message: assistant_message("Paris is sunny and 9am."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
         ],
     ));
 
@@ -103,7 +110,7 @@ async fn agent_executes_multiple_tool_calls_concurrently_by_default() -> Result<
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 3);
     assert_eq!(requests[1].messages.len(), 4);
     assert_eq!(
         requests[1].messages[2].tool_name.as_deref(),
@@ -139,6 +146,13 @@ async fn agent_can_execute_multiple_tool_calls_concurrently() -> Result<(), Xlai
                 ],
                 usage: None,
                 finish_reason: FinishReason::ToolCalls,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("Paris is sunny and 9am."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
             ChatResponse {
@@ -245,6 +259,13 @@ async fn agent_runs_tool_batch_sequentially_when_any_tool_is_sequential() -> Res
                 finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
+            ChatResponse {
+                message: assistant_message("Paris is sunny and 9am."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
         ],
     ));
 
@@ -332,6 +353,13 @@ async fn agent_runs_mixed_tool_batch_sequentially_in_model_order() -> Result<(),
                 ],
                 usage: None,
                 finish_reason: FinishReason::ToolCalls,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("Paris schedule assembled."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
             ChatResponse {
@@ -446,7 +474,7 @@ async fn agent_runs_mixed_tool_batch_sequentially_in_model_order() -> Result<(),
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 3);
     assert_eq!(
         requests[1]
             .messages
@@ -491,6 +519,13 @@ async fn agent_runs_mixed_batch_sequentially_when_multiple_tools_are_sequential(
                 ],
                 usage: None,
                 finish_reason: FinishReason::ToolCalls,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("Paris plan completed."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
             ChatResponse {

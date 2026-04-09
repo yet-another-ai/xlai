@@ -81,6 +81,13 @@ async fn agent_skill_tool_uses_configured_skill_store() -> Result<(), XlaiError>
                 finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
+            ChatResponse {
+                message: assistant_message("skill loaded"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
         ],
     ));
 
@@ -97,7 +104,7 @@ async fn agent_skill_tool_uses_configured_skill_store() -> Result<(), XlaiError>
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 3);
     // Second model round: [user, assistant, system_reminder, tool]
     assert_eq!(requests[1].messages.len(), 4);
     assert_eq!(requests[1].messages[3].tool_name.as_deref(), Some("skill"));
@@ -206,6 +213,13 @@ async fn agent_mcp_registry_executes_registered_tool_calls() -> Result<(), XlaiE
                 finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
+            ChatResponse {
+                message: assistant_message("Paris is sunny."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
         ],
     ));
 
@@ -233,7 +247,7 @@ async fn agent_mcp_registry_executes_registered_tool_calls() -> Result<(), XlaiE
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 3);
     assert_eq!(requests[1].messages.len(), 3);
     assert_eq!(
         requests[1].messages[2].tool_name.as_deref(),
@@ -317,6 +331,13 @@ async fn agent_register_tool_shorthand_routes_through_mcp_registry() -> Result<(
                 finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
+            ChatResponse {
+                message: assistant_message("Paris is sunny."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
         ],
     ));
 
@@ -346,7 +367,7 @@ async fn agent_register_tool_shorthand_routes_through_mcp_registry() -> Result<(
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 3);
     assert!(
         requests[0]
             .available_tools
@@ -415,6 +436,13 @@ async fn agent_context_compressor_runs_once_per_stream_round() -> Result<(), Xla
                 finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
+            ChatResponse {
+                message: assistant_message("done"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
         ],
     ));
 
@@ -446,7 +474,7 @@ async fn agent_context_compressor_runs_once_per_stream_round() -> Result<(), Xla
     });
 
     agent_stream_prompt_final_response(&agent, "What's the weather in Paris?").await?;
-    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
     Ok(())
 }
 
@@ -467,6 +495,13 @@ async fn agent_context_compressor_sees_growing_history() -> Result<(), XlaiError
                 }],
                 usage: None,
                 finish_reason: FinishReason::ToolCalls,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("ok"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
             ChatResponse {
@@ -501,7 +536,7 @@ async fn agent_context_compressor_sees_growing_history() -> Result<(), XlaiError
 
     agent_stream_prompt_final_response(&agent, "Paris weather?").await?;
     let seen = lock_unpoisoned(&lens);
-    assert_eq!(&*seen, &vec![1_usize, 3]);
+    assert_eq!(&*seen, &vec![1_usize, 3, 4]);
     Ok(())
 }
 
@@ -521,6 +556,13 @@ async fn agent_context_compressor_rewritten_messages_reach_model() -> Result<(),
                 }],
                 usage: None,
                 finish_reason: FinishReason::ToolCalls,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("final"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
             ChatResponse {
@@ -561,18 +603,20 @@ async fn agent_context_compressor_rewritten_messages_reach_model() -> Result<(),
 
     agent_stream_prompt_final_response(&agent, "Paris?").await?;
     let reqs = lock_unpoisoned(&requests);
-    assert_eq!(reqs.len(), 2);
+    assert_eq!(reqs.len(), 3);
     assert_eq!(reqs[0].messages.len(), 1);
     assert_eq!(reqs[0].messages[0].role, MessageRole::User);
     assert_eq!(reqs[1].messages.len(), 1);
     assert_eq!(reqs[1].messages[0].role, MessageRole::User);
+    assert_eq!(reqs[2].messages.len(), 1);
+    assert_eq!(reqs[2].messages[0].role, MessageRole::User);
     Ok(())
 }
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
-async fn agent_loop_injects_continue_when_compressor_removes_all_user_messages()
--> Result<(), XlaiError> {
+async fn agent_loop_injects_continue_only_when_last_message_is_assistant() -> Result<(), XlaiError>
+{
     let requests = Arc::new(Mutex::new(Vec::new()));
     let rounds = Arc::new(AtomicUsize::new(0));
     let model = Arc::new(RecordingChatModel::new(
@@ -587,6 +631,13 @@ async fn agent_loop_injects_continue_when_compressor_removes_all_user_messages()
                 }],
                 usage: None,
                 finish_reason: FinishReason::ToolCalls,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("final"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
             ChatResponse {
@@ -637,13 +688,17 @@ async fn agent_loop_injects_continue_when_compressor_removes_all_user_messages()
     agent_stream_prompt_final_response(&agent, "Paris?").await?;
 
     let reqs = lock_unpoisoned(&requests);
-    assert_eq!(reqs.len(), 2);
-    assert_eq!(reqs[1].messages.len(), 3);
+    assert_eq!(reqs.len(), 3);
+    assert_eq!(reqs[1].messages.len(), 2);
     assert_eq!(reqs[1].messages[0].role, MessageRole::Assistant);
     assert_eq!(reqs[1].messages[1].role, MessageRole::Tool);
-    assert_eq!(reqs[1].messages[2].role, MessageRole::User);
+    assert_eq!(reqs[2].messages.len(), 4);
+    assert_eq!(reqs[2].messages[0].role, MessageRole::Assistant);
+    assert_eq!(reqs[2].messages[1].role, MessageRole::Tool);
+    assert_eq!(reqs[2].messages[2].role, MessageRole::Assistant);
+    assert_eq!(reqs[2].messages[3].role, MessageRole::User);
     assert_eq!(
-        reqs[1].messages[2].content.as_single_text(),
+        reqs[2].messages[3].content.as_single_text(),
         Some(
             "Continue. If you feel nothing else could be further done, just summarize your work without any tool calling."
         )
@@ -677,6 +732,13 @@ async fn agent_loop_does_not_inject_continue_when_user_message_still_exists()
                 finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
+            ChatResponse {
+                message: assistant_message("final"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
         ],
     ));
 
@@ -694,7 +756,7 @@ async fn agent_loop_does_not_inject_continue_when_user_message_still_exists()
     agent_stream_prompt_final_response(&agent, "Paris?").await?;
 
     let reqs = lock_unpoisoned(&requests);
-    assert_eq!(reqs.len(), 2);
+    assert_eq!(reqs.len(), 3);
     assert_eq!(reqs[1].messages.len(), 3);
     assert_eq!(reqs[1].messages[0].role, MessageRole::User);
     assert_eq!(reqs[1].messages[1].role, MessageRole::Assistant);
@@ -1095,6 +1157,13 @@ async fn agent_system_reminder_stream_runs_once_per_loop_round() -> Result<(), X
                 finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
+            ChatResponse {
+                message: assistant_message("done"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
         ],
     ));
 
@@ -1117,10 +1186,10 @@ async fn agent_system_reminder_stream_runs_once_per_loop_round() -> Result<(), X
     });
 
     agent_stream_prompt_final_response(&agent, "Paris?").await?;
-    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
 
     let reqs = lock_unpoisoned(&requests);
-    assert_eq!(reqs.len(), 2);
+    assert_eq!(reqs.len(), 3);
     for r in reqs.iter() {
         assert!(
             r.messages.iter().any(|m| {

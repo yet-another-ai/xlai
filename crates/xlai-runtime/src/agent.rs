@@ -70,6 +70,13 @@ fn ensure_agent_loop_user_message(messages: Vec<ChatMessage>) -> Vec<ChatMessage
         return messages;
     }
 
+    if !matches!(
+        messages.last().map(|message| message.role),
+        Some(MessageRole::Assistant)
+    ) {
+        return messages;
+    }
+
     let mut messages = messages;
     messages.push(ChatMessage {
         role: MessageRole::User,
@@ -81,9 +88,10 @@ fn ensure_agent_loop_user_message(messages: Vec<ChatMessage>) -> Vec<ChatMessage
     messages
 }
 
-/// High-level agent session: multi-round tool execution runs only on **streaming** APIs when
-/// the agent loop is enabled (see [`Self::with_agent_loop_enabled`]). Unary [`Self::execute`] / [`Self::prompt`] always issue
-/// a single model call (no tool callbacks), so callers are not blocked for arbitrarily long runs.
+/// High-level agent session: the automatic multi-call agent loop runs only on **streaming** APIs
+/// when the agent loop is enabled (see [`Self::with_agent_loop_enabled`]). Unary
+/// [`Self::execute`] / [`Self::prompt`] always issue a single model call (no tool callbacks), so
+/// callers are not blocked for arbitrarily long runs.
 /// [`Chat`] also performs only single model calls.
 ///
 /// Optionally, [`Self::with_context_compressor`] can rewrite the message list before each looped
@@ -204,13 +212,15 @@ impl Agent {
         self
     }
 
-    /// Controls the multi-round agent loop on **streaming** APIs only ([`Self::stream`],
-    /// [`Self::stream_prompt`], etc.).
+    /// Controls the automatic multi-call agent loop on **streaming** APIs only
+    /// ([`Self::stream`], [`Self::stream_prompt`], etc.).
     ///
     /// When `false`, those streams perform a single model turn and do not run tool callbacks.
     ///
-    /// When `true` (default), streams repeat model → tools → model until there are no tool calls
-    /// (bounded by [`Self::with_max_tool_round_trips`]).
+    /// When `true` (default), streams keep issuing follow-up model calls, executing any tool calls
+    /// returned along the way. The loop stops only after two consecutive model responses both
+    /// produce an assistant message with no further tool calls (bounded by
+    /// [`Self::with_max_tool_round_trips`]).
     ///
     /// [`Self::execute`] and [`Self::prompt`] always perform exactly one model call and never run
     /// tool callbacks here (use streaming if you need the agent tool loop).
@@ -221,8 +231,8 @@ impl Agent {
     }
 
     /// Registers an async hook that runs **before each model call** in the streaming agent loop
-    /// ([`Self::stream`], [`Self::stream_prompt`], etc.), when [`Self::with_agent_loop_enabled`] is
-    /// `true`.
+    /// ([`Self::stream`], [`Self::stream_prompt`], etc.), when [`Self::with_agent_loop_enabled`]
+    /// is `true`.
     ///
     /// The callback receives the full accumulated [`ChatMessage`] history for this stream and a
     /// best-effort [`Option<u32>`] input-token estimate derived from JSON-serialized request size
@@ -419,7 +429,7 @@ impl Agent {
 
     /// Runs exactly one model call with the given message history (no tool execution).
     ///
-    /// For multi-round tool execution with incremental output, use [`Self::stream`] instead.
+    /// For automatic multi-call execution with incremental output, use [`Self::stream`] instead.
     ///
     /// # Errors
     ///
@@ -495,6 +505,7 @@ impl Agent {
 
         Box::pin(try_stream! {
             let mut messages = messages;
+            let mut consecutive_assistant_messages_without_tool_calls = 0usize;
             for _ in 0..max {
                 let mut to_send =
                     prepare_messages_for_agent_round(&chat, &messages, &compressor).await?;
@@ -524,8 +535,17 @@ impl Agent {
                 messages.push(assistant_message);
 
                 if response.tool_calls.is_empty() {
-                    return;
+                    if response.message.role == MessageRole::Assistant {
+                        consecutive_assistant_messages_without_tool_calls += 1;
+                        if consecutive_assistant_messages_without_tool_calls >= 2 {
+                            return;
+                        }
+                    } else {
+                        consecutive_assistant_messages_without_tool_calls = 0;
+                    }
+                    continue;
                 }
+                consecutive_assistant_messages_without_tool_calls = 0;
 
                 for call in &response.tool_calls {
                     yield ChatExecutionEvent::ToolCall(call.clone());
@@ -540,7 +560,7 @@ impl Agent {
 
             Err(XlaiError::new(
                 ErrorKind::Tool,
-                "agent exceeded the maximum number of tool round trips",
+                "agent exceeded the maximum number of automatic response rounds",
             ))?;
         })
     }

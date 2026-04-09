@@ -54,6 +54,24 @@ async fn agent_stream_emits_model_and_tool_events() -> Result<(), XlaiError> {
                 metadata: empty_metadata(),
             }),
         ],
+        vec![
+            ChatChunk::MessageStart {
+                role: MessageRole::Assistant,
+                message_index: 0,
+            },
+            ChatChunk::ContentDelta(StreamTextDelta {
+                message_index: 0,
+                part_index: 0,
+                delta: "Paris is sunny.".to_owned(),
+            }),
+            ChatChunk::Finished(ChatResponse {
+                message: assistant_message("Paris is sunny."),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            }),
+        ],
     ]));
 
     let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
@@ -103,13 +121,13 @@ async fn agent_stream_emits_model_and_tool_events() -> Result<(), XlaiError> {
 
     assert_eq!(
         content_deltas,
-        vec!["Looking up weather", "Paris is sunny."]
+        vec!["Looking up weather", "Paris is sunny.", "Paris is sunny."]
     );
     assert!(saw_tool_call);
     assert!(saw_tool_result);
     assert_eq!(
         finished_messages,
-        vec!["Looking up weather", "Paris is sunny."]
+        vec!["Looking up weather", "Paris is sunny.", "Paris is sunny."]
     );
 
     Ok(())
