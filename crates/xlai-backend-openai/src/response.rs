@@ -189,9 +189,9 @@ fn parse_openai_function_call_item(
 
 #[derive(Deserialize)]
 struct OpenAiUsage {
-    #[serde(rename = "prompt_tokens")]
+    #[serde(rename = "prompt_tokens", alias = "input_tokens")]
     prompt: u32,
-    #[serde(rename = "completion_tokens")]
+    #[serde(rename = "completion_tokens", alias = "output_tokens")]
     completion: u32,
     #[serde(rename = "total_tokens")]
     total: u32,
