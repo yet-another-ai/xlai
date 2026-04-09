@@ -2,28 +2,31 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Serialize;
 use serde_json::{Map, Value};
 use xlai_core::{
-    ChatContent, ChatMessage, ChatRequest, ContentPart, ErrorKind, ImageDetail, MediaSource,
-    MessageRole, StructuredOutputFormat, ToolCall, ToolDefinition, ToolParameterType, XlaiError,
+    ChatMessage, ChatRequest, ContentPart, ErrorKind, ImageDetail, MediaSource, MessageRole,
+    StructuredOutputFormat, ToolCall, ToolDefinition, ToolParameterType, XlaiError,
 };
 
 use crate::OpenAiConfig;
+use crate::response::response_output_items_from_message;
 
 #[derive(Serialize)]
 pub(crate) struct OpenAiChatRequest {
     model: String,
-    messages: Vec<OpenAiRequestMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instructions: Option<String>,
+    input: Vec<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
+    max_output_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_effort: Option<&'static str>,
+    reasoning: Option<OpenAiReasoningConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAiTool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<OpenAiResponseFormat>,
+    text: Option<OpenAiTextConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
 }
@@ -34,15 +37,14 @@ impl OpenAiChatRequest {
         request: ChatRequest,
         stream: bool,
     ) -> Result<Self, XlaiError> {
-        let response_format = match request
+        let text = match request
             .structured_output
             .as_ref()
             .map(|output| &output.format)
         {
             None => None,
-            Some(StructuredOutputFormat::JsonSchema { schema }) => Some(OpenAiResponseFormat {
-                kind: "json_schema",
-                json_schema: Some(OpenAiJsonSchemaResponseFormat {
+            Some(StructuredOutputFormat::JsonSchema { schema }) => Some(OpenAiTextConfig {
+                format: Some(OpenAiTextFormat::JsonSchema {
                     name: request
                         .structured_output
                         .as_ref()
@@ -73,136 +75,93 @@ impl OpenAiChatRequest {
 
         Ok(Self {
             model: request.model.unwrap_or_else(|| config.model.clone()),
-            messages: request
+            instructions: request.system_prompt,
+            input: request
                 .messages
                 .into_iter()
-                .map(OpenAiRequestMessage::from)
+                .flat_map(openai_request_input_items)
                 .collect(),
             temperature: request.temperature,
-            max_tokens: request.max_output_tokens,
-            reasoning_effort: request.reasoning_effort.map(reasoning_effort_openai),
+            max_output_tokens: request.max_output_tokens,
+            reasoning: request
+                .reasoning_effort
+                .map(|effort| OpenAiReasoningConfig {
+                    effort: reasoning_effort_openai(effort),
+                }),
             tool_choice: tools.as_ref().map(|_| "auto"),
             tools,
-            response_format,
+            text,
             stream: stream.then_some(true),
         })
     }
 }
 
-#[derive(Serialize)]
-struct OpenAiResponseFormat {
-    #[serde(rename = "type")]
-    kind: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    json_schema: Option<OpenAiJsonSchemaResponseFormat>,
-}
+fn openai_request_input_items(message: ChatMessage) -> Vec<Value> {
+    if let Some(items) = response_output_items_from_message(&message) {
+        return items;
+    }
 
-#[derive(Serialize)]
-struct OpenAiJsonSchemaResponseFormat {
-    name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
-    schema: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    strict: Option<bool>,
-}
-
-#[derive(Serialize)]
-struct OpenAiRequestMessage {
-    role: &'static str,
-    content: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_call_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<OpenAiRequestToolCall>>,
-}
-
-impl From<ChatMessage> for OpenAiRequestMessage {
-    fn from(message: ChatMessage) -> Self {
-        let assistant_tool_calls = (message.role == MessageRole::Assistant)
-            .then(|| message.assistant_tool_calls())
-            .flatten();
-        let role = match message.role {
-            MessageRole::System => "system",
-            MessageRole::User => "user",
-            MessageRole::Assistant => "assistant",
-            MessageRole::Tool => "tool",
-        };
-
-        Self {
-            role,
-            content: openai_request_content_value(&message, assistant_tool_calls.as_deref()),
-            name: message.tool_name,
-            tool_call_id: message.tool_call_id,
-            tool_calls: assistant_tool_calls
-                .as_deref()
-                .map(openai_request_tool_calls),
+    match message.role {
+        MessageRole::System => vec![openai_request_message_item(
+            "system",
+            &message.content,
+            false,
+        )],
+        MessageRole::User => vec![openai_request_message_item("user", &message.content, false)],
+        MessageRole::Assistant => {
+            if let Some(tool_calls) = message.assistant_tool_calls()
+                && !tool_calls.is_empty()
+            {
+                return openai_request_function_calls(&tool_calls);
+            }
+            vec![openai_request_message_item(
+                "assistant",
+                &message.content,
+                true,
+            )]
         }
+        MessageRole::Tool => vec![serde_json::json!({
+            "type": "function_call_output",
+            "call_id": message.tool_call_id,
+            "output": message.content.text_parts_concatenated(),
+        })],
     }
 }
 
-fn openai_request_content_value(
-    message: &ChatMessage,
-    assistant_tool_calls: Option<&[ToolCall]>,
+fn openai_request_message_item(
+    role: &str,
+    content: &xlai_core::ChatContent,
+    assistant_output: bool,
 ) -> Value {
-    if message.role == MessageRole::Tool {
-        return Value::String(message.content.text_parts_concatenated());
-    }
-    if message.role == MessageRole::Assistant
-        && assistant_tool_calls.is_some_and(|tool_calls| !tool_calls.is_empty())
-        && message.content.is_empty()
-    {
-        return Value::Null;
-    }
-    chat_content_to_openai_request_value(&message.content)
+    serde_json::json!({
+        "type": "message",
+        "role": role,
+        "content": content
+            .parts
+            .iter()
+            .map(|part| openai_request_part_value(part, assistant_output))
+            .collect::<Vec<_>>(),
+    })
 }
 
-#[derive(Serialize)]
-struct OpenAiRequestToolCall {
-    id: String,
-    #[serde(rename = "type")]
-    kind: &'static str,
-    function: OpenAiRequestFunctionCall,
-}
-
-#[derive(Serialize)]
-struct OpenAiRequestFunctionCall {
-    name: String,
-    arguments: String,
-}
-
-fn openai_request_tool_calls(tool_calls: &[ToolCall]) -> Vec<OpenAiRequestToolCall> {
+fn openai_request_function_calls(tool_calls: &[ToolCall]) -> Vec<Value> {
     tool_calls
         .iter()
-        .map(|tool_call| OpenAiRequestToolCall {
-            id: tool_call.id.clone(),
-            kind: "function",
-            function: OpenAiRequestFunctionCall {
-                name: tool_call.tool_name.clone(),
-                arguments: tool_call.arguments.to_string(),
-            },
+        .map(|tool_call| {
+            serde_json::json!({
+                "type": "function_call",
+                "call_id": tool_call.id,
+                "name": tool_call.tool_name,
+                "arguments": tool_call.arguments.to_string(),
+            })
         })
         .collect()
 }
 
-fn chat_content_to_openai_request_value(content: &ChatContent) -> Value {
-    if let Some(text) = content.as_single_text() {
-        return Value::String(text.to_owned());
-    }
-    let parts: Vec<Value> = content
-        .parts
-        .iter()
-        .map(openai_request_part_value)
-        .collect();
-    Value::Array(parts)
-}
-
-fn openai_request_part_value(part: &ContentPart) -> Value {
+fn openai_request_part_value(part: &ContentPart, assistant_output: bool) -> Value {
     match part {
         ContentPart::Text { text } => serde_json::json!({
-            "type": "text",
+            "type": if assistant_output { "output_text" } else { "input_text" },
             "text": text,
         }),
         ContentPart::Image {
@@ -220,18 +179,18 @@ fn openai_request_part_value(part: &ContentPart) -> Value {
                     format!("data:{mime};base64,{}", STANDARD.encode(data))
                 }
             };
-            let mut image_url = serde_json::json!({ "url": url });
+            let mut item = serde_json::json!({
+                "type": "input_image",
+                "image_url": url,
+            });
             if let Some(d) = detail {
-                image_url["detail"] = Value::String(image_detail_openai(*d).to_owned());
+                item["detail"] = Value::String(image_detail_openai(*d).to_owned());
             }
-            serde_json::json!({
-                "type": "image_url",
-                "image_url": image_url,
-            })
+            item
         }
         ContentPart::Audio { source, mime_type } => match source {
             MediaSource::Url { url } => serde_json::json!({
-                "type": "text",
+                "type": if assistant_output { "output_text" } else { "input_text" },
                 "text": format!("(Attached audio URL: {url})"),
             }),
             MediaSource::InlineData {
@@ -240,11 +199,9 @@ fn openai_request_part_value(part: &ContentPart) -> Value {
             } => {
                 let mime = mime_type.as_deref().unwrap_or(inline_mime.as_str());
                 serde_json::json!({
-                    "type": "file",
-                    "file": {
-                        "filename": "audio",
-                        "file_data": format!("data:{mime};base64,{}", STANDARD.encode(data)),
-                    },
+                    "type": "input_file",
+                    "filename": "audio",
+                    "file_data": format!("data:{mime};base64,{}", STANDARD.encode(data)),
                 })
             }
         },
@@ -254,8 +211,9 @@ fn openai_request_part_value(part: &ContentPart) -> Value {
             filename,
         } => match source {
             MediaSource::Url { url } => serde_json::json!({
-                "type": "text",
-                "text": format!("(Attached file URL: {url})"),
+                "type": "input_file",
+                "file_url": url,
+                "filename": filename.clone().unwrap_or_else(|| "attachment".to_owned()),
             }),
             MediaSource::InlineData {
                 mime_type: inline_mime,
@@ -264,11 +222,9 @@ fn openai_request_part_value(part: &ContentPart) -> Value {
                 let mime = mime_type.as_deref().unwrap_or(inline_mime.as_str());
                 let fname = filename.clone().unwrap_or_else(|| "attachment".to_owned());
                 serde_json::json!({
-                    "type": "file",
-                    "file": {
-                        "filename": fname,
-                        "file_data": format!("data:{mime};base64,{}", STANDARD.encode(data)),
-                    },
+                    "type": "input_file",
+                    "filename": fname,
+                    "file_data": format!("data:{mime};base64,{}", STANDARD.encode(data)),
                 })
             }
         },
@@ -284,30 +240,53 @@ const fn image_detail_openai(detail: ImageDetail) -> &'static str {
 }
 
 #[derive(Serialize)]
+struct OpenAiReasoningConfig {
+    effort: &'static str,
+}
+
+#[derive(Serialize)]
+struct OpenAiTextConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    format: Option<OpenAiTextFormat>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum OpenAiTextFormat {
+    JsonSchema {
+        name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+        schema: Value,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        strict: Option<bool>,
+    },
+}
+
+#[derive(Serialize)]
 struct OpenAiTool {
     #[serde(rename = "type")]
     kind: &'static str,
-    function: OpenAiFunctionDefinition,
+    name: String,
+    description: String,
+    parameters: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    strict: Option<bool>,
 }
 
 impl From<&ToolDefinition> for OpenAiTool {
     fn from(tool: &ToolDefinition) -> Self {
         Self {
             kind: "function",
-            function: OpenAiFunctionDefinition {
-                name: tool.name.clone(),
-                description: tool.description.clone(),
-                parameters: tool_json_schema(tool),
-            },
+            name: tool.name.clone(),
+            description: tool.description.clone(),
+            parameters: tool_json_schema(tool),
+            // OpenAI strict function schemas require all properties to appear in `required`.
+            // Our tool definitions allow optional params, so default to best-effort function calling
+            // until we add nullable/all-required schema lowering for strict mode.
+            strict: None,
         }
     }
-}
-
-#[derive(Serialize)]
-struct OpenAiFunctionDefinition {
-    name: String,
-    description: String,
-    parameters: Value,
 }
 
 fn tool_json_schema(tool: &ToolDefinition) -> Value {

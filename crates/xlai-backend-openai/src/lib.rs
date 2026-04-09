@@ -4,6 +4,7 @@ use async_stream::try_stream;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use futures_util::{StreamExt, stream as stream_util};
 use reqwest::Client;
+use serde_json::Value;
 use xlai_core::{
     BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatModel, ChatRequest, ChatResponse,
     ChatRetryPolicy, ErrorKind, MediaSource, MessageRole, StreamTextDelta, TranscriptionBackend,
@@ -28,7 +29,7 @@ use chat_retry::{
 use provider_response::{require_success_response, xlai_error_from_reqwest};
 use request::OpenAiChatRequest;
 use response::OpenAiChatResponse;
-use stream::{OpenAiStreamResponse, SseParser, StreamState, update_finish_reason};
+use stream::{SseParser, StreamState, maybe_completed_response, update_finish_reason};
 use transcription::{OpenAiTranscriptionRequest, OpenAiTranscriptionResponse};
 use tts::{
     ParsedSpeechSse, build_speech_json_body, merge_header_metadata, mime_for_tts_format,
@@ -73,8 +74,8 @@ impl OpenAiConfig {
         self
     }
 
-    fn chat_completions_url(&self) -> String {
-        format!("{}/chat/completions", self.base_url.trim_end_matches('/'))
+    fn responses_url(&self) -> String {
+        format!("{}/responses", self.base_url.trim_end_matches('/'))
     }
 
     fn audio_transcriptions_url(&self) -> String {
@@ -116,14 +117,14 @@ impl OpenAiChatModel {
         }
     }
 
-    /// POST `/chat/completions` with optional retries before the response body is consumed.
-    async fn post_chat_completions_checked(
+    /// POST `/responses` with optional retries before the response body is consumed.
+    async fn post_responses_checked(
         &self,
         payload: &OpenAiChatRequest,
         max_extra_attempts: u32,
         policy_for_backoff: Option<&ChatRetryPolicy>,
     ) -> Result<reqwest::Response, XlaiError> {
-        let endpoint = self.config.chat_completions_url();
+        let endpoint = self.config.responses_url();
         let mut failures = 0u32;
         loop {
             let attempt = async {
@@ -210,7 +211,7 @@ impl ChatModel for OpenAiChatModel {
             let payload = OpenAiChatRequest::from_core_request(&self.config, request, false)?;
 
             let response = self
-                .post_chat_completions_checked(&payload, max_extra, policy_for_backoff)
+                .post_responses_checked(&payload, max_extra, policy_for_backoff)
                 .await?;
 
             let response: OpenAiChatResponse = response
@@ -230,7 +231,7 @@ impl ChatModel for OpenAiChatModel {
             let payload = OpenAiChatRequest::from_core_request(&this.config, request, true)?;
 
             let response = this
-                .post_chat_completions_checked(&payload, max_extra, policy_for_backoff)
+                .post_responses_checked(&payload, max_extra, policy_for_backoff)
                 .await?;
 
             let mut bytes_stream = response.bytes_stream();
@@ -249,44 +250,119 @@ impl ChatModel for OpenAiChatModel {
                         return;
                     }
 
-                    let chunk: OpenAiStreamResponse = serde_json::from_str(&event).map_err(|error| {
+                    let event_value: Value = serde_json::from_str(&event).map_err(|error| {
                         XlaiError::new(
                             ErrorKind::Provider,
                             format!("failed to parse stream event: {error}"),
                         )
                     })?;
 
-                    let choice = chunk.choices.into_iter().next().ok_or_else(|| {
-                        XlaiError::new(
-                            ErrorKind::Provider,
-                            "openai-compatible stream response contained no choices",
-                        )
-                    })?;
-
-                    if !message_started {
-                        message_started = true;
-                        yield ChatChunk::MessageStart {
-                            role: MessageRole::Assistant,
-                        };
+                    if let Some(response) = maybe_completed_response(&event_value)? {
+                        yield ChatChunk::Finished(response);
+                        return;
                     }
 
-                    if let Some(content) = choice.delta.content {
-                        state.message_content.push_str(&content);
-                        yield ChatChunk::ContentDelta(StreamTextDelta {
-                            part_index: 0,
-                            delta: content,
-                        });
-                    }
-
-                    if let Some(tool_calls) = choice.delta.tool_calls {
-                        for tool_call in tool_calls {
-                            let chunk = state.apply_tool_delta(tool_call);
+                    match event_value.get("type").and_then(Value::as_str) {
+                        Some("response.output_text.delta") => {
+                            if !message_started {
+                                message_started = true;
+                                yield ChatChunk::MessageStart {
+                                    role: MessageRole::Assistant,
+                                };
+                            }
+                            if let Some(delta) = event_value.get("delta").and_then(Value::as_str) {
+                                state.message_content.push_str(delta);
+                                yield ChatChunk::ContentDelta(StreamTextDelta {
+                                    part_index: 0,
+                                    delta: delta.to_owned(),
+                                });
+                            }
+                        }
+                        Some("response.output_item.added") => {
+                            if !message_started {
+                                message_started = true;
+                                yield ChatChunk::MessageStart {
+                                    role: MessageRole::Assistant,
+                                };
+                            }
+                            if let Some(item) = event_value.get("item").and_then(Value::as_object)
+                                && item.get("type").and_then(Value::as_str) == Some("function_call")
+                            {
+                                let index = event_value
+                                    .get("output_index")
+                                    .and_then(Value::as_u64)
+                                    .unwrap_or(0) as usize;
+                                let chunk = state.apply_tool_call_added(
+                                    index,
+                                    item.get("call_id").and_then(Value::as_str).map(str::to_owned),
+                                    item.get("name").and_then(Value::as_str).map(str::to_owned),
+                                    item.get("arguments").and_then(Value::as_str).map(str::to_owned),
+                                );
+                                yield ChatChunk::ToolCallDelta(chunk);
+                            }
+                        }
+                        Some("response.function_call_arguments.delta") => {
+                            if !message_started {
+                                message_started = true;
+                                yield ChatChunk::MessageStart {
+                                    role: MessageRole::Assistant,
+                                };
+                            }
+                            let index = event_value
+                                .get("output_index")
+                                .and_then(Value::as_u64)
+                                .unwrap_or(0) as usize;
+                            let delta = event_value
+                                .get("delta")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_owned();
+                            let chunk = state.apply_tool_delta(index, delta);
                             yield ChatChunk::ToolCallDelta(chunk);
                         }
-                    }
-
-                    if let Some(reason) = choice.finish_reason {
-                        update_finish_reason(&mut state, Some(reason.as_str()));
+                        Some("response.output_item.done") => {
+                            if let Some(item) = event_value.get("item") {
+                                state.push_output_item(item.clone());
+                            }
+                        }
+                        Some("response.completed") => {
+                            let has_tool_calls = state.has_tool_calls();
+                            update_finish_reason(
+                                &mut state,
+                                event_value
+                                    .get("response")
+                                    .and_then(|r| r.get("status"))
+                                    .and_then(Value::as_str),
+                                event_value
+                                    .get("response")
+                                    .and_then(|r| r.get("incomplete_details"))
+                                    .and_then(|d| d.get("reason"))
+                                    .and_then(Value::as_str),
+                                has_tool_calls,
+                            );
+                        }
+                        Some("response.incomplete") => {
+                            let has_tool_calls = state.has_tool_calls();
+                            update_finish_reason(
+                                &mut state,
+                                Some("incomplete"),
+                                event_value
+                                    .get("response")
+                                    .and_then(|r| r.get("incomplete_details"))
+                                    .and_then(|d| d.get("reason"))
+                                    .and_then(Value::as_str),
+                                has_tool_calls,
+                            );
+                        }
+                        Some("error") => {
+                            let message = event_value
+                                .get("error")
+                                .and_then(|e| e.get("message"))
+                                .and_then(Value::as_str)
+                                .unwrap_or("openai-compatible stream returned an error event");
+                            Err(XlaiError::new(ErrorKind::Provider, message))?;
+                        }
+                        _ => {}
                     }
                 }
             }

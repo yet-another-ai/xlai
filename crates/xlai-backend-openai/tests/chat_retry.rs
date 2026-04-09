@@ -1,4 +1,4 @@
-//! Integration tests for chat completion retries against a mock HTTP server.
+//! Integration tests for responses API retries against a mock HTTP server.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -15,9 +15,16 @@ use xlai_core::{
 
 fn minimal_success_json() -> serde_json::Value {
     json!({
-        "choices": [{
-            "message": { "content": "ok" },
-            "finish_reason": "stop"
+        "status": "completed",
+        "output": [{
+            "type": "message",
+            "role": "assistant",
+            "status": "completed",
+            "content": [{
+                "type": "output_text",
+                "text": "ok",
+                "annotations": []
+            }]
         }]
     })
 }
@@ -49,7 +56,7 @@ async fn no_policy_single_503_fails_without_second_request() {
     let hits = Arc::new(AtomicUsize::new(0));
     let hits_clone = hits.clone();
     Mock::given(method("POST"))
-        .and(path("/v1/chat/completions"))
+        .and(path("/v1/responses"))
         .respond_with(move |_req: &wiremock::Request| {
             hits_clone.fetch_add(1, Ordering::SeqCst);
             ResponseTemplate::new(503).set_body_string("unavailable")
@@ -76,7 +83,7 @@ async fn retry_policy_recovers_after_transient_503() {
     let count = Arc::new(AtomicUsize::new(0));
     let count_clone = count.clone();
     Mock::given(method("POST"))
-        .and(path("/v1/chat/completions"))
+        .and(path("/v1/responses"))
         .respond_with(move |_req: &wiremock::Request| {
             let n = count_clone.fetch_add(1, Ordering::SeqCst);
             if n == 0 {
@@ -112,7 +119,7 @@ async fn does_not_retry_when_policy_disabled() {
     let hits = Arc::new(AtomicUsize::new(0));
     let hits_clone = hits.clone();
     Mock::given(method("POST"))
-        .and(path("/v1/chat/completions"))
+        .and(path("/v1/responses"))
         .respond_with(move |_req: &wiremock::Request| {
             hits_clone.fetch_add(1, Ordering::SeqCst);
             ResponseTemplate::new(503).set_body_string("unavailable")
@@ -136,7 +143,7 @@ async fn does_not_retry_non_retryable_http_error() {
     let hits = Arc::new(AtomicUsize::new(0));
     let hits_clone = hits.clone();
     Mock::given(method("POST"))
-        .and(path("/v1/chat/completions"))
+        .and(path("/v1/responses"))
         .respond_with(move |_req: &wiremock::Request| {
             hits_clone.fetch_add(1, Ordering::SeqCst);
             ResponseTemplate::new(401).set_body_string("nope")
