@@ -270,7 +270,8 @@ struct OpenAiTool {
     name: String,
     description: String,
     parameters: Value,
-    strict: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    strict: Option<bool>,
 }
 
 impl From<&ToolDefinition> for OpenAiTool {
@@ -280,7 +281,10 @@ impl From<&ToolDefinition> for OpenAiTool {
             name: tool.name.clone(),
             description: tool.description.clone(),
             parameters: tool_json_schema(tool),
-            strict: true,
+            // OpenAI strict function schemas require all properties to appear in `required`.
+            // Our tool definitions allow optional params, so default to best-effort function calling
+            // until we add nullable/all-required schema lowering for strict mode.
+            strict: None,
         }
     }
 }
