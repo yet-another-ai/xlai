@@ -37,6 +37,8 @@ type SystemReminderFn =
 #[cfg(target_arch = "wasm32")]
 type SystemReminderFn = dyn Fn(Vec<ChatMessage>) -> BoxFuture<'static, Result<String, XlaiError>>;
 
+const AGENT_LOOP_CONTINUE_PROMPT: &str = "continue";
+
 /// Runs before each model call in the streaming agent loop (see [`Agent::with_context_compressor`]).
 async fn prepare_messages_for_agent_round(
     chat: &Chat,
@@ -58,6 +60,25 @@ async fn prepare_messages_for_agent_round(
     }
 
     Ok(rewritten)
+}
+
+fn ensure_agent_loop_user_message(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
+    if messages
+        .iter()
+        .any(|message| message.role == MessageRole::User)
+    {
+        return messages;
+    }
+
+    let mut messages = messages;
+    messages.push(ChatMessage {
+        role: MessageRole::User,
+        content: ChatContent::text(AGENT_LOOP_CONTINUE_PROMPT),
+        tool_name: None,
+        tool_call_id: None,
+        metadata: BTreeMap::new(),
+    });
+    messages
 }
 
 /// High-level agent session: multi-round tool execution runs only on **streaming** APIs when
@@ -319,6 +340,7 @@ impl Agent {
     async fn prepare_outgoing_with_reminder(
         &self,
         messages: Vec<ChatMessage>,
+        ensure_user_message: bool,
     ) -> Result<Vec<ChatMessage>, XlaiError> {
         let messages = system_reminder::strip_internal_reminders(messages);
 
@@ -341,6 +363,12 @@ impl Agent {
             user_fragment.as_deref(),
         )
         .await?;
+
+        let messages = if ensure_user_message {
+            ensure_agent_loop_user_message(messages)
+        } else {
+            messages
+        };
 
         let Some(body) = body else {
             return Ok(messages);
@@ -397,7 +425,7 @@ impl Agent {
     ///
     /// Returns an error if the configured model request fails.
     pub async fn execute(&self, messages: Vec<ChatMessage>) -> Result<ChatResponse, XlaiError> {
-        let messages = self.prepare_outgoing_with_reminder(messages).await?;
+        let messages = self.prepare_outgoing_with_reminder(messages, false).await?;
         self.chat.execute(messages).await
     }
 
@@ -452,7 +480,7 @@ impl Agent {
 
         if !agent.agent_loop_enabled {
             return Box::pin(try_stream! {
-                let to_send = agent.prepare_outgoing_with_reminder(messages).await?;
+                let to_send = agent.prepare_outgoing_with_reminder(messages, false).await?;
                 let mut inner = agent.chat.stream(to_send);
                 while let Some(item) = inner.next().await {
                     let item = item?;
@@ -470,7 +498,7 @@ impl Agent {
             for _ in 0..max {
                 let mut to_send =
                     prepare_messages_for_agent_round(&chat, &messages, &compressor).await?;
-                to_send = agent.prepare_outgoing_with_reminder(to_send).await?;
+                to_send = agent.prepare_outgoing_with_reminder(to_send, true).await?;
 
                 let mut final_response: Option<ChatResponse> = None;
                 let mut inner = chat.stream(to_send);
