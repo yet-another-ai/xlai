@@ -37,7 +37,7 @@ type SystemReminderFn =
 #[cfg(target_arch = "wasm32")]
 type SystemReminderFn = dyn Fn(Vec<ChatMessage>) -> BoxFuture<'static, Result<String, XlaiError>>;
 
-const AGENT_LOOP_CONTINUE_PROMPT: &str = "continue";
+const AGENT_LOOP_CONTINUE_PROMPT: &str = "Continue. If you feel nothing else could be further done, just summarize your work without any tool calling.";
 
 /// Runs before each model call in the streaming agent loop (see [`Agent::with_context_compressor`]).
 async fn prepare_messages_for_agent_round(

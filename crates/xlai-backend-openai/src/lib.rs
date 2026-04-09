@@ -237,8 +237,6 @@ impl ChatModel for OpenAiChatModel {
             let mut bytes_stream = response.bytes_stream();
             let mut parser = SseParser::default();
             let mut state = StreamState::default();
-            let mut message_started = false;
-
             while let Some(chunk) = bytes_stream.next().await {
                 let chunk = chunk
                     .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
@@ -264,50 +262,58 @@ impl ChatModel for OpenAiChatModel {
 
                     match event_value.get("type").and_then(Value::as_str) {
                         Some("response.output_text.delta") => {
-                            if !message_started {
-                                message_started = true;
+                            let message_index = event_value
+                                .get("output_index")
+                                .and_then(Value::as_u64)
+                                .unwrap_or(0) as usize;
+                            if state.mark_message_started(message_index) {
                                 yield ChatChunk::MessageStart {
                                     role: MessageRole::Assistant,
+                                    message_index,
                                 };
                             }
                             if let Some(delta) = event_value.get("delta").and_then(Value::as_str) {
                                 state.message_content.push_str(delta);
                                 yield ChatChunk::ContentDelta(StreamTextDelta {
-                                    part_index: 0,
+                                    message_index,
+                                    part_index: event_value
+                                        .get("content_index")
+                                        .and_then(Value::as_u64)
+                                        .unwrap_or(0) as usize,
                                     delta: delta.to_owned(),
                                 });
                             }
                         }
                         Some("response.output_item.added") => {
-                            if !message_started {
-                                message_started = true;
-                                yield ChatChunk::MessageStart {
-                                    role: MessageRole::Assistant,
-                                };
-                            }
                             if let Some(item) = event_value.get("item").and_then(Value::as_object)
-                                && item.get("type").and_then(Value::as_str) == Some("function_call")
                             {
                                 let index = event_value
                                     .get("output_index")
                                     .and_then(Value::as_u64)
                                     .unwrap_or(0) as usize;
-                                let chunk = state.apply_tool_call_added(
-                                    index,
-                                    item.get("call_id").and_then(Value::as_str).map(str::to_owned),
-                                    item.get("name").and_then(Value::as_str).map(str::to_owned),
-                                    item.get("arguments").and_then(Value::as_str).map(str::to_owned),
-                                );
-                                yield ChatChunk::ToolCallDelta(chunk);
+                                match item.get("type").and_then(Value::as_str) {
+                                    Some("message") => {
+                                        if state.mark_message_started(index) {
+                                            yield ChatChunk::MessageStart {
+                                                role: MessageRole::Assistant,
+                                                message_index: index,
+                                            };
+                                        }
+                                    }
+                                    Some("function_call") => {
+                                        let chunk = state.apply_tool_call_added(
+                                            index,
+                                            item.get("call_id").and_then(Value::as_str).map(str::to_owned),
+                                            item.get("name").and_then(Value::as_str).map(str::to_owned),
+                                            item.get("arguments").and_then(Value::as_str).map(str::to_owned),
+                                        );
+                                        yield ChatChunk::ToolCallDelta(chunk);
+                                    }
+                                    _ => {}
+                                }
                             }
                         }
                         Some("response.function_call_arguments.delta") => {
-                            if !message_started {
-                                message_started = true;
-                                yield ChatChunk::MessageStart {
-                                    role: MessageRole::Assistant,
-                                };
-                            }
                             let index = event_value
                                 .get("output_index")
                                 .and_then(Value::as_u64)

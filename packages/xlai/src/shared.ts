@@ -217,7 +217,8 @@ function legacyParametersToInputSchema(
 
 function resolvedToolInputSchema(definition: ToolDefinition): ToolSchema {
   return normalizeInlineData(
-    definition.inputSchema ?? legacyParametersToInputSchema(definition.parameters),
+    definition.inputSchema ??
+      legacyParametersToInputSchema(definition.parameters),
   );
 }
 

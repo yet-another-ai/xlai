@@ -338,6 +338,7 @@ impl LlamaCppChatModel {
         if !tool_mode {
             emit(ChatChunk::MessageStart {
                 role: MessageRole::Assistant,
+                message_index: 0,
             })?;
         }
 
@@ -360,6 +361,7 @@ impl LlamaCppChatModel {
                 generated.push_str(&piece);
                 if !tool_mode {
                     emit(ChatChunk::ContentDelta(xlai_core::StreamTextDelta {
+                        message_index: 0,
                         part_index: 0,
                         delta: piece,
                     }))?;
@@ -378,9 +380,11 @@ impl LlamaCppChatModel {
                 ToolResponse::AssistantMessage(message_text) => {
                     emit(ChatChunk::MessageStart {
                         role: MessageRole::Assistant,
+                        message_index: 0,
                     })?;
                     if !message_text.is_empty() {
                         emit(ChatChunk::ContentDelta(xlai_core::StreamTextDelta {
+                            message_index: 0,
                             part_index: 0,
                             delta: message_text.clone(),
                         }))?;

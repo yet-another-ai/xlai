@@ -552,6 +552,7 @@ pub struct ToolCallChunk {
 pub enum ChatChunk {
     MessageStart {
         role: MessageRole,
+        message_index: usize,
     },
     /// Incremental text for multimodal part at `part_index` (usually `0` for plain assistant streams).
     ContentDelta(StreamTextDelta),

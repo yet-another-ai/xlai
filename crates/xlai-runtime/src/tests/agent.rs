@@ -644,7 +644,9 @@ async fn agent_loop_injects_continue_when_compressor_removes_all_user_messages()
     assert_eq!(reqs[1].messages[2].role, MessageRole::User);
     assert_eq!(
         reqs[1].messages[2].content.as_single_text(),
-        Some("continue")
+        Some(
+            "Continue. If you feel nothing else could be further done, just summarize your work without any tool calling."
+        )
     );
     Ok(())
 }

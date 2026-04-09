@@ -352,11 +352,12 @@ describe('xlai agent api', () => {
 
   it('wires registerContextCompressor and streamPrompt on AgentSession', async () => {
     const registerContextCompressor = vi.fn();
-    const streamPrompt = vi
-      .fn()
-      .mockResolvedValue([
-        { kind: 'model', data: { MessageStart: { role: 'assistant' } } },
-      ]);
+    const streamPrompt = vi.fn().mockResolvedValue([
+      {
+        kind: 'model',
+        data: { MessageStart: { role: 'assistant', message_index: 0 } },
+      },
+    ]);
 
     vi.spyOn(
       wasmModule as typeof wasmModule & {
@@ -384,7 +385,10 @@ describe('xlai agent api', () => {
     expect(registerContextCompressor).toHaveBeenCalledTimes(1);
 
     await expect(session.streamPrompt('hello')).resolves.toEqual([
-      { kind: 'model', data: { MessageStart: { role: 'assistant' } } },
+      {
+        kind: 'model',
+        data: { MessageStart: { role: 'assistant', message_index: 0 } },
+      },
     ]);
     expect(streamPrompt).toHaveBeenCalledWith('hello');
   });
