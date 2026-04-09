@@ -59,6 +59,7 @@ fn prepared_rejects_tools_plus_structured() {
         available_tools: vec![ToolDefinition {
             name: "t".into(),
             description: "d".into(),
+            input_schema: None,
             parameters: vec![],
             execution_mode: ToolCallExecutionMode::Concurrent,
         }],
@@ -86,6 +87,7 @@ fn tool_envelope_roundtrip() {
     let tools = vec![ToolDefinition {
         name: "get_weather".into(),
         description: "w".into(),
+        input_schema: None,
         parameters: vec![ToolParameter {
             name: "city".into(),
             description: "c".into(),

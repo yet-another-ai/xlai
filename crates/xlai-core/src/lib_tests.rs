@@ -3,7 +3,8 @@ use serde_json::json;
 
 use crate::{
     ChatContent, ChatMessage, ChatRequest, ChatRetryPolicy, ContentPart, ErrorKind, MediaSource,
-    MessageRole, ReasoningEffort, StructuredOutput, StructuredOutputFormat, ToolCall, TtsChunk,
+    MessageRole, ReasoningEffort, StructuredOutput, StructuredOutputFormat, ToolCall,
+    ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolSchema, TtsChunk,
     TtsResponse, XlaiError,
 };
 
@@ -223,6 +224,88 @@ fn reasoning_effort_round_trips_snake_case_json() {
         return;
     };
     assert_eq!(back, ReasoningEffort::Medium);
+}
+
+#[test]
+fn tool_schema_round_trips_nested_json() {
+    let schema = ToolSchema::object(
+        [
+            (
+                "cities".to_owned(),
+                ToolSchema::array(Some(
+                    ToolSchema::object(
+                        [(
+                            "name".to_owned(),
+                            ToolSchema::string().with_description("City name"),
+                        )]
+                        .into_iter()
+                        .collect(),
+                        vec!["name".to_owned()],
+                    )
+                    .with_description("City entry"),
+                ))
+                .with_description("Cities to check"),
+            ),
+            (
+                "include_forecast".to_owned(),
+                ToolSchema::boolean().with_description("Whether to include forecast data"),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+        vec!["cities".to_owned()],
+    )
+    .with_description("Weather lookup payload");
+
+    let serialized = serde_json::to_value(&schema);
+    assert!(serialized.is_ok(), "serialize");
+    let Ok(value) = serialized else {
+        return;
+    };
+    assert_eq!(value["type"], json!("object"));
+    assert_eq!(value["properties"]["cities"]["type"], json!("array"));
+    assert_eq!(
+        value["properties"]["cities"]["items"]["properties"]["name"]["type"],
+        json!("string")
+    );
+
+    let deserialized: Result<ToolSchema, _> = serde_json::from_value(value);
+    assert!(deserialized.is_ok(), "deserialize");
+    let Ok(back) = deserialized else {
+        return;
+    };
+    assert_eq!(back, schema);
+}
+
+#[test]
+fn tool_definition_normalizes_legacy_parameters_into_object_schema() {
+    let definition = ToolDefinition {
+        name: "lookup_weather".to_owned(),
+        description: "Lookup weather by city".to_owned(),
+        input_schema: None,
+        parameters: vec![
+            ToolParameter {
+                name: "city".to_owned(),
+                description: "City name".to_owned(),
+                kind: ToolParameterType::String,
+                required: true,
+            },
+            ToolParameter {
+                name: "days".to_owned(),
+                description: "Optional forecast range".to_owned(),
+                kind: ToolParameterType::Integer,
+                required: false,
+            },
+        ],
+        execution_mode: ToolCallExecutionMode::Concurrent,
+    };
+
+    let schema = definition.resolved_input_schema().json_schema();
+    assert_eq!(schema["type"], json!("object"));
+    assert_eq!(schema["properties"]["city"]["type"], json!("string"));
+    assert_eq!(schema["properties"]["days"]["type"], json!("integer"));
+    assert_eq!(schema["required"], json!(["city"]));
+    assert_eq!(schema["additionalProperties"], json!(false));
 }
 
 #[test]

@@ -217,13 +217,17 @@ describe('xlai chat api', () => {
     expect(registerTool).toHaveBeenCalledTimes(1);
     const [definition, callback] = registerTool.mock.calls[0] as [
       {
-        parameters: Array<{
-          kind: string;
-        }>;
+        input_schema: {
+          type: string;
+          properties?: Record<string, { type: string }>;
+          required?: string[];
+        };
       },
       (argumentsValue: unknown) => Promise<unknown>,
     ];
-    expect(definition.parameters[0]?.kind).toBe('String');
+    expect(definition.input_schema.type).toBe('object');
+    expect(definition.input_schema.properties?.city?.type).toBe('string');
+    expect(definition.input_schema.required).toEqual(['city']);
     expect((definition as { execution_mode?: string }).execution_mode).toBe(
       'Concurrent',
     );
@@ -308,9 +312,10 @@ describe('xlai chat api', () => {
     );
 
     const [definition] = registerTool.mock.calls[0] as [
-      { execution_mode?: string },
+      { input_schema?: { type: string }; execution_mode?: string },
       unknown,
     ];
+    expect(definition.input_schema?.type).toBe('object');
     expect(definition.execution_mode).toBe('Sequential');
   });
 });

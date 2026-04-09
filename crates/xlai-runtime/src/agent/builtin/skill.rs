@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 use tera::Context;
-use xlai_core::{ToolDefinition, ToolParameter, ToolParameterType, ToolResult, XlaiError};
+use xlai_core::{ToolDefinition, ToolResult, ToolSchema, XlaiError};
 
 use crate::chat::ToolOrigin;
 use crate::{Chat, EmbeddedPromptStore, XlaiRuntime};
@@ -25,27 +25,28 @@ pub(super) fn register(chat: &mut Chat, runtime: Arc<XlaiRuntime>) -> Result<(),
 fn definition() -> Result<ToolDefinition, XlaiError> {
     let mut context = Context::new();
     context.insert("skill_tag_name", TOOL_NAME);
+    let schema = ToolSchema::object(
+        BTreeMap::from([
+            (
+                "skill".to_owned(),
+                ToolSchema::string().with_description("The skill identifier to resolve and apply"),
+            ),
+            (
+                "args".to_owned(),
+                ToolSchema::string().with_description(
+                    "Optional task-specific input to pair with the resolved skill",
+                ),
+            ),
+        ]),
+        vec!["skill".to_owned()],
+    );
 
-    Ok(ToolDefinition {
-        name: TOOL_NAME.to_owned(),
-        description: EmbeddedPromptStore::render(TOOL_DESCRIPTION_TEMPLATE, &context)?,
-        execution_mode: Default::default(),
-        parameters: vec![
-            ToolParameter {
-                name: "skill".to_owned(),
-                description: "The skill identifier to resolve and apply".to_owned(),
-                kind: ToolParameterType::String,
-                required: true,
-            },
-            ToolParameter {
-                name: "args".to_owned(),
-                description: "Optional task-specific input to pair with the resolved skill"
-                    .to_owned(),
-                kind: ToolParameterType::String,
-                required: false,
-            },
-        ],
-    })
+    Ok(ToolDefinition::new(
+        TOOL_NAME,
+        EmbeddedPromptStore::render(TOOL_DESCRIPTION_TEMPLATE, &context)?,
+        schema,
+    )
+    .with_execution_mode(Default::default()))
 }
 
 async fn resolve(runtime: &XlaiRuntime, arguments: Value) -> Result<ToolResult, XlaiError> {

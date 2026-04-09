@@ -19,6 +19,7 @@ fn prepared_request_rejects_combined_tools_and_structured_output() {
         available_tools: vec![ToolDefinition {
             name: "lookup_weather".to_owned(),
             description: "Lookup weather".to_owned(),
+            input_schema: None,
             parameters: vec![ToolParameter {
                 name: "city".to_owned(),
                 description: "City".to_owned(),

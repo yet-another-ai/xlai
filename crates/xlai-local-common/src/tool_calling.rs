@@ -1,6 +1,6 @@
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use tera::Context;
-use xlai_core::{ErrorKind, ToolCall, ToolDefinition, ToolParameterType, XlaiError};
+use xlai_core::{ErrorKind, ToolCall, ToolDefinition, XlaiError};
 
 use super::prompt_store::EmbeddedPromptStore;
 
@@ -153,37 +153,5 @@ pub fn parse_tool_response(
 }
 
 fn tool_arguments_schema(tool: &ToolDefinition) -> Value {
-    let mut properties = Map::new();
-    let mut required = Vec::new();
-
-    for parameter in &tool.parameters {
-        properties.insert(
-            parameter.name.clone(),
-            json!({
-                "type": tool_parameter_kind(parameter.kind),
-                "description": parameter.description,
-            }),
-        );
-        if parameter.required {
-            required.push(parameter.name.clone());
-        }
-    }
-
-    json!({
-        "type": "object",
-        "properties": properties,
-        "required": required,
-        "additionalProperties": false,
-    })
-}
-
-const fn tool_parameter_kind(kind: ToolParameterType) -> &'static str {
-    match kind {
-        ToolParameterType::String => "string",
-        ToolParameterType::Number => "number",
-        ToolParameterType::Integer => "integer",
-        ToolParameterType::Boolean => "boolean",
-        ToolParameterType::Array => "array",
-        ToolParameterType::Object => "object",
-    }
+    tool.resolved_input_schema().json_schema()
 }
