@@ -12,7 +12,7 @@ use crate::{ChatExecutionEvent, RuntimeBuilder};
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
-async fn agent_stream_emits_model_and_tool_events() -> Result<(), XlaiError> {
+async fn agent_stream_emits_thinking_for_intermediate_rounds() -> Result<(), XlaiError> {
     let model = Arc::new(StreamingChatModel::new(vec![
         vec![
             ChatChunk::MessageStart {
@@ -91,12 +91,16 @@ async fn agent_stream_emits_model_and_tool_events() -> Result<(), XlaiError> {
 
     let mut stream = agent.stream_prompt("Stream the weather.");
     let mut content_deltas = Vec::new();
+    let mut thinking_messages = Vec::new();
     let mut saw_tool_call = false;
     let mut saw_tool_result = false;
     let mut finished_messages = Vec::new();
 
     while let Some(event) = stream.next().await {
         match event? {
+            ChatExecutionEvent::Thinking(response) => {
+                thinking_messages.push(response.message.content.text_parts_concatenated());
+            }
             ChatExecutionEvent::Model(ChatChunk::ContentDelta(StreamTextDelta {
                 delta, ..
             })) => {
@@ -120,15 +124,13 @@ async fn agent_stream_emits_model_and_tool_events() -> Result<(), XlaiError> {
     }
 
     assert_eq!(
-        content_deltas,
-        vec!["Looking up weather", "Paris is sunny.", "Paris is sunny."]
+        thinking_messages,
+        vec!["Looking up weather", "Paris is sunny."]
     );
+    assert_eq!(content_deltas, vec!["Paris is sunny."]);
     assert!(saw_tool_call);
     assert!(saw_tool_result);
-    assert_eq!(
-        finished_messages,
-        vec!["Looking up weather", "Paris is sunny.", "Paris is sunny."]
-    );
+    assert_eq!(finished_messages, vec!["Paris is sunny."]);
 
     Ok(())
 }
@@ -181,7 +183,8 @@ async fn chat_stream_preserves_multiple_assistant_message_indices() -> Result<()
                 ..
             })) => deltas.push((message_index, delta)),
             ChatExecutionEvent::Model(ChatChunk::Finished(_)) => {}
-            ChatExecutionEvent::Model(ChatChunk::ToolCallDelta(_))
+            ChatExecutionEvent::Thinking(_)
+            | ChatExecutionEvent::Model(ChatChunk::ToolCallDelta(_))
             | ChatExecutionEvent::ToolCall(_)
             | ChatExecutionEvent::ToolResult(_) => {}
         }

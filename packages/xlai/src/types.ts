@@ -101,9 +101,11 @@ export interface ChatResponse {
   message: {
     role: 'assistant';
     content: ChatContent;
+    metadata?: Record<string, unknown>;
   };
   finishReason: ChatFinishReason;
   usage?: ChatUsage;
+  metadata?: Record<string, unknown>;
 }
 
 /** Matches Rust `ChatMessage` JSON (snake_case fields from serde). */
@@ -119,10 +121,12 @@ export interface ChatMessage {
 
 /**
  * One event from `AgentSession.streamPrompt` / `streamPromptWithContent` (WASM JSON).
- * `data` holds a `ChatChunk`, `ToolCall`, or `ToolResult` shape from the core types.
+ * Intermediate agent-loop assistant rounds are surfaced as `thinking` so consumers can render
+ * them separately from the terminal assistant reply.
  */
 export type ChatExecutionEvent =
   | { kind: 'model'; data: unknown }
+  | { kind: 'thinking'; data: ChatResponse }
   | { kind: 'toolCall'; data: unknown }
   | { kind: 'toolResult'; data: unknown };
 

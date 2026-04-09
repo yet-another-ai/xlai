@@ -513,12 +513,13 @@ impl Agent {
 
                 let mut final_response: Option<ChatResponse> = None;
                 let mut inner = chat.stream(to_send);
+                let mut round_events = Vec::new();
                 while let Some(item) = inner.next().await {
                     let item = item?;
                     if let ChatExecutionEvent::Model(ChatChunk::Finished(resp)) = &item {
                         final_response = Some(resp.clone());
                     }
-                    yield item;
+                    round_events.push(item);
                 }
 
                 let response = final_response.ok_or_else(|| {
@@ -534,18 +535,34 @@ impl Agent {
                     .with_assistant_tool_calls(&response.tool_calls);
                 messages.push(assistant_message);
 
-                if response.tool_calls.is_empty() {
-                    if response.message.role == MessageRole::Assistant {
+                let is_assistant_message = response.message.role == MessageRole::Assistant;
+                let is_non_final_round = if response.tool_calls.is_empty() {
+                    if is_assistant_message {
                         consecutive_assistant_messages_without_tool_calls += 1;
-                        if consecutive_assistant_messages_without_tool_calls >= 2 {
-                            return;
-                        }
+                        consecutive_assistant_messages_without_tool_calls < 2
                     } else {
                         consecutive_assistant_messages_without_tool_calls = 0;
+                        true
                     }
-                    continue;
+                } else {
+                    consecutive_assistant_messages_without_tool_calls = 0;
+                    true
+                };
+
+                if is_non_final_round {
+                    if is_assistant_message {
+                        yield ChatExecutionEvent::Thinking(response.clone());
+                    } else {
+                        for event in round_events {
+                            yield event;
+                        }
+                    }
+                } else {
+                    for event in round_events {
+                        yield event;
+                    }
+                    return;
                 }
-                consecutive_assistant_messages_without_tool_calls = 0;
 
                 for call in &response.tool_calls {
                     yield ChatExecutionEvent::ToolCall(call.clone());
