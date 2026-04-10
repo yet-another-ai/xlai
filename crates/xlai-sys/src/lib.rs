@@ -9,7 +9,11 @@
 // can resolve those symbols even when the referencing native objects also live in
 // an rlib-produced archive.
 #[cfg(any(feature = "llama", feature = "qts-ggml"))]
-#[link(name = "ggml-base", kind = "static", modifiers = "+whole-archive,-bundle")]
+#[link(
+    name = "ggml-base",
+    kind = "static",
+    modifiers = "+whole-archive,-bundle"
+)]
 unsafe extern "C" {}
 
 #[cfg(feature = "qts-ggml")]
