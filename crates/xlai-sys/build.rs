@@ -577,6 +577,22 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
     emit_llama_vulkan_sdk_paths(feature_set.vulkan, &target_os);
     emit_search_path_variants(&dst.join("build/bin"));
 
+    // The llama-specific archives are linked from `src/lib.rs` with `-bundle` to keep
+    // them out of the Rust rlib. The shared ggml dependency chain stays here because
+    // those libraries are also used by the standalone qts-ggml path when features unify.
+    println!("cargo:rustc-link-lib=static=ggml");
+    println!("cargo:rustc-link-lib=static=ggml-cpu");
+    if enable_openblas {
+        println!("cargo:rustc-link-lib=static=ggml-blas");
+    }
+    if feature_set.metal {
+        println!("cargo:rustc-link-lib=static=ggml-metal");
+    }
+    if feature_set.vulkan {
+        println!("cargo:rustc-link-lib=static=ggml-vulkan");
+    }
+    println!("cargo:rustc-link-lib=static=ggml-base");
+
     match target_os.as_str() {
         "macos" | "ios" => {
             println!("cargo:rustc-link-lib=c++");

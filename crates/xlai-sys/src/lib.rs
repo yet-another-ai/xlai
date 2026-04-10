@@ -25,28 +25,6 @@ unsafe extern "C" {}
 #[cfg(feature = "llama")]
 #[link(name = "llama", kind = "static", modifiers = "-bundle")]
 unsafe extern "C" {}
-#[cfg(feature = "llama")]
-#[link(name = "ggml", kind = "static", modifiers = "-bundle")]
-unsafe extern "C" {}
-#[cfg(feature = "llama")]
-#[link(name = "ggml-cpu", kind = "static", modifiers = "-bundle")]
-unsafe extern "C" {}
-#[cfg(all(feature = "llama", feature = "metal", target_os = "macos"))]
-#[link(name = "ggml-metal", kind = "static", modifiers = "-bundle")]
-unsafe extern "C" {}
-#[cfg(all(
-    feature = "llama",
-    feature = "openblas",
-    any(target_os = "linux", target_os = "windows")
-))]
-#[link(name = "ggml-blas", kind = "static", modifiers = "-bundle")]
-unsafe extern "C" {}
-#[cfg(all(feature = "llama", feature = "vulkan"))]
-#[link(name = "ggml-vulkan", kind = "static", modifiers = "-bundle")]
-unsafe extern "C" {}
-#[cfg(feature = "llama")]
-#[link(name = "ggml-base", kind = "static", modifiers = "-bundle")]
-unsafe extern "C" {}
 
 #[cfg(feature = "qts-ggml")]
 pub mod qts_ggml {
