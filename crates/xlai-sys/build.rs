@@ -203,6 +203,7 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
     }
 
     println!("cargo:rustc-link-lib=static=ggml-cpu");
+    println!("cargo:rustc-link-lib=static=ggml-base");
 
     if feature_enabled("metal") && target.contains("apple") {
         println!("cargo:rustc-link-lib=framework=Metal");
@@ -594,6 +595,7 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
     if feature_set.vulkan {
         libraries.push("ggml-vulkan");
     }
+    libraries.push("ggml-base");
     for library in libraries {
         println!("cargo:rustc-link-lib=static={library}");
     }
