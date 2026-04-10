@@ -4,6 +4,14 @@
 //! enabled stack(s). Building both in one binary links two separate ggml static libraries and can
 //! duplicate symbols — prefer separate processes or a single stack unless you know the link layout.
 
+// Newer ggml releases moved backend helpers like `ggml_backend_meta_device` into
+// `ggml-base`. Link it as a non-bundled native archive so downstream final links
+// resolve those symbols directly instead of relying on an archive nested inside
+// `libxlai_sys.rlib`.
+#[cfg(any(feature = "llama", feature = "qts-ggml"))]
+#[link(name = "ggml-base", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+
 #[cfg(feature = "qts-ggml")]
 pub mod qts_ggml {
     #![allow(
