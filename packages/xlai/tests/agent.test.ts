@@ -228,13 +228,17 @@ describe('xlai agent api', () => {
     expect(registerTool).toHaveBeenCalledTimes(1);
     const [definition, callback] = registerTool.mock.calls[0] as [
       {
-        parameters: Array<{
-          kind: string;
-        }>;
+        input_schema: {
+          type: string;
+          properties?: Record<string, { type: string }>;
+          required?: string[];
+        };
       },
       (argumentsValue: unknown) => Promise<unknown>,
     ];
-    expect(definition.parameters[0]?.kind).toBe('String');
+    expect(definition.input_schema.type).toBe('object');
+    expect(definition.input_schema.properties?.city?.type).toBe('string');
+    expect(definition.input_schema.required).toEqual(['city']);
     await expect(callback({ city: 'Paris' })).resolves.toEqual({
       tool_name: 'lookup_weather',
       content: 'weather for Paris: sunny',
@@ -348,11 +352,12 @@ describe('xlai agent api', () => {
 
   it('wires registerContextCompressor and streamPrompt on AgentSession', async () => {
     const registerContextCompressor = vi.fn();
-    const streamPrompt = vi
-      .fn()
-      .mockResolvedValue([
-        { kind: 'model', data: { MessageStart: { role: 'assistant' } } },
-      ]);
+    const streamPrompt = vi.fn().mockResolvedValue([
+      {
+        kind: 'model',
+        data: { MessageStart: { role: 'assistant', message_index: 0 } },
+      },
+    ]);
 
     vi.spyOn(
       wasmModule as typeof wasmModule & {
@@ -380,7 +385,10 @@ describe('xlai agent api', () => {
     expect(registerContextCompressor).toHaveBeenCalledTimes(1);
 
     await expect(session.streamPrompt('hello')).resolves.toEqual([
-      { kind: 'model', data: { MessageStart: { role: 'assistant' } } },
+      {
+        kind: 'model',
+        data: { MessageStart: { role: 'assistant', message_index: 0 } },
+      },
     ]);
     expect(streamPrompt).toHaveBeenCalledWith('hello');
   });

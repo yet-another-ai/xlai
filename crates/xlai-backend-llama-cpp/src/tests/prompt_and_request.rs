@@ -40,6 +40,7 @@ fn prepared_request_allows_tool_calls() {
         available_tools: vec![ToolDefinition {
             name: "lookup_weather".to_owned(),
             description: "Lookup weather".to_owned(),
+            input_schema: None,
             parameters: vec![ToolParameter {
                 name: "city".to_owned(),
                 description: "City".to_owned(),
@@ -181,6 +182,7 @@ fn tool_instruction_is_added_as_system_message() {
         available_tools: vec![ToolDefinition {
             name: "lookup_weather".to_owned(),
             description: "Lookup weather by city".to_owned(),
+            input_schema: None,
             parameters: vec![ToolParameter {
                 name: "city".to_owned(),
                 description: "City name".to_owned(),

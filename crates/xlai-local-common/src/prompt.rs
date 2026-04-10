@@ -170,6 +170,7 @@ mod tests {
         prepared.available_tools = vec![ToolDefinition {
             name: "lookup_weather".to_owned(),
             description: "Lookup weather by city".to_owned(),
+            input_schema: None,
             parameters: vec![ToolParameter {
                 name: "city".to_owned(),
                 description: "City name".to_owned(),

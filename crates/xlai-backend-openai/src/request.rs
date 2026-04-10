@@ -1,9 +1,9 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Serialize;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use xlai_core::{
     ChatMessage, ChatRequest, ContentPart, ErrorKind, ImageDetail, MediaSource, MessageRole,
-    StructuredOutputFormat, ToolCall, ToolDefinition, ToolParameterType, XlaiError,
+    StructuredOutputFormat, ToolCall, ToolDefinition, XlaiError,
 };
 
 use crate::OpenAiConfig;
@@ -290,40 +290,7 @@ impl From<&ToolDefinition> for OpenAiTool {
 }
 
 fn tool_json_schema(tool: &ToolDefinition) -> Value {
-    let mut properties = Map::new();
-    let mut required = Vec::new();
-
-    for parameter in &tool.parameters {
-        properties.insert(
-            parameter.name.clone(),
-            serde_json::json!({
-                "type": tool_parameter_kind(parameter.kind),
-                "description": parameter.description,
-            }),
-        );
-
-        if parameter.required {
-            required.push(parameter.name.clone());
-        }
-    }
-
-    serde_json::json!({
-        "type": "object",
-        "properties": properties,
-        "required": required,
-        "additionalProperties": false,
-    })
-}
-
-const fn tool_parameter_kind(kind: ToolParameterType) -> &'static str {
-    match kind {
-        ToolParameterType::String => "string",
-        ToolParameterType::Number => "number",
-        ToolParameterType::Integer => "integer",
-        ToolParameterType::Boolean => "boolean",
-        ToolParameterType::Array => "array",
-        ToolParameterType::Object => "object",
-    }
+    tool.resolved_input_schema().json_schema()
 }
 
 const fn reasoning_effort_openai(effort: xlai_core::ReasoningEffort) -> &'static str {

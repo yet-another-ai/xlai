@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 use xlai_core::{
@@ -16,6 +16,7 @@ pub(crate) struct StreamState {
     tool_calls: Vec<PartialToolCall>,
     pub(crate) finish_reason: FinishReason,
     output_items: Vec<Value>,
+    started_message_indices: BTreeSet<usize>,
 }
 
 impl Default for StreamState {
@@ -25,6 +26,7 @@ impl Default for StreamState {
             tool_calls: Vec::new(),
             finish_reason: FinishReason::Completed,
             output_items: Vec::new(),
+            started_message_indices: BTreeSet::new(),
         }
     }
 }
@@ -76,6 +78,10 @@ impl StreamState {
 
     pub(crate) fn push_output_item(&mut self, item: Value) {
         self.output_items.push(item);
+    }
+
+    pub(crate) fn mark_message_started(&mut self, message_index: usize) -> bool {
+        self.started_message_indices.insert(message_index)
     }
 
     pub(crate) fn has_tool_calls(&self) -> bool {
@@ -211,7 +217,7 @@ pub(crate) fn maybe_completed_response(event: &Value) -> Result<Option<ChatRespo
 
 #[cfg(test)]
 mod sse_parser_tests {
-    use super::SseParser;
+    use super::{SseParser, StreamState};
 
     #[test]
     fn splits_events_on_lf_only_delimiter() {
@@ -239,5 +245,13 @@ mod sse_parser_tests {
             ev,
             vec![r#"{"type":"speech.audio.delta","audio":"YWI="}"#.to_owned()]
         );
+    }
+
+    #[test]
+    fn stream_state_tracks_message_start_per_message_index() {
+        let mut state = StreamState::default();
+        assert!(state.mark_message_started(0));
+        assert!(!state.mark_message_started(0));
+        assert!(state.mark_message_started(1));
     }
 }

@@ -117,6 +117,8 @@ impl ChatContent {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StreamTextDelta {
+    /// Which assistant message in the current streamed response this delta belongs to.
+    pub message_index: usize,
     /// Index into the assembled message [`ChatContent::parts`] for this stream.
     pub part_index: usize,
     pub delta: String,

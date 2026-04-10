@@ -4,7 +4,8 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 use xlai_core::{
     ChatContent, ChatMessage, ChatRequest, ContentPart, ErrorKind, MediaSource, MessageRole,
-    ReasoningEffort, StructuredOutput, StructuredOutputFormat, ToolCall, XlaiError,
+    ReasoningEffort, StructuredOutput, StructuredOutputFormat, ToolCall, ToolDefinition,
+    ToolSchema, XlaiError,
 };
 
 use crate::request::OpenAiChatRequest;
@@ -369,4 +370,72 @@ fn serializes_reasoning_effort_for_openai_requests() {
         return;
     };
     assert_eq!(v["reasoning"]["effort"], json!("high"));
+}
+
+#[test]
+fn serializes_nested_tool_schema_for_openai_tools() {
+    let config = test_config();
+    let tool = ToolDefinition::new(
+        "lookup_weather",
+        "Lookup weather for multiple cities",
+        ToolSchema::object(
+            BTreeMap::from([
+                (
+                    "cities".to_owned(),
+                    ToolSchema::array(Some(ToolSchema::object(
+                        BTreeMap::from([(
+                            "name".to_owned(),
+                            ToolSchema::string().with_description("City name"),
+                        )]),
+                        vec!["name".to_owned()],
+                    )))
+                    .with_description("Cities to check"),
+                ),
+                (
+                    "include_forecast".to_owned(),
+                    ToolSchema::boolean().with_description("Whether to include forecast data"),
+                ),
+            ]),
+            vec!["cities".to_owned()],
+        ),
+    );
+    let request = ChatRequest {
+        model: None,
+        system_prompt: None,
+        messages: vec![ChatMessage {
+            role: MessageRole::User,
+            content: ChatContent::text("Check the weather."),
+            tool_name: None,
+            tool_call_id: None,
+            metadata: BTreeMap::new(),
+        }],
+        available_tools: vec![tool],
+        structured_output: None,
+        metadata: BTreeMap::new(),
+        temperature: None,
+        max_output_tokens: None,
+        reasoning_effort: None,
+        retry_policy: None,
+    };
+
+    let payload = OpenAiChatRequest::from_core_request(&config, request, false);
+    assert!(payload.is_ok(), "build payload");
+    let Ok(payload) = payload else {
+        return;
+    };
+    let serialized = serde_json::to_value(&payload);
+    assert!(serialized.is_ok(), "serialize payload");
+    let Ok(v) = serialized else {
+        return;
+    };
+    assert_eq!(v["tools"][0]["parameters"]["type"], json!("object"));
+    assert_eq!(
+        v["tools"][0]["parameters"]["properties"]["cities"]["type"],
+        json!("array")
+    );
+    assert_eq!(
+        v["tools"][0]["parameters"]["properties"]["cities"]["items"]["properties"]["name"]["type"],
+        json!("string")
+    );
+    assert_eq!(v["tools"][0]["parameters"]["required"], json!(["cities"]));
 }

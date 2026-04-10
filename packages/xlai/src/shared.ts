@@ -16,7 +16,8 @@ import type {
   ContentPart,
   QtsSessionConfig,
   ToolDefinition,
-  ToolParameterType,
+  ToolParameter,
+  ToolSchema,
   ToolResult,
 } from './types';
 import { envValue, getWasmModule, initXlai } from './wasm';
@@ -43,14 +44,6 @@ export type ResolvedSessionOptions = Omit<ResolvedRequestOptions, 'prompt'> & {
 export type WasmChatFunction = (
   options: ResolvedRequestOptions,
 ) => Promise<ChatResponse>;
-
-export type WasmToolParameterKind =
-  | 'String'
-  | 'Number'
-  | 'Integer'
-  | 'Boolean'
-  | 'Array'
-  | 'Object';
 
 export type WasmToolSessionInstance = {
   registerTool: (
@@ -198,45 +191,47 @@ export function resolveSessionOptions(
   return base;
 }
 
-function toolParameterKindToWasm(
-  kind: ToolParameterType,
-): WasmToolParameterKind {
-  switch (kind) {
-    case 'string':
-      return 'String';
-    case 'number':
-      return 'Number';
-    case 'integer':
-      return 'Integer';
-    case 'boolean':
-      return 'Boolean';
-    case 'array':
-      return 'Array';
-    case 'object':
-      return 'Object';
-  }
+function legacyParametersToInputSchema(
+  parameters: ToolParameter[] | undefined,
+): ToolSchema {
+  const normalizedParameters = parameters ?? [];
+  const properties = Object.fromEntries(
+    normalizedParameters.map((parameter) => [
+      parameter.name,
+      {
+        type: parameter.kind,
+        description: parameter.description,
+      },
+    ]),
+  ) as Record<string, ToolSchema>;
+
+  return {
+    type: 'object',
+    properties,
+    required: normalizedParameters
+      .filter((parameter) => parameter.required)
+      .map((parameter) => parameter.name),
+    additionalProperties: false,
+  };
+}
+
+function resolvedToolInputSchema(definition: ToolDefinition): ToolSchema {
+  return normalizeInlineData(
+    definition.inputSchema ??
+      legacyParametersToInputSchema(definition.parameters),
+  );
 }
 
 function toWasmToolDefinition(definition: ToolDefinition): {
   name: string;
   description: string;
-  parameters: Array<{
-    name: string;
-    description: string;
-    kind: WasmToolParameterKind;
-    required: boolean;
-  }>;
+  input_schema: ToolSchema;
   execution_mode: 'Concurrent' | 'Sequential';
 } {
   return {
     name: definition.name,
     description: definition.description,
-    parameters: definition.parameters.map((parameter) => ({
-      name: parameter.name,
-      description: parameter.description,
-      kind: toolParameterKindToWasm(parameter.kind),
-      required: parameter.required,
-    })),
+    input_schema: resolvedToolInputSchema(definition),
     execution_mode:
       definition.executionMode === 'sequential' ? 'Sequential' : 'Concurrent',
   };

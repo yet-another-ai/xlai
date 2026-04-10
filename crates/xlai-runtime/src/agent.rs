@@ -37,6 +37,8 @@ type SystemReminderFn =
 #[cfg(target_arch = "wasm32")]
 type SystemReminderFn = dyn Fn(Vec<ChatMessage>) -> BoxFuture<'static, Result<String, XlaiError>>;
 
+const AGENT_LOOP_CONTINUE_PROMPT: &str = "Continue. If you feel nothing else could be further done, just summarize your work without any tool calling.";
+
 /// Runs before each model call in the streaming agent loop (see [`Agent::with_context_compressor`]).
 async fn prepare_messages_for_agent_round(
     chat: &Chat,
@@ -60,9 +62,36 @@ async fn prepare_messages_for_agent_round(
     Ok(rewritten)
 }
 
-/// High-level agent session: multi-round tool execution runs only on **streaming** APIs when
-/// the agent loop is enabled (see [`Self::with_agent_loop_enabled`]). Unary [`Self::execute`] / [`Self::prompt`] always issue
-/// a single model call (no tool callbacks), so callers are not blocked for arbitrarily long runs.
+fn ensure_agent_loop_user_message(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
+    if messages
+        .iter()
+        .any(|message| message.role == MessageRole::User)
+    {
+        return messages;
+    }
+
+    if !matches!(
+        messages.last().map(|message| message.role),
+        Some(MessageRole::Assistant)
+    ) {
+        return messages;
+    }
+
+    let mut messages = messages;
+    messages.push(ChatMessage {
+        role: MessageRole::User,
+        content: ChatContent::text(AGENT_LOOP_CONTINUE_PROMPT),
+        tool_name: None,
+        tool_call_id: None,
+        metadata: BTreeMap::new(),
+    });
+    messages
+}
+
+/// High-level agent session: the automatic multi-call agent loop runs only on **streaming** APIs
+/// when the agent loop is enabled (see [`Self::with_agent_loop_enabled`]). Unary
+/// [`Self::execute`] / [`Self::prompt`] always issue a single model call (no tool callbacks), so
+/// callers are not blocked for arbitrarily long runs.
 /// [`Chat`] also performs only single model calls.
 ///
 /// Optionally, [`Self::with_context_compressor`] can rewrite the message list before each looped
@@ -183,13 +212,15 @@ impl Agent {
         self
     }
 
-    /// Controls the multi-round agent loop on **streaming** APIs only ([`Self::stream`],
-    /// [`Self::stream_prompt`], etc.).
+    /// Controls the automatic multi-call agent loop on **streaming** APIs only
+    /// ([`Self::stream`], [`Self::stream_prompt`], etc.).
     ///
     /// When `false`, those streams perform a single model turn and do not run tool callbacks.
     ///
-    /// When `true` (default), streams repeat model → tools → model until there are no tool calls
-    /// (bounded by [`Self::with_max_tool_round_trips`]).
+    /// When `true` (default), streams keep issuing follow-up model calls, executing any tool calls
+    /// returned along the way. The loop stops only after two consecutive model responses both
+    /// produce an assistant message with no further tool calls (bounded by
+    /// [`Self::with_max_tool_round_trips`]).
     ///
     /// [`Self::execute`] and [`Self::prompt`] always perform exactly one model call and never run
     /// tool callbacks here (use streaming if you need the agent tool loop).
@@ -200,8 +231,8 @@ impl Agent {
     }
 
     /// Registers an async hook that runs **before each model call** in the streaming agent loop
-    /// ([`Self::stream`], [`Self::stream_prompt`], etc.), when [`Self::with_agent_loop_enabled`] is
-    /// `true`.
+    /// ([`Self::stream`], [`Self::stream_prompt`], etc.), when [`Self::with_agent_loop_enabled`]
+    /// is `true`.
     ///
     /// The callback receives the full accumulated [`ChatMessage`] history for this stream and a
     /// best-effort [`Option<u32>`] input-token estimate derived from JSON-serialized request size
@@ -319,6 +350,7 @@ impl Agent {
     async fn prepare_outgoing_with_reminder(
         &self,
         messages: Vec<ChatMessage>,
+        ensure_user_message: bool,
     ) -> Result<Vec<ChatMessage>, XlaiError> {
         let messages = system_reminder::strip_internal_reminders(messages);
 
@@ -341,6 +373,12 @@ impl Agent {
             user_fragment.as_deref(),
         )
         .await?;
+
+        let messages = if ensure_user_message {
+            ensure_agent_loop_user_message(messages)
+        } else {
+            messages
+        };
 
         let Some(body) = body else {
             return Ok(messages);
@@ -391,13 +429,13 @@ impl Agent {
 
     /// Runs exactly one model call with the given message history (no tool execution).
     ///
-    /// For multi-round tool execution with incremental output, use [`Self::stream`] instead.
+    /// For automatic multi-call execution with incremental output, use [`Self::stream`] instead.
     ///
     /// # Errors
     ///
     /// Returns an error if the configured model request fails.
     pub async fn execute(&self, messages: Vec<ChatMessage>) -> Result<ChatResponse, XlaiError> {
-        let messages = self.prepare_outgoing_with_reminder(messages).await?;
+        let messages = self.prepare_outgoing_with_reminder(messages, false).await?;
         self.chat.execute(messages).await
     }
 
@@ -452,7 +490,7 @@ impl Agent {
 
         if !agent.agent_loop_enabled {
             return Box::pin(try_stream! {
-                let to_send = agent.prepare_outgoing_with_reminder(messages).await?;
+                let to_send = agent.prepare_outgoing_with_reminder(messages, false).await?;
                 let mut inner = agent.chat.stream(to_send);
                 while let Some(item) = inner.next().await {
                     let item = item?;
@@ -467,19 +505,21 @@ impl Agent {
 
         Box::pin(try_stream! {
             let mut messages = messages;
+            let mut consecutive_assistant_messages_without_tool_calls = 0usize;
             for _ in 0..max {
                 let mut to_send =
                     prepare_messages_for_agent_round(&chat, &messages, &compressor).await?;
-                to_send = agent.prepare_outgoing_with_reminder(to_send).await?;
+                to_send = agent.prepare_outgoing_with_reminder(to_send, true).await?;
 
                 let mut final_response: Option<ChatResponse> = None;
                 let mut inner = chat.stream(to_send);
+                let mut round_events = Vec::new();
                 while let Some(item) = inner.next().await {
                     let item = item?;
                     if let ChatExecutionEvent::Model(ChatChunk::Finished(resp)) = &item {
                         final_response = Some(resp.clone());
                     }
-                    yield item;
+                    round_events.push(item);
                 }
 
                 let response = final_response.ok_or_else(|| {
@@ -495,7 +535,32 @@ impl Agent {
                     .with_assistant_tool_calls(&response.tool_calls);
                 messages.push(assistant_message);
 
-                if response.tool_calls.is_empty() {
+                let is_assistant_message = response.message.role == MessageRole::Assistant;
+                let is_non_final_round = if response.tool_calls.is_empty() {
+                    if is_assistant_message {
+                        consecutive_assistant_messages_without_tool_calls += 1;
+                        consecutive_assistant_messages_without_tool_calls < 2
+                    } else {
+                        consecutive_assistant_messages_without_tool_calls = 0;
+                        true
+                    }
+                } else {
+                    consecutive_assistant_messages_without_tool_calls = 0;
+                    true
+                };
+
+                if is_non_final_round {
+                    if is_assistant_message {
+                        yield ChatExecutionEvent::Thinking(response.clone());
+                    } else {
+                        for event in round_events {
+                            yield event;
+                        }
+                    }
+                } else {
+                    for event in round_events {
+                        yield event;
+                    }
                     return;
                 }
 
@@ -512,7 +577,7 @@ impl Agent {
 
             Err(XlaiError::new(
                 ErrorKind::Tool,
-                "agent exceeded the maximum number of tool round trips",
+                "agent exceeded the maximum number of automatic response rounds",
             ))?;
         })
     }

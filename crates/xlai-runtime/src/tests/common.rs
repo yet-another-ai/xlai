@@ -1,12 +1,12 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use futures_util::{StreamExt, stream};
 use xlai_core::{
     BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
     ChatResponse, FsPath, MessageRole, Metadata, Skill, SkillStore, ToolCallExecutionMode,
-    ToolDefinition, ToolParameter, ToolParameterType, TranscriptionModel, TranscriptionRequest,
-    TranscriptionResponse, TtsModel, TtsRequest, TtsResponse, XlaiError,
+    ToolDefinition, ToolSchema, TranscriptionModel, TranscriptionRequest, TranscriptionResponse,
+    TtsModel, TtsRequest, TtsResponse, XlaiError,
 };
 
 use crate::{Agent, ChatExecutionEvent, MarkdownSkillStore, MemoryFileSystem};
@@ -24,17 +24,18 @@ pub(super) fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 pub(super) fn weather_tool_definition() -> ToolDefinition {
-    ToolDefinition {
-        name: "lookup_weather".to_owned(),
-        description: "Lookup current weather".to_owned(),
-        parameters: vec![ToolParameter {
-            name: "city".to_owned(),
-            description: "The city name".to_owned(),
-            kind: ToolParameterType::String,
-            required: true,
-        }],
-        execution_mode: ToolCallExecutionMode::Concurrent,
-    }
+    ToolDefinition::new(
+        "lookup_weather",
+        "Lookup current weather",
+        ToolSchema::object(
+            BTreeMap::from([(
+                "city".to_owned(),
+                ToolSchema::string().with_description("The city name"),
+            )]),
+            vec!["city".to_owned()],
+        ),
+    )
+    .with_execution_mode(ToolCallExecutionMode::Concurrent)
 }
 
 pub(super) fn weather_tool_definition_sequential() -> ToolDefinition {
@@ -45,17 +46,18 @@ pub(super) fn weather_tool_definition_sequential() -> ToolDefinition {
 }
 
 pub(super) fn time_tool_definition() -> ToolDefinition {
-    ToolDefinition {
-        name: "lookup_time".to_owned(),
-        description: "Lookup current time".to_owned(),
-        parameters: vec![ToolParameter {
-            name: "city".to_owned(),
-            description: "The city name".to_owned(),
-            kind: ToolParameterType::String,
-            required: true,
-        }],
-        execution_mode: ToolCallExecutionMode::Concurrent,
-    }
+    ToolDefinition::new(
+        "lookup_time",
+        "Lookup current time",
+        ToolSchema::object(
+            BTreeMap::from([(
+                "city".to_owned(),
+                ToolSchema::string().with_description("The city name"),
+            )]),
+            vec!["city".to_owned()],
+        ),
+    )
+    .with_execution_mode(ToolCallExecutionMode::Concurrent)
 }
 
 pub(super) fn time_tool_definition_sequential() -> ToolDefinition {
@@ -66,17 +68,18 @@ pub(super) fn time_tool_definition_sequential() -> ToolDefinition {
 }
 
 pub(super) fn calendar_tool_definition() -> ToolDefinition {
-    ToolDefinition {
-        name: "lookup_calendar".to_owned(),
-        description: "Lookup current calendar".to_owned(),
-        parameters: vec![ToolParameter {
-            name: "city".to_owned(),
-            description: "The city name".to_owned(),
-            kind: ToolParameterType::String,
-            required: true,
-        }],
-        execution_mode: ToolCallExecutionMode::Concurrent,
-    }
+    ToolDefinition::new(
+        "lookup_calendar",
+        "Lookup current calendar",
+        ToolSchema::object(
+            BTreeMap::from([(
+                "city".to_owned(),
+                ToolSchema::string().with_description("The city name"),
+            )]),
+            vec!["city".to_owned()],
+        ),
+    )
+    .with_execution_mode(ToolCallExecutionMode::Concurrent)
 }
 
 pub(super) fn calendar_tool_definition_sequential() -> ToolDefinition {

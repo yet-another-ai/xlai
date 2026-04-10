@@ -36,13 +36,18 @@ struct RegisteredTool {
     origin: ToolOrigin,
 }
 
-/// One item from a chat/agent stream (model chunks, tool calls, tool results).
+/// One item from a chat/agent stream.
 ///
-/// Serialized for WASM/JS as `{"kind":"model"|"toolCall"|"toolResult","data":...}` (camelCase).
+/// Agent streams may classify intermediate assistant rounds as [`Self::Thinking`] so consumers can
+/// render them differently from the final assistant reply.
+///
+/// Serialized for WASM/JS as
+/// `{"kind":"model"|"thinking"|"toolCall"|"toolResult","data":...}` (camelCase).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "data", rename_all = "camelCase")]
 pub enum ChatExecutionEvent {
     Model(ChatChunk),
+    Thinking(ChatResponse),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
 }

@@ -45,6 +45,7 @@ export type {
   ToolDefinition,
   ToolParameter,
   ToolParameterType,
+  ToolSchema,
   ToolResult,
   TtsAudioFormatWire,
   TtsChunk,
