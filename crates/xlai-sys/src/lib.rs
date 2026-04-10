@@ -5,11 +5,11 @@
 //! duplicate symbols — prefer separate processes or a single stack unless you know the link layout.
 
 // Newer ggml releases moved backend helpers like `ggml_backend_meta_device` into
-// `ggml-base`. Link it as a non-bundled native archive so downstream final links
-// resolve those symbols directly instead of relying on an archive nested inside
-// `libxlai_sys.rlib`.
+// `ggml-base`. Link it as a non-bundled whole archive so downstream final links
+// can resolve those symbols even when the referencing native objects also live in
+// an rlib-produced archive.
 #[cfg(any(feature = "llama", feature = "qts-ggml"))]
-#[link(name = "ggml-base", kind = "static", modifiers = "-bundle")]
+#[link(name = "ggml-base", kind = "static", modifiers = "+whole-archive,-bundle")]
 unsafe extern "C" {}
 
 #[cfg(feature = "qts-ggml")]
