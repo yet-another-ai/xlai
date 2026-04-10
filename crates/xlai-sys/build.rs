@@ -566,6 +566,7 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
         &common_dir,
         &vendor_dir,
         &ggml_include_dir,
+        &source_dir.join("ggml/src"),
         &wrapper_cpp,
     );
     generate_llama_bindings(&include_dir, &ggml_include_dir)?;
@@ -939,15 +940,20 @@ fn build_wrapper(
     common_dir: &Path,
     vendor_dir: &Path,
     ggml_include_dir: &Path,
+    ggml_src_dir: &Path,
     wrapper_cpp: &Path,
 ) {
     cc::Build::new()
         .cpp(true)
         .file(wrapper_cpp)
+        // Keep the meta backend implementation bundled with our wrapper objects so
+        // final Rust links do not depend on extracting it from `libggml-base.a`.
+        .file(ggml_src_dir.join("ggml-backend-meta.cpp"))
         .include(include_dir)
         .include(common_dir)
         .include(vendor_dir)
         .include(ggml_include_dir)
+        .include(ggml_src_dir)
         .std("c++17")
         .compile("xlai_llama_cpp_wrapper");
 }
