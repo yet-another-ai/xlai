@@ -7,10 +7,13 @@ use crate::qts_browser::QtsBrowserCapabilities;
 use futures_util::StreamExt;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::wasm_bindgen;
-use xlai_backend_openai::{OpenAiConfig, OpenAiTtsModel};
+use xlai_backend_openai::{OpenAiConfig, OpenAiImageGenerationModel, OpenAiTtsModel};
 #[cfg(feature = "qts")]
 use xlai_core::XlaiError;
-use xlai_core::{ChatContent, TtsChunk, TtsDeliveryMode, TtsModel, TtsRequest};
+use xlai_core::{
+    ChatContent, ImageGenerationModel, ImageGenerationRequest, TtsChunk, TtsDeliveryMode, TtsModel,
+    TtsRequest,
+};
 
 use crate::agent_session::WasmAgentSession;
 use crate::chat_session::WasmChatSession;
@@ -27,7 +30,7 @@ use crate::memory_fs::WasmMemoryFileSystem;
 use crate::types::WasmQtsTtsCallOptions;
 use crate::types::{
     DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL, WasmAgentRequest, WasmChatRequest,
-    WasmChatSessionOptions, WasmTtsCallOptions,
+    WasmChatSessionOptions, WasmImageGenerationCallOptions, WasmTtsCallOptions,
 };
 use crate::wasm_helpers::js_error;
 
@@ -237,6 +240,25 @@ fn openai_tts_model(opts: &WasmTtsCallOptions) -> OpenAiTtsModel {
     OpenAiTtsModel::new(config)
 }
 
+fn openai_image_generation_model(
+    opts: &WasmImageGenerationCallOptions,
+) -> OpenAiImageGenerationModel {
+    let mut config = OpenAiConfig::new(
+        opts.base_url
+            .clone()
+            .unwrap_or_else(|| DEFAULT_OPENAI_BASE_URL.to_owned()),
+        opts.api_key.clone(),
+        opts.model
+            .clone()
+            .or_else(|| opts.image_model.clone())
+            .unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_owned()),
+    );
+    if let Some(ref m) = opts.image_model {
+        config = config.with_image_model(m.clone());
+    }
+    OpenAiImageGenerationModel::new(config)
+}
+
 fn tts_request_from_opts(opts: &WasmTtsCallOptions, delivery: TtsDeliveryMode) -> TtsRequest {
     TtsRequest {
         model: None,
@@ -250,6 +272,21 @@ fn tts_request_from_opts(opts: &WasmTtsCallOptions, delivery: TtsDeliveryMode) -
     }
 }
 
+fn image_generation_request_from_opts(
+    opts: &WasmImageGenerationCallOptions,
+) -> ImageGenerationRequest {
+    ImageGenerationRequest {
+        model: opts.model.clone(),
+        prompt: opts.prompt.clone(),
+        size: opts.size.clone(),
+        quality: opts.quality,
+        background: opts.background,
+        output_format: opts.output_format,
+        count: opts.count,
+        metadata: Default::default(),
+    }
+}
+
 #[wasm_bindgen]
 pub async fn tts(options: JsValue) -> Result<JsValue, JsValue> {
     let opts: WasmTtsCallOptions = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
@@ -257,6 +294,16 @@ pub async fn tts(options: JsValue) -> Result<JsValue, JsValue> {
     let model = openai_tts_model(&opts);
     let request = tts_request_from_opts(&opts, delivery);
     let response = model.synthesize(request).await.map_err(js_error)?;
+    serde_wasm_bindgen::to_value(&response).map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = generateImage)]
+pub async fn generate_image(options: JsValue) -> Result<JsValue, JsValue> {
+    let opts: WasmImageGenerationCallOptions =
+        serde_wasm_bindgen::from_value(options).map_err(js_error)?;
+    let model = openai_image_generation_model(&opts);
+    let request = image_generation_request_from_opts(&opts);
+    let response = model.generate_image(request).await.map_err(js_error)?;
     serde_wasm_bindgen::to_value(&response).map_err(js_error)
 }
 

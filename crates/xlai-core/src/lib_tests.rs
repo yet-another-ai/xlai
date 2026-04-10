@@ -2,10 +2,11 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 
 use crate::{
-    ChatContent, ChatMessage, ChatRequest, ChatRetryPolicy, ContentPart, ErrorKind, MediaSource,
-    MessageRole, ReasoningEffort, StructuredOutput, StructuredOutputFormat, ToolCall,
-    ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolSchema, TtsChunk,
-    TtsResponse, XlaiError,
+    ChatContent, ChatMessage, ChatRequest, ChatRetryPolicy, ContentPart, ErrorKind, GeneratedImage,
+    ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality,
+    ImageGenerationRequest, ImageGenerationResponse, MediaSource, MessageRole, ReasoningEffort,
+    StructuredOutput, StructuredOutputFormat, ToolCall, ToolCallExecutionMode, ToolDefinition,
+    ToolParameter, ToolParameterType, ToolSchema, TtsChunk, TtsResponse, XlaiError,
 };
 
 #[test]
@@ -152,6 +153,65 @@ fn chat_content_round_trips_audio_parts() {
         return;
     };
     assert_eq!(back, c);
+}
+
+#[test]
+fn image_generation_request_round_trips_json() {
+    let request = ImageGenerationRequest {
+        model: Some("gpt-image-1".to_owned()),
+        prompt: "A watercolor fox in a forest".to_owned(),
+        size: Some("1024x1024".to_owned()),
+        quality: Some(ImageGenerationQuality::High),
+        background: Some(ImageGenerationBackground::Transparent),
+        output_format: Some(ImageGenerationOutputFormat::Png),
+        count: Some(2),
+        metadata: Default::default(),
+    };
+
+    let serialized = serde_json::to_value(&request);
+    assert!(serialized.is_ok(), "serialize");
+    let Ok(v) = serialized else {
+        return;
+    };
+    assert_eq!(v["quality"], json!("high"));
+    assert_eq!(v["background"], json!("transparent"));
+    assert_eq!(v["output_format"], json!("png"));
+
+    let deserialized: Result<ImageGenerationRequest, _> = serde_json::from_value(v);
+    assert!(deserialized.is_ok(), "deserialize");
+    let Ok(back) = deserialized else {
+        return;
+    };
+    assert_eq!(back, request);
+}
+
+#[test]
+fn image_generation_response_round_trips_inline_images() {
+    let response = ImageGenerationResponse {
+        images: vec![GeneratedImage {
+            image: MediaSource::InlineData {
+                mime_type: "image/png".to_owned(),
+                data: vec![0, 1, 2, 3],
+            },
+            mime_type: Some("image/png".to_owned()),
+            revised_prompt: Some("A watercolor fox resting in a pine forest".to_owned()),
+            metadata: Default::default(),
+        }],
+        metadata: Default::default(),
+    };
+
+    let serialized = serde_json::to_value(&response);
+    assert!(serialized.is_ok(), "serialize");
+    let Ok(v) = serialized else {
+        return;
+    };
+
+    let deserialized: Result<ImageGenerationResponse, _> = serde_json::from_value(v);
+    assert!(deserialized.is_ok(), "deserialize");
+    let Ok(back) = deserialized else {
+        return;
+    };
+    assert_eq!(back, response);
 }
 
 #[test]

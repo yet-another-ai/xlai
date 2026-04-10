@@ -4,9 +4,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use futures_util::{StreamExt, stream};
 use xlai_core::{
     BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
-    ChatResponse, FsPath, MessageRole, Metadata, Skill, SkillStore, ToolCallExecutionMode,
-    ToolDefinition, ToolSchema, TranscriptionModel, TranscriptionRequest, TranscriptionResponse,
-    TtsModel, TtsRequest, TtsResponse, XlaiError,
+    ChatResponse, FsPath, GeneratedImage, ImageGenerationModel, ImageGenerationRequest,
+    ImageGenerationResponse, MediaSource, MessageRole, Metadata, Skill, SkillStore,
+    ToolCallExecutionMode, ToolDefinition, ToolSchema, TranscriptionModel, TranscriptionRequest,
+    TranscriptionResponse, TtsModel, TtsRequest, TtsResponse, XlaiError,
 };
 
 use crate::{Agent, ChatExecutionEvent, MarkdownSkillStore, MemoryFileSystem};
@@ -276,6 +277,59 @@ impl TranscriptionModel for RecordingTranscriptionModel {
                 )
             })
         })
+    }
+}
+
+pub(super) struct RecordingImageGenerationModel {
+    requests: Arc<Mutex<Vec<ImageGenerationRequest>>>,
+    responses: Mutex<VecDeque<ImageGenerationResponse>>,
+}
+
+impl RecordingImageGenerationModel {
+    pub(super) fn new(
+        requests: Arc<Mutex<Vec<ImageGenerationRequest>>>,
+        responses: Vec<ImageGenerationResponse>,
+    ) -> Self {
+        Self {
+            requests,
+            responses: Mutex::new(VecDeque::from(responses)),
+        }
+    }
+}
+
+impl ImageGenerationModel for RecordingImageGenerationModel {
+    fn provider_name(&self) -> &'static str {
+        "recording-image-generation-test"
+    }
+
+    fn generate_image(
+        &self,
+        request: ImageGenerationRequest,
+    ) -> BoxFuture<'_, Result<ImageGenerationResponse, XlaiError>> {
+        Box::pin(async move {
+            lock_unpoisoned(&self.requests).push(request);
+            lock_unpoisoned(&self.responses).pop_front().ok_or_else(|| {
+                XlaiError::new(
+                    xlai_core::ErrorKind::Provider,
+                    "missing image generation response",
+                )
+            })
+        })
+    }
+}
+
+pub(super) fn sample_generated_image_response() -> ImageGenerationResponse {
+    ImageGenerationResponse {
+        images: vec![GeneratedImage {
+            image: MediaSource::InlineData {
+                mime_type: "image/png".to_owned(),
+                data: vec![137, 80, 78, 71],
+            },
+            mime_type: Some("image/png".to_owned()),
+            revised_prompt: Some("A bright orange cat sitting on a windowsill".to_owned()),
+            metadata: empty_metadata(),
+        }],
+        metadata: empty_metadata(),
     }
 }
 

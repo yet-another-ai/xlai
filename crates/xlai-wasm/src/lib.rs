@@ -6,7 +6,9 @@ pub use xlai_facade::builder;
 pub use xlai_facade::core;
 pub use xlai_facade::{
     Agent, Chat, ChatExecutionEvent, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath,
-    McpRegistry, MemoryFileSystem, OpenAiChatModel, OpenAiConfig, OpenAiTranscriptionModel,
+    GeneratedImage, ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality,
+    ImageGenerationRequest, ImageGenerationResponse, McpRegistry, MemoryFileSystem,
+    OpenAiChatModel, OpenAiConfig, OpenAiImageGenerationModel, OpenAiTranscriptionModel,
     OpenAiTtsModel, ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode, WritableFileSystem,
     XlaiRuntime,
 };
@@ -33,8 +35,8 @@ mod js_file_system;
 pub use agent_session::WasmAgentSession;
 pub use api::{
     agent, chat, create_agent_session, create_agent_session_with_memory_file_system,
-    create_chat_session, create_chat_session_with_memory_file_system, package_version, tts,
-    tts_stream,
+    create_chat_session, create_chat_session_with_memory_file_system, generate_image,
+    package_version, tts, tts_stream,
 };
 #[cfg(target_arch = "wasm32")]
 pub use api::{

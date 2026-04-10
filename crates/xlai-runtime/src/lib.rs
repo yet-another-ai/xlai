@@ -11,9 +11,10 @@ use async_stream::try_stream;
 use futures_util::StreamExt;
 use xlai_core::{
     BoxStream, ChatChunk, ChatModel, ChatRequest, ChatResponse, EmbeddingModel, EmbeddingRequest,
-    EmbeddingResponse, ErrorKind, KnowledgeHit, KnowledgeQuery, KnowledgeStore, RuntimeCapability,
-    Skill, SkillId, SkillStore, ToolCall, ToolExecutor, ToolResult, TranscriptionModel, TtsModel,
-    VectorSearchHit, VectorSearchQuery, VectorStore, XlaiError,
+    EmbeddingResponse, ErrorKind, ImageGenerationModel, KnowledgeHit, KnowledgeQuery,
+    KnowledgeStore, RuntimeCapability, Skill, SkillId, SkillStore, ToolCall, ToolExecutor,
+    ToolResult, TranscriptionModel, TtsModel, VectorSearchHit, VectorSearchQuery, VectorStore,
+    XlaiError,
 };
 
 pub use agent::{Agent, McpRegistry};
@@ -26,16 +27,20 @@ pub use skill_store::MarkdownSkillStore;
 pub use tera::Context as PromptContext;
 pub use xlai_core::{
     ChatBackend, ChatContent, ChatRetryPolicy, ContentPart, DirectoryFileSystem, FileSystem,
-    FsEntry, FsEntryKind, FsPath, ImageDetail, MediaSource, ReadableFileSystem, ReasoningEffort,
-    StreamTextDelta, ToolCallExecutionMode, ToolSchema, ToolSchemaKind, TranscriptionBackend,
-    TranscriptionRequest, TranscriptionResponse, TtsAudioFormat, TtsBackend, TtsChunk,
-    TtsDeliveryMode, TtsRequest, TtsResponse, VoiceReferenceSample, VoiceSpec, WritableFileSystem,
+    FsEntry, FsEntryKind, FsPath, GeneratedImage, ImageDetail, ImageGenerationBackend,
+    ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality,
+    ImageGenerationRequest, ImageGenerationResponse, MediaSource, ReadableFileSystem,
+    ReasoningEffort, StreamTextDelta, ToolCallExecutionMode, ToolSchema, ToolSchemaKind,
+    TranscriptionBackend, TranscriptionRequest, TranscriptionResponse, TtsAudioFormat, TtsBackend,
+    TtsChunk, TtsDeliveryMode, TtsRequest, TtsResponse, VoiceReferenceSample, VoiceSpec,
+    WritableFileSystem,
 };
 
 #[derive(Clone, Default)]
 pub struct RuntimeBuilder {
     chat_model: Option<Arc<dyn ChatModel>>,
     embedding_model: Option<Arc<dyn EmbeddingModel>>,
+    image_generation_model: Option<Arc<dyn ImageGenerationModel>>,
     transcription_model: Option<Arc<dyn TranscriptionModel>>,
     tts_model: Option<Arc<dyn TtsModel>>,
     tool_executor: Option<Arc<dyn ToolExecutor>>,
@@ -72,6 +77,24 @@ impl RuntimeBuilder {
         self.embedding_model = Some(embedding_model);
         self.capabilities.push(RuntimeCapability::Embeddings);
         self
+    }
+
+    #[must_use]
+    pub fn with_image_generation_model(
+        mut self,
+        image_generation_model: Arc<dyn ImageGenerationModel>,
+    ) -> Self {
+        self.image_generation_model = Some(image_generation_model);
+        self.capabilities.push(RuntimeCapability::ImageGeneration);
+        self
+    }
+
+    #[must_use]
+    pub fn with_image_generation_backend<B>(self, backend: B) -> Self
+    where
+        B: xlai_core::ImageGenerationBackend,
+    {
+        self.with_image_generation_model(Arc::new(backend.into_image_generation_model()))
     }
 
     #[must_use]
@@ -151,6 +174,7 @@ impl RuntimeBuilder {
         let runtime = XlaiRuntime {
             chat_model: self.chat_model,
             embedding_model: self.embedding_model,
+            image_generation_model: self.image_generation_model,
             transcription_model: self.transcription_model,
             tts_model: self.tts_model,
             tool_executor: self.tool_executor,
@@ -176,6 +200,7 @@ impl RuntimeBuilder {
 pub struct XlaiRuntime {
     chat_model: Option<Arc<dyn ChatModel>>,
     embedding_model: Option<Arc<dyn EmbeddingModel>>,
+    image_generation_model: Option<Arc<dyn ImageGenerationModel>>,
     transcription_model: Option<Arc<dyn TranscriptionModel>>,
     tts_model: Option<Arc<dyn TtsModel>>,
     tool_executor: Option<Arc<dyn ToolExecutor>>,
@@ -263,6 +288,24 @@ impl XlaiRuntime {
             .ok_or_else(|| missing_dependency("embedding model"))?;
 
         embedding_model.embed(request).await
+    }
+
+    /// Executes an image generation request with the configured image model.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no image generation model is configured or if the
+    /// underlying provider request fails.
+    pub async fn generate_image(
+        &self,
+        request: ImageGenerationRequest,
+    ) -> Result<ImageGenerationResponse, XlaiError> {
+        let image_generation_model = self
+            .image_generation_model
+            .as_ref()
+            .ok_or_else(|| missing_dependency("image generation model"))?;
+
+        image_generation_model.generate_image(request).await
     }
 
     /// Executes an audio transcription request with the configured transcription model.

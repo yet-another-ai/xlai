@@ -5,7 +5,8 @@
 pub use xlai_core as core;
 
 pub use xlai_backend_openai::{
-    OpenAiChatModel, OpenAiConfig, OpenAiTranscriptionModel, OpenAiTtsModel,
+    OpenAiChatModel, OpenAiConfig, OpenAiImageGenerationModel, OpenAiTranscriptionModel,
+    OpenAiTtsModel,
 };
 pub use xlai_backend_transformersjs::{
     TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
@@ -19,8 +20,9 @@ pub use xlai_qts_core::{QtsTtsConfig, QtsTtsModel};
 
 pub use xlai_runtime::{
     Agent, Chat, ChatExecutionEvent, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath,
-    McpRegistry, MemoryFileSystem, ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode,
-    WritableFileSystem, XlaiRuntime,
+    GeneratedImage, ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality,
+    ImageGenerationRequest, ImageGenerationResponse, McpRegistry, MemoryFileSystem,
+    ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode, WritableFileSystem, XlaiRuntime,
 };
 
 #[cfg(not(target_arch = "wasm32"))]

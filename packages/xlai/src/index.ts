@@ -11,6 +11,7 @@ export type {
 } from './filesystem';
 export { AgentSession, agent, createAgentSession } from './agent';
 export { ChatSession, chat, createChatSession } from './chat';
+export { generateImage } from './image-generation';
 export { tts, ttsStream } from './tts';
 export {
   LocalTtsRuntime,
@@ -36,7 +37,13 @@ export type {
   ChatSessionOptions,
   ChatUsage,
   ContentPart,
+  GeneratedImage,
   ImageDetail,
+  ImageGenerationBackground,
+  ImageGenerationOptions,
+  ImageGenerationOutputFormat,
+  ImageGenerationQuality,
+  ImageGenerationResponse,
   MediaSource,
   QtsModelFileEntry,
   QtsModelManifest,

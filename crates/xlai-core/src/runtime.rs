@@ -38,6 +38,7 @@ impl<T> MaybeSend for T where T: ?Sized {}
 pub enum RuntimeCapability {
     Chat,
     Embeddings,
+    ImageGeneration,
     Transcription,
     Tts,
     ToolCalling,

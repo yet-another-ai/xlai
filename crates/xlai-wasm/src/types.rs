@@ -3,7 +3,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use xlai_core::{
-    ChatContent, ChatResponse, ChatRetryPolicy, FinishReason, FsEntry, FsEntryKind, MessageRole,
+    ChatContent, ChatResponse, ChatRetryPolicy, FinishReason, FsEntry, FsEntryKind,
+    ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality, MessageRole,
     ReasoningEffort, TokenUsage, TtsAudioFormat, TtsDeliveryMode, VoiceSpec,
 };
 
@@ -149,6 +150,29 @@ pub(crate) struct WasmTtsCallOptions {
     pub(crate) instructions: Option<String>,
     #[serde(default)]
     pub(crate) delivery: Option<TtsDeliveryMode>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WasmImageGenerationCallOptions {
+    pub(crate) prompt: String,
+    pub(crate) api_key: String,
+    #[serde(default)]
+    pub(crate) base_url: Option<String>,
+    #[serde(default)]
+    pub(crate) model: Option<String>,
+    #[serde(default)]
+    pub(crate) image_model: Option<String>,
+    #[serde(default)]
+    pub(crate) size: Option<String>,
+    #[serde(default)]
+    pub(crate) quality: Option<ImageGenerationQuality>,
+    #[serde(default)]
+    pub(crate) background: Option<ImageGenerationBackground>,
+    #[serde(default)]
+    pub(crate) output_format: Option<ImageGenerationOutputFormat>,
+    #[serde(default)]
+    pub(crate) count: Option<u32>,
 }
 
 /// Local QTS TTS call options (no OpenAI `apiKey`; see `docs/qts-wasm-browser-runtime.md`).

@@ -259,6 +259,39 @@ export interface AgentSessionOptions extends ChatSessionOptions {
   agentLoop?: boolean;
 }
 
+export type ImageGenerationQuality = 'low' | 'medium' | 'high';
+
+export type ImageGenerationBackground = 'transparent' | 'opaque';
+
+export type ImageGenerationOutputFormat = 'png' | 'jpeg' | 'webp';
+
+/** Matches `xlai_core::GeneratedImage` JSON. */
+export interface GeneratedImage {
+  image: MediaSource;
+  mime_type?: string | null;
+  revised_prompt?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ImageGenerationOptions {
+  prompt: string;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  imageModel?: string;
+  size?: string;
+  quality?: ImageGenerationQuality;
+  background?: ImageGenerationBackground;
+  outputFormat?: ImageGenerationOutputFormat;
+  count?: number;
+}
+
+/** Matches `xlai_core::ImageGenerationResponse` JSON. */
+export interface ImageGenerationResponse {
+  images: GeneratedImage[];
+  metadata?: Record<string, unknown>;
+}
+
 /** Matches `xlai_core::VoiceReferenceSample` JSON. */
 export interface VoiceReferenceSample {
   audio: MediaSource;

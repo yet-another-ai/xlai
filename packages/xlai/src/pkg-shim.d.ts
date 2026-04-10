@@ -30,6 +30,7 @@ declare module '../pkg/xlai_wasm.js' {
   export default init;
   export function chat(options: unknown): Promise<unknown>;
   export function agent(options: unknown): Promise<unknown>;
+  export function generateImage(options: unknown): Promise<unknown>;
   export function tts(options: unknown): Promise<unknown>;
   export function ttsStream(options: unknown): Promise<unknown>;
   export function createChatSession(options: unknown): WasmToolSession;
