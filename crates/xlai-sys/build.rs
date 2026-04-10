@@ -577,29 +577,6 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
     emit_llama_vulkan_sdk_paths(feature_set.vulkan, &target_os);
     emit_search_path_variants(&dst.join("build/bin"));
 
-    let mut libraries = vec![
-        "xlai_llama_cpp_wrapper",
-        "common",
-        "cpp-httplib",
-        "llguidance",
-        "llama",
-        "ggml",
-        "ggml-cpu",
-    ];
-    if feature_set.metal {
-        libraries.push("ggml-metal");
-    }
-    if enable_openblas {
-        libraries.push("ggml-blas");
-    }
-    if feature_set.vulkan {
-        libraries.push("ggml-vulkan");
-    }
-    libraries.push("ggml-base");
-    for library in libraries {
-        println!("cargo:rustc-link-lib=static={library}");
-    }
-
     match target_os.as_str() {
         "macos" | "ios" => {
             println!("cargo:rustc-link-lib=c++");

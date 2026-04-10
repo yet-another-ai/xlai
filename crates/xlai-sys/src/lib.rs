@@ -4,6 +4,50 @@
 //! enabled stack(s). Building both in one binary links two separate ggml static libraries and can
 //! duplicate symbols — prefer separate processes or a single stack unless you know the link layout.
 
+// Keep the vendored llama.cpp native archives out of `libxlai_sys.rlib` so downstream
+// test/binary links see the real library dependency graph instead of nested static archives.
+#[cfg(feature = "llama")]
+#[link(
+    name = "xlai_llama_cpp_wrapper",
+    kind = "static",
+    modifiers = "-bundle"
+)]
+unsafe extern "C" {}
+#[cfg(feature = "llama")]
+#[link(name = "common", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "llama")]
+#[link(name = "cpp-httplib", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "llama")]
+#[link(name = "llguidance", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "llama")]
+#[link(name = "llama", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "llama")]
+#[link(name = "ggml", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "llama")]
+#[link(name = "ggml-cpu", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(all(feature = "llama", feature = "metal", target_os = "macos"))]
+#[link(name = "ggml-metal", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(all(
+    feature = "llama",
+    feature = "openblas",
+    any(target_os = "linux", target_os = "windows")
+))]
+#[link(name = "ggml-blas", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(all(feature = "llama", feature = "vulkan"))]
+#[link(name = "ggml-vulkan", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "llama")]
+#[link(name = "ggml-base", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+
 #[cfg(feature = "qts-ggml")]
 pub mod qts_ggml {
     #![allow(
