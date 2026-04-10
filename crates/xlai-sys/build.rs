@@ -203,7 +203,10 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
     }
 
     println!("cargo:rustc-link-lib=static=ggml-cpu");
-    println!("cargo:rustc-link-lib=static=ggml-base");
+    // Recent ggml releases moved some backend helpers into `ggml-base`; force-load the
+    // archive so symbols referenced from bundled native objects inside the Rust rlib
+    // are still visible to the final linker on GNU/LLD toolchains.
+    println!("cargo:rustc-link-lib=static:+whole-archive=ggml-base");
 
     if feature_enabled("metal") && target.contains("apple") {
         println!("cargo:rustc-link-lib=framework=Metal");
@@ -583,7 +586,6 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
         "llguidance",
         "llama",
         "ggml",
-        "ggml-base",
         "ggml-cpu",
     ];
     if feature_set.metal {
@@ -598,6 +600,9 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
     for library in libraries {
         println!("cargo:rustc-link-lib=static={library}");
     }
+    // See comment in the standalone ggml link path above: force-load `ggml-base` so
+    // symbols moved there by newer ggml releases resolve from the final test/binary link.
+    println!("cargo:rustc-link-lib=static:+whole-archive=ggml-base");
 
     match target_os.as_str() {
         "macos" | "ios" => {
