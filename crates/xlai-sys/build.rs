@@ -25,11 +25,11 @@ fn main() {
         return;
     }
 
+    if want_llama {
+        build_llama_cpp_stack(&manifest_dir, &out_dir).expect("xlai-sys: llama.cpp build failed");
+    }
     if want_qts {
         build_qts_standalone_ggml(&manifest_dir, &out_dir);
-    }
-    if want_llama {
-        build_llama_cpp_stack(&manifest_dir).expect("xlai-sys: llama.cpp build failed");
     }
 }
 
@@ -39,7 +39,6 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
     let openblas_fe = feature_enabled("openblas");
     let enable_linux_windows_blas =
         openblas_fe && matches!(target_os.as_str(), "linux" | "windows");
-    let link_ggml_blas = openblas_fe && (enable_linux_windows_blas || target.contains("apple"));
 
     let ggml_root = env::var("GGML_SRC")
         .map(PathBuf::from)
@@ -73,6 +72,7 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
 
     let mut cfg = cmake::Config::new(&ggml_root);
     cfg.profile("Release");
+    cfg.out_dir(qts_cmake_out_dir(out_dir));
     cfg.define("BUILD_SHARED_LIBS", "OFF");
     cfg.define("GGML_STATIC", "ON");
     cfg.define("GGML_BUILD_EXAMPLES", "OFF");
@@ -141,69 +141,19 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
     map_feature_cmake(&mut cfg, "zdnn", "GGML_ZDNN");
     map_feature_cmake(&mut cfg, "virtgpu", "GGML_VIRTGPU");
 
+    let qts_out_dir = qts_cmake_out_dir(out_dir);
     let dst = cfg.build();
-    let lib_dir = find_lib_dir(&dst, out_dir).unwrap_or_else(|| {
+    let lib_dir = find_lib_dir(&dst, &qts_out_dir).unwrap_or_else(|| {
         panic!(
             "xlai-sys (qts-ggml): could not locate static libs under cmake output {:?} or {:?}/build",
-            dst, out_dir
+            dst, qts_out_dir
         )
     });
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
 
-    // Link order: dependents before their dependencies (GNU ld).
-    println!("cargo:rustc-link-lib=static=ggml");
-    if feature_enabled("metal") && target.contains("apple") {
-        println!("cargo:rustc-link-lib=static=ggml-metal");
-    }
-    if feature_enabled("cuda") {
-        println!("cargo:rustc-link-lib=static=ggml-cuda");
-    }
     if feature_enabled("vulkan") {
-        println!("cargo:rustc-link-lib=static=ggml-vulkan");
         emit_vulkan_loader_links(&target);
     }
-    if feature_enabled("hip") {
-        println!("cargo:rustc-link-lib=static=ggml-hip");
-    }
-    if feature_enabled("musa") {
-        println!("cargo:rustc-link-lib=static=ggml-musa");
-    }
-    if feature_enabled("opencl") {
-        println!("cargo:rustc-link-lib=static=ggml-opencl");
-    }
-    if link_ggml_blas {
-        println!("cargo:rustc-link-lib=static=ggml-blas");
-    }
-    if feature_enabled("rpc") {
-        println!("cargo:rustc-link-lib=static=ggml-rpc");
-    }
-    if feature_enabled("sycl") {
-        println!("cargo:rustc-link-lib=static=ggml-sycl");
-    }
-    if feature_enabled("webgpu") {
-        println!("cargo:rustc-link-lib=static=ggml-webgpu");
-    }
-    if feature_enabled("openvino") {
-        println!("cargo:rustc-link-lib=static=ggml-openvino");
-    }
-    if feature_enabled("hexagon") {
-        println!("cargo:rustc-link-lib=static=ggml-hexagon");
-    }
-    if feature_enabled("cann") {
-        println!("cargo:rustc-link-lib=static=ggml-cann");
-    }
-    if feature_enabled("zendnn") {
-        println!("cargo:rustc-link-lib=static=ggml-zendnn");
-    }
-    if feature_enabled("zdnn") {
-        println!("cargo:rustc-link-lib=static=ggml-zdnn");
-    }
-    if feature_enabled("virtgpu") {
-        println!("cargo:rustc-link-lib=static=ggml-virtgpu");
-    }
-
-    println!("cargo:rustc-link-lib=static=ggml-cpu");
-    println!("cargo:rustc-link-lib=static=ggml-base");
 
     if feature_enabled("metal") && target.contains("apple") {
         println!("cargo:rustc-link-lib=framework=Metal");
@@ -482,7 +432,7 @@ struct BackendFeatureSet {
     vulkan: bool,
 }
 
-fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
+fn build_llama_cpp_stack(manifest_dir: &Path, out_dir: &Path) -> BuildResult<()> {
     let vendor_source_dir = manifest_dir.join("vendor/llama.cpp");
     let source_dir = prepare_llama_source(&vendor_source_dir)?;
     let include_dir = source_dir.join("include");
@@ -544,9 +494,7 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
         .define("GGML_VIRTGPU", "OFF")
         .define("GGML_WEBGPU", "OFF");
 
-    if target_os == "windows" {
-        config.out_dir(short_cmake_out_dir(feature_set)?);
-    }
+    config.out_dir(llama_cmake_out_dir(manifest_dir, out_dir, feature_set)?);
 
     apply_cmake_env_overrides(&mut config, enable_openblas);
 
@@ -567,6 +515,7 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
         &common_dir,
         &vendor_dir,
         &ggml_include_dir,
+        &source_dir.join("ggml/src"),
         &wrapper_cpp,
     );
     generate_llama_bindings(&include_dir, &ggml_include_dir)?;
@@ -575,29 +524,6 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
     emit_search_path_variants(&llguidance_output_dir(&dst));
     emit_llama_vulkan_sdk_paths(feature_set.vulkan, &target_os);
     emit_search_path_variants(&dst.join("build/bin"));
-
-    let mut libraries = vec![
-        "xlai_llama_cpp_wrapper",
-        "common",
-        "cpp-httplib",
-        "llguidance",
-        "llama",
-        "ggml",
-        "ggml-base",
-        "ggml-cpu",
-    ];
-    if feature_set.metal {
-        libraries.push("ggml-metal");
-    }
-    if enable_openblas {
-        libraries.push("ggml-blas");
-    }
-    if feature_set.vulkan {
-        libraries.push("ggml-vulkan");
-    }
-    for library in libraries {
-        println!("cargo:rustc-link-lib=static={library}");
-    }
 
     match target_os.as_str() {
         "macos" | "ios" => {
@@ -711,6 +637,24 @@ fn short_cmake_out_dir(feature_set: BackendFeatureSet) -> BuildResult<PathBuf> {
         "{target_arch}-{target_env}-{profile}-{}",
         feature_set.suffix()
     )))
+}
+
+fn qts_cmake_out_dir(out_dir: &Path) -> PathBuf {
+    out_dir.join("qts-ggml-cmake")
+}
+
+fn llama_cmake_out_dir(
+    manifest_dir: &Path,
+    out_dir: &Path,
+    feature_set: BackendFeatureSet,
+) -> BuildResult<PathBuf> {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "windows" {
+        return Ok(short_cmake_out_dir(feature_set)?.join("llama-cpp"));
+    }
+
+    let _ = manifest_dir;
+    Ok(out_dir.join("llama-cpp-cmake"))
 }
 
 fn emit_llama_search_paths(dst: &Path, feature_set: BackendFeatureSet, enable_openblas: bool) {
@@ -941,17 +885,25 @@ fn build_wrapper(
     common_dir: &Path,
     vendor_dir: &Path,
     ggml_include_dir: &Path,
+    ggml_src_dir: &Path,
     wrapper_cpp: &Path,
 ) {
+    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
+
     cc::Build::new()
         .cpp(true)
+        .cargo_metadata(false)
+        .out_dir(&out_dir)
         .file(wrapper_cpp)
         .include(include_dir)
         .include(common_dir)
         .include(vendor_dir)
         .include(ggml_include_dir)
+        .include(ggml_src_dir)
         .std("c++17")
         .compile("xlai_llama_cpp_wrapper");
+
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
 }
 
 fn generate_llama_bindings(include_dir: &Path, ggml_include_dir: &Path) -> BuildResult<()> {
