@@ -15,7 +15,8 @@ All members live under [`crates/`](../crates/). This doc classifies them for dep
 
 | Crate | Role |
 |-------|------|
-| `xlai-sys` | Vendored `llama.cpp` / `ggml` (CMake) |
+| `xlai-sys-llama` | Vendored `llama.cpp` build (CMake + bindgen) |
+| `xlai-sys-ggml` | Vendored standalone `ggml` build for QTS (CMake + bindgen) |
 | `xlai-local-common` | Local chat prompt + tool JSON (used by llama.cpp / transformers.js backends) |
 | `xlai-backend-llama-cpp` | Native llama.cpp chat backend |
 | `xlai-facade` | Shared re-exports for `xlai-native` / `xlai-wasm` |

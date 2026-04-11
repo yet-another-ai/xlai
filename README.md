@@ -38,7 +38,8 @@ xlai/
 │   ├── xlai-qts-core/
 │   ├── xlai-qts-manifest/
 │   ├── xlai-runtime/
-│   ├── xlai-sys/
+│   ├── xlai-sys-ggml/
+│   ├── xlai-sys-llama/
 │   └── xlai-wasm/
 ├── packages/
 │   └── xlai/
@@ -65,8 +66,10 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). F
   Browser-facing `wasm-bindgen` facade crate for web integration. Default Cargo feature `qts` enables local QTS entrypoints (`qtsBrowserTts`, manifest validation); the in-browser engine is still a stub until GGML/ORT WASM work lands (see `docs/qts-wasm-browser-runtime.md`).
 - `crates/xlai-backend-llama-cpp`
   Native `llama.cpp` chat backend for local GGUF inference.
-- `crates/xlai-sys`
-  Vendored native stacks: `llama.cpp` (feature `llama`) and standalone `ggml` for QTS (feature `qts-ggml`). Dependents enable one or both; linking both can duplicate ggml symbols.
+- `crates/xlai-sys-llama`
+  Vendored `llama.cpp` native stack for the local chat backend.
+- `crates/xlai-sys-ggml`
+  Vendored standalone `ggml` native stack for QTS.
 - `packages/xlai`
   Vite-based TypeScript package published as `@yai-xlai/xlai`, built on top of `xlai-wasm`, with Vitest coverage.
 - `crates/xlai-backend-openai`
@@ -76,7 +79,7 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). F
 - `crates/xlai-qts-manifest`
   Serde types for browser QTS model manifests and capability JSON (no GGML/ORT); used by `xlai-wasm` (feature `qts`) and re-exported as `xlai_qts_core::browser`.
 - `crates/xlai-qts-core`
-  Qwen3 TTS engine; links standalone `ggml` through `xlai-sys` (`qts-ggml`). Exposes native `TtsModel` (`QtsTtsModel`, WAV output; tuning via `TtsRequest` metadata `xlai.qts.*`). **`VoiceSpec::Clone`** uses the first reference sample (inline WAV only): x-vector and ICL prompts, with optional `xlai.qts.voice_clone_mode` (`xvector` \| `icl`). ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts-export-and-hf-publish.md`). Pipelined vocoder chunking and overlap are documented in `docs/qts-vocoder-streaming.md`. `xlai_qts_core::browser` re-exports `xlai-qts-manifest`.
+  Qwen3 TTS engine; links standalone `ggml` through `xlai-sys-ggml`. Exposes native `TtsModel` (`QtsTtsModel`, WAV output; tuning via `TtsRequest` metadata `xlai.qts.*`). **`VoiceSpec::Clone`** uses the first reference sample (inline WAV only): x-vector and ICL prompts, with optional `xlai.qts.voice_clone_mode` (`xvector` \| `icl`). ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts-export-and-hf-publish.md`). Pipelined vocoder chunking and overlap are documented in `docs/qts-vocoder-streaming.md`. `xlai_qts_core::browser` re-exports `xlai-qts-manifest`.
 - `crates/xlai-qts-cli`
   Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without voice-clone flags, `synthesize` uses `xlai-runtime` + `xlai-qts-core` (`QtsTtsModel`). With `--voice-clone-prompt` or `--ref-audio`, it uses the direct engine path. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
 

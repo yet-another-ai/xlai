@@ -1,0 +1,42 @@
+[package]
+name = "xlai-sys-ggml"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Vendored standalone ggml native build for xlai QTS."
+links = "xlai_sys_ggml"
+build = "build.rs"
+publish = false
+
+[lib]
+name = "xlai_sys_ggml"
+
+[features]
+default = []
+openblas = []
+metal = []
+vulkan = []
+native = []
+cuda = []
+hip = []
+blas = []
+musa = []
+opencl = []
+rpc = []
+sycl = []
+webgpu = []
+openvino = []
+hexagon = []
+cann = []
+zendnn = []
+zdnn = []
+virtgpu = []
+
+[build-dependencies]
+bindgen.workspace = true
+cmake.workspace = true
+
+[lints]
+workspace = true

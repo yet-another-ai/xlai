@@ -4813,7 +4813,7 @@ dependencies = [
  "xlai-core",
  "xlai-local-common",
  "xlai-runtime",
- "xlai-sys",
+ "xlai-sys-llama",
 ]
 
 [[package]]
@@ -4941,7 +4941,7 @@ dependencies = [
  "xlai-core",
  "xlai-qts-manifest",
  "xlai-runtime",
- "xlai-sys",
+ "xlai-sys-ggml",
 ]
 
 [[package]]
@@ -4971,7 +4971,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "xlai-sys"
+name = "xlai-sys-ggml"
+version = "0.1.0"
+dependencies = [
+ "bindgen",
+ "cmake",
+]
+
+[[package]]
+name = "xlai-sys-llama"
 version = "0.1.0"
 dependencies = [
  "bindgen",
