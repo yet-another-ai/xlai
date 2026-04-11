@@ -25,11 +25,11 @@ fn main() {
         return;
     }
 
-    if want_qts {
-        build_qts_standalone_ggml(&manifest_dir, &out_dir);
-    }
     if want_llama {
         build_llama_cpp_stack(&manifest_dir, &out_dir).expect("xlai-sys: llama.cpp build failed");
+    }
+    if want_qts {
+        build_qts_standalone_ggml(&manifest_dir, &out_dir);
     }
 }
 
