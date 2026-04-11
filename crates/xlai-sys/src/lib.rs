@@ -6,8 +6,13 @@
 
 // Keep the vendored llama.cpp native archives out of `libxlai_sys.rlib` so downstream
 // test/binary links see the real library dependency graph instead of nested static archives.
-// `xlai_llama_cpp_wrapper` itself is linked by `cc::Build::compile()` in `build.rs`, so it
-// must not be duplicated here with a modifier-bearing `#[link]` attribute.
+#[cfg(feature = "llama")]
+#[link(
+    name = "xlai_llama_cpp_wrapper",
+    kind = "static",
+    modifiers = "-bundle"
+)]
+unsafe extern "C" {}
 #[cfg(feature = "llama")]
 #[link(name = "common", kind = "static", modifiers = "-bundle")]
 unsafe extern "C" {}

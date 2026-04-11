@@ -938,9 +938,14 @@ fn build_wrapper(
     ggml_src_dir: &Path,
     wrapper_cpp: &Path,
 ) {
+    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
+
     cc::Build::new()
         .cpp(true)
+        .cargo_metadata(false)
+        .out_dir(&out_dir)
         .file(wrapper_cpp)
+        .file(ggml_src_dir.join("ggml-backend.cpp"))
         // Keep the meta backend implementation bundled with our wrapper objects so
         // final Rust links do not depend on extracting it from `libggml-base.a`.
         .file(ggml_src_dir.join("ggml-backend-meta.cpp"))
@@ -951,6 +956,8 @@ fn build_wrapper(
         .include(ggml_src_dir)
         .std("c++17")
         .compile("xlai_llama_cpp_wrapper");
+
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
 }
 
 fn generate_llama_bindings(include_dir: &Path, ggml_include_dir: &Path) -> BuildResult<()> {
