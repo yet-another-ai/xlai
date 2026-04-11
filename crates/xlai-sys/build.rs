@@ -39,7 +39,6 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
     let openblas_fe = feature_enabled("openblas");
     let enable_linux_windows_blas =
         openblas_fe && matches!(target_os.as_str(), "linux" | "windows");
-    let link_ggml_blas = openblas_fe && (enable_linux_windows_blas || target.contains("apple"));
 
     let ggml_root = env::var("GGML_SRC")
         .map(PathBuf::from)
@@ -150,60 +149,9 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
     });
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
 
-    // Link order: dependents before their dependencies (GNU ld).
-    println!("cargo:rustc-link-lib=static=ggml");
-    if feature_enabled("metal") && target.contains("apple") {
-        println!("cargo:rustc-link-lib=static=ggml-metal");
-    }
-    if feature_enabled("cuda") {
-        println!("cargo:rustc-link-lib=static=ggml-cuda");
-    }
     if feature_enabled("vulkan") {
-        println!("cargo:rustc-link-lib=static=ggml-vulkan");
         emit_vulkan_loader_links(&target);
     }
-    if feature_enabled("hip") {
-        println!("cargo:rustc-link-lib=static=ggml-hip");
-    }
-    if feature_enabled("musa") {
-        println!("cargo:rustc-link-lib=static=ggml-musa");
-    }
-    if feature_enabled("opencl") {
-        println!("cargo:rustc-link-lib=static=ggml-opencl");
-    }
-    if link_ggml_blas {
-        println!("cargo:rustc-link-lib=static=ggml-blas");
-    }
-    if feature_enabled("rpc") {
-        println!("cargo:rustc-link-lib=static=ggml-rpc");
-    }
-    if feature_enabled("sycl") {
-        println!("cargo:rustc-link-lib=static=ggml-sycl");
-    }
-    if feature_enabled("webgpu") {
-        println!("cargo:rustc-link-lib=static=ggml-webgpu");
-    }
-    if feature_enabled("openvino") {
-        println!("cargo:rustc-link-lib=static=ggml-openvino");
-    }
-    if feature_enabled("hexagon") {
-        println!("cargo:rustc-link-lib=static=ggml-hexagon");
-    }
-    if feature_enabled("cann") {
-        println!("cargo:rustc-link-lib=static=ggml-cann");
-    }
-    if feature_enabled("zendnn") {
-        println!("cargo:rustc-link-lib=static=ggml-zendnn");
-    }
-    if feature_enabled("zdnn") {
-        println!("cargo:rustc-link-lib=static=ggml-zdnn");
-    }
-    if feature_enabled("virtgpu") {
-        println!("cargo:rustc-link-lib=static=ggml-virtgpu");
-    }
-
-    println!("cargo:rustc-link-lib=static=ggml-cpu");
-    println!("cargo:rustc-link-lib=static=ggml-base");
 
     if feature_enabled("metal") && target.contains("apple") {
         println!("cargo:rustc-link-lib=framework=Metal");
@@ -577,22 +525,6 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
     emit_llama_vulkan_sdk_paths(feature_set.vulkan, &target_os);
     emit_search_path_variants(&dst.join("build/bin"));
 
-    // The llama-specific archives are linked from `src/lib.rs` with `-bundle` to keep
-    // them out of the Rust rlib. The shared ggml dependency chain stays here because
-    // those libraries are also used by the standalone qts-ggml path when features unify.
-    println!("cargo:rustc-link-lib=static=ggml");
-    println!("cargo:rustc-link-lib=static=ggml-cpu");
-    if enable_openblas {
-        println!("cargo:rustc-link-lib=static=ggml-blas");
-    }
-    if feature_set.metal {
-        println!("cargo:rustc-link-lib=static=ggml-metal");
-    }
-    if feature_set.vulkan {
-        println!("cargo:rustc-link-lib=static=ggml-vulkan");
-    }
-    println!("cargo:rustc-link-lib=static=ggml-base");
-
     match target_os.as_str() {
         "macos" | "ios" => {
             println!("cargo:rustc-link-lib=c++");
@@ -945,10 +877,6 @@ fn build_wrapper(
         .cargo_metadata(false)
         .out_dir(&out_dir)
         .file(wrapper_cpp)
-        .file(ggml_src_dir.join("ggml-backend.cpp"))
-        // Keep the meta backend implementation bundled with our wrapper objects so
-        // final Rust links do not depend on extracting it from `libggml-base.a`.
-        .file(ggml_src_dir.join("ggml-backend-meta.cpp"))
         .include(include_dir)
         .include(common_dir)
         .include(vendor_dir)

@@ -25,6 +25,71 @@ unsafe extern "C" {}
 #[cfg(feature = "llama")]
 #[link(name = "llama", kind = "static", modifiers = "-bundle")]
 unsafe extern "C" {}
+#[cfg(any(feature = "llama", feature = "qts-ggml"))]
+#[link(name = "ggml", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(any(feature = "llama", feature = "qts-ggml"))]
+#[link(name = "ggml-cpu", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(any(feature = "llama", feature = "qts-ggml"))]
+#[link(name = "ggml-base", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(all(
+    feature = "openblas",
+    any(
+        target_os = "linux",
+        target_os = "windows",
+        target_os = "macos",
+        target_os = "ios"
+    )
+))]
+#[link(name = "ggml-blas", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(all(feature = "metal", target_os = "macos"))]
+#[link(name = "ggml-metal", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "cuda")]
+#[link(name = "ggml-cuda", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "vulkan")]
+#[link(name = "ggml-vulkan", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "hip")]
+#[link(name = "ggml-hip", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "musa")]
+#[link(name = "ggml-musa", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "opencl")]
+#[link(name = "ggml-opencl", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "rpc")]
+#[link(name = "ggml-rpc", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "sycl")]
+#[link(name = "ggml-sycl", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "webgpu")]
+#[link(name = "ggml-webgpu", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "openvino")]
+#[link(name = "ggml-openvino", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "hexagon")]
+#[link(name = "ggml-hexagon", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "cann")]
+#[link(name = "ggml-cann", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "zendnn")]
+#[link(name = "ggml-zendnn", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "zdnn")]
+#[link(name = "ggml-zdnn", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
+#[cfg(feature = "virtgpu")]
+#[link(name = "ggml-virtgpu", kind = "static", modifiers = "-bundle")]
+unsafe extern "C" {}
 
 #[cfg(feature = "qts-ggml")]
 pub mod qts_ggml {
