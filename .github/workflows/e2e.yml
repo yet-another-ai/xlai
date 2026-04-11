@@ -107,6 +107,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_IMAGE_MODEL: ${{ vars.OPENAI_IMAGE_MODEL }}
           OPENAI_TRANSCRIPTION_MODEL: ${{ vars.OPENAI_TRANSCRIPTION_MODEL }}
           OPENAI_TTS_MODEL: ${{ vars.OPENAI_TTS_MODEL }}
           LLAMA_CPP_MODEL: ${{ runner.os == 'Windows' && format('C:/w/{0}', env.LLAMA_CPP_FIXTURE_PATH) || format('{0}/{1}', github.workspace, env.LLAMA_CPP_FIXTURE_PATH) }}
