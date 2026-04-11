@@ -10,10 +10,10 @@ publish = false
 
 [features]
 default = ["openblas"]
-metal = ["xlai-sys/metal"]
-vulkan = ["xlai-sys/vulkan"]
-native = ["xlai-sys/native"]
-openblas = ["xlai-sys/openblas"]
+metal = ["xlai-sys-ggml/metal"]
+vulkan = ["xlai-sys-ggml/vulkan"]
+native = ["xlai-sys-ggml/native"]
+openblas = ["xlai-sys-ggml/openblas"]
 acl = ["ort/acl"]
 armnn = ["ort/armnn"]
 cann = ["ort/cann"]
@@ -37,7 +37,7 @@ async-stream.workspace = true
 tracing.workspace = true
 xlai-core.workspace = true
 xlai-qts-manifest.workspace = true
-xlai-sys = { workspace = true, features = ["qts-ggml"] }
+xlai-sys-ggml.workspace = true
 thiserror.workspace = true
 rand.workspace = true
 hound.workspace = true

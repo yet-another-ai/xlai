@@ -4,13 +4,13 @@ This document records feasibility findings and the intended runtime shape for lo
 
 ## Feasibility spikes (repo state)
 
-### GGML talker (`xlai-sys` + vendored GGML)
+### GGML talker (`xlai-sys-ggml` + vendored GGML)
 
-- `cargo check -p xlai-sys --target wasm32-unknown-unknown --features qts-ggml` fails during CMake configuration: the default C toolchain cannot compile a trivial program for `wasm32-unknown-unknown` (no compatible clang target / CMake “unknown” platform).
-- The current integration links **static** GGML libraries produced by CMake for **host** targets (see `crates/xlai-sys/build.rs`). That path assumes native linkers, pthread/OpenMP-style deps on Linux, frameworks on Apple, etc.
-- The `webgpu` Cargo feature on `xlai-sys` forwards to `GGML_WEBGPU` in CMake. That is a **native** GGML backend build flag today, not a guarantee of a working **browser** WebGPU path from Rust `wasm32-unknown-unknown`.
+- `cargo check -p xlai-sys-ggml --target wasm32-unknown-unknown` still fails during CMake configuration: the default C toolchain cannot compile a trivial program for `wasm32-unknown-unknown` (no compatible clang target / CMake “unknown” platform).
+- The current integration links **static** GGML libraries produced by CMake for **host** targets (see `crates/xlai-sys-ggml/build.rs`). That path assumes native linkers, pthread/OpenMP-style deps on Linux, frameworks on Apple, etc.
+- The `webgpu` Cargo feature on `xlai-sys-ggml` forwards to `GGML_WEBGPU` in CMake. That is a **native** GGML backend build flag today, not a guarantee of a working **browser** WebGPU path from Rust `wasm32-unknown-unknown`.
 
-**Conclusion:** End-to-end local GGML talker in the browser requires a **separate** build and integration story (for example Emscripten-based GGML, a prebuilt browser GGML WASM module, or a different inference stack). The existing `xlai-sys` CMake pipeline is not sufficient for `wasm32-unknown-unknown` without additional toolchain work.
+**Conclusion:** End-to-end local GGML talker in the browser requires a **separate** build and integration story (for example Emscripten-based GGML, a prebuilt browser GGML WASM module, or a different inference stack). The existing `xlai-sys-ggml` CMake pipeline is not sufficient for `wasm32-unknown-unknown` without additional toolchain work.
 
 ### Vocoder (`ort` / ONNX Runtime)
 
