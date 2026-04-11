@@ -29,7 +29,7 @@ fn main() {
         build_qts_standalone_ggml(&manifest_dir, &out_dir);
     }
     if want_llama {
-        build_llama_cpp_stack(&manifest_dir).expect("xlai-sys: llama.cpp build failed");
+        build_llama_cpp_stack(&manifest_dir, &out_dir).expect("xlai-sys: llama.cpp build failed");
     }
 }
 
@@ -72,6 +72,7 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
 
     let mut cfg = cmake::Config::new(&ggml_root);
     cfg.profile("Release");
+    cfg.out_dir(qts_cmake_out_dir(out_dir));
     cfg.define("BUILD_SHARED_LIBS", "OFF");
     cfg.define("GGML_STATIC", "ON");
     cfg.define("GGML_BUILD_EXAMPLES", "OFF");
@@ -140,11 +141,12 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
     map_feature_cmake(&mut cfg, "zdnn", "GGML_ZDNN");
     map_feature_cmake(&mut cfg, "virtgpu", "GGML_VIRTGPU");
 
+    let qts_out_dir = qts_cmake_out_dir(out_dir);
     let dst = cfg.build();
-    let lib_dir = find_lib_dir(&dst, out_dir).unwrap_or_else(|| {
+    let lib_dir = find_lib_dir(&dst, &qts_out_dir).unwrap_or_else(|| {
         panic!(
             "xlai-sys (qts-ggml): could not locate static libs under cmake output {:?} or {:?}/build",
-            dst, out_dir
+            dst, qts_out_dir
         )
     });
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
@@ -430,7 +432,7 @@ struct BackendFeatureSet {
     vulkan: bool,
 }
 
-fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
+fn build_llama_cpp_stack(manifest_dir: &Path, out_dir: &Path) -> BuildResult<()> {
     let vendor_source_dir = manifest_dir.join("vendor/llama.cpp");
     let source_dir = prepare_llama_source(&vendor_source_dir)?;
     let include_dir = source_dir.join("include");
@@ -492,9 +494,7 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
         .define("GGML_VIRTGPU", "OFF")
         .define("GGML_WEBGPU", "OFF");
 
-    if target_os == "windows" {
-        config.out_dir(short_cmake_out_dir(feature_set)?);
-    }
+    config.out_dir(llama_cmake_out_dir(manifest_dir, out_dir, feature_set)?);
 
     apply_cmake_env_overrides(&mut config, enable_openblas);
 
@@ -637,6 +637,24 @@ fn short_cmake_out_dir(feature_set: BackendFeatureSet) -> BuildResult<PathBuf> {
         "{target_arch}-{target_env}-{profile}-{}",
         feature_set.suffix()
     )))
+}
+
+fn qts_cmake_out_dir(out_dir: &Path) -> PathBuf {
+    out_dir.join("qts-ggml-cmake")
+}
+
+fn llama_cmake_out_dir(
+    manifest_dir: &Path,
+    out_dir: &Path,
+    feature_set: BackendFeatureSet,
+) -> BuildResult<PathBuf> {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "windows" {
+        return Ok(short_cmake_out_dir(feature_set)?.join("llama-cpp"));
+    }
+
+    let _ = manifest_dir;
+    Ok(out_dir.join("llama-cpp-cmake"))
 }
 
 fn emit_llama_search_paths(dst: &Path, feature_set: BackendFeatureSet, enable_openblas: bool) {
