@@ -1,6 +1,6 @@
-//! Standalone GGML FFI from [`xlai_sys::qts_ggml`] (QTS talker).
+//! Standalone GGML FFI from `xlai_sys_ggml` (QTS talker).
 
-pub use xlai_sys::qts_ggml as sys;
+pub use xlai_sys_ggml as sys;
 
 #[cfg(test)]
 mod tests {

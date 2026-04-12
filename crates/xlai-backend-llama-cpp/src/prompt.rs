@@ -1,5 +1,5 @@
 use xlai_core::XlaiError;
-use xlai_sys as sys;
+use xlai_sys_llama as sys;
 
 use crate::request::PreparedRequest;
 use crate::{LlamaCppConfig, LoadedModel, map_provider_error};

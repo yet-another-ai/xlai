@@ -12,7 +12,8 @@ members = [
     "crates/xlai-qts-core",
     "crates/xlai-qts-manifest",
     "crates/xlai-runtime",
-    "crates/xlai-sys",
+    "crates/xlai-sys-ggml",
+    "crates/xlai-sys-llama",
     "crates/xlai-wasm",
 ]
 exclude = ["reference/qts", "target/_ortfetch", "target/ortcheck"]
@@ -78,7 +79,8 @@ xlai-facade = { path = "crates/xlai-facade", version = "0.1.0", default-features
 xlai-native = { path = "crates/xlai-native", version = "0.1.0" }
 xlai-qts-core = { path = "crates/xlai-qts-core", version = "0.1.0" }
 xlai-qts-manifest = { path = "crates/xlai-qts-manifest", version = "0.1.0" }
-xlai-sys = { path = "crates/xlai-sys", version = "0.1.0" }
+xlai-sys-ggml = { path = "crates/xlai-sys-ggml", version = "0.1.0" }
+xlai-sys-llama = { path = "crates/xlai-sys-llama", version = "0.1.0" }
 xlai-wasm = { path = "crates/xlai-wasm", version = "0.1.0" }
 
 [workspace.lints.rust]

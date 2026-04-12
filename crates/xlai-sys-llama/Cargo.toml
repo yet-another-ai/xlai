@@ -1,0 +1,31 @@
+[package]
+name = "xlai-sys-llama"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Vendored llama.cpp native build for xlai."
+links = "xlai_sys_llama"
+build = "build.rs"
+publish = false
+
+[lib]
+name = "xlai_sys_llama"
+
+[dependencies]
+tracing = { workspace = true }
+
+[features]
+default = []
+openblas = []
+metal = []
+vulkan = []
+
+[build-dependencies]
+bindgen.workspace = true
+cmake.workspace = true
+cc = "1.2.58"
+
+[lints]
+workspace = true

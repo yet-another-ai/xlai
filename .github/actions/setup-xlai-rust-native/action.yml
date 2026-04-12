@@ -1,5 +1,5 @@
 # Shared steps for native Rust jobs: toolchain, sccache, rust-cache, OpenBLAS / vcpkg / shaderc.
-# Call after `actions/checkout` (with `submodules: true` when building xlai-sys).
+# Call after `actions/checkout` (with `submodules: true` when building xlai-sys-llama or xlai-sys-ggml).
 
 name: XLAI Rust native setup
 description: Rust toolchain, sccache, cache, and OS-specific native dependencies

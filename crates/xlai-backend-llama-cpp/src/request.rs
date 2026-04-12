@@ -28,7 +28,7 @@ pub(crate) fn validate_prepared_for_llama(
 ) -> Result<(), XlaiError> {
     prepared.validate_common()?;
 
-    if config.n_gpu_layers > 0 && !xlai_sys::supports_gpu_offload() {
+    if config.n_gpu_layers > 0 && !xlai_sys_llama::supports_gpu_offload() {
         return Err(XlaiError::new(
             xlai_core::ErrorKind::Unsupported,
             "this xlai llama.cpp build was compiled without GPU offload support",
