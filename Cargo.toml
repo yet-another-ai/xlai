@@ -96,3 +96,5 @@ panic_in_result_fn = "deny"
 
 [profile.release]
 debug = "line-tables-only"
+lto = true
+codegen-units = 1
