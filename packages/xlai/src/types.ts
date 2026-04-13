@@ -75,7 +75,7 @@ export interface ChatOptions {
   retryPolicy?: ChatRetryPolicy;
 }
 
-export interface AgentOptions extends ChatOptions {}
+export type AgentOptions = ChatOptions;
 
 export interface ChatUsage {
   inputTokens: number;
@@ -244,7 +244,7 @@ export interface ChatSessionOptions {
   qts?: QtsSessionConfig;
 }
 
-export interface AgentSessionOptions extends ChatSessionOptions {}
+export type AgentSessionOptions = ChatSessionOptions;
 
 export type ImageGenerationQuality = 'low' | 'medium' | 'high';
 
