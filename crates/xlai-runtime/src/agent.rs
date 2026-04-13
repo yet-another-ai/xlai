@@ -37,10 +37,8 @@ type SystemReminderFn =
 #[cfg(target_arch = "wasm32")]
 type SystemReminderFn = dyn Fn(Vec<ChatMessage>) -> BoxFuture<'static, Result<String, XlaiError>>;
 
-const AGENT_LOOP_CONTINUE_PROMPT: &str = "Continue. If you feel nothing else could be further done, just summarize your work without any tool calling.";
-
-/// Runs before each model call in the streaming agent loop (see [`Agent::with_context_compressor`]).
-async fn prepare_messages_for_agent_round(
+/// Runs before each model call in the streaming tool loop (see [`Agent::with_context_compressor`]).
+async fn prepare_messages_for_tool_round(
     chat: &Chat,
     messages: &[ChatMessage],
     compressor: &Option<Arc<ContextCompressorFn>>,
@@ -62,52 +60,25 @@ async fn prepare_messages_for_agent_round(
     Ok(rewritten)
 }
 
-fn ensure_agent_loop_user_message(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
-    if messages
-        .iter()
-        .any(|message| message.role == MessageRole::User)
-    {
-        return messages;
-    }
-
-    if !matches!(
-        messages.last().map(|message| message.role),
-        Some(MessageRole::Assistant)
-    ) {
-        return messages;
-    }
-
-    let mut messages = messages;
-    messages.push(ChatMessage {
-        role: MessageRole::User,
-        content: ChatContent::text(AGENT_LOOP_CONTINUE_PROMPT),
-        tool_name: None,
-        tool_call_id: None,
-        metadata: BTreeMap::new(),
-    });
-    messages
-}
-
-/// High-level agent session: the automatic multi-call agent loop runs only on **streaming** APIs
-/// when the agent loop is enabled (see [`Self::with_agent_loop_enabled`]). Unary
+/// High-level agent session: the automatic multi-call tool loop runs only on **streaming** APIs.
+/// Unary
 /// [`Self::execute`] / [`Self::prompt`] always issue a single model call (no tool callbacks), so
 /// callers are not blocked for arbitrarily long runs.
 /// [`Chat`] also performs only single model calls.
 ///
 /// Optionally, [`Self::with_context_compressor`] can rewrite the message list before each looped
-/// model call (streaming + agent loop only).
+/// model call in the streaming tool loop.
 ///
 /// [`Self::register_system_reminder`] injects a composed system reminder before every model call
-/// (unary and streaming, including each agent-loop round), placed immediately before the last
+/// (unary and streaming, including each tool-loop round), placed immediately before the last
 /// message in the outgoing request. Reminder rows are **internal**: they are not stored in the
-/// agent loop’s growing transcript, are omitted from [`Self::stream`] yields, and any prior
+/// tool loop’s growing transcript, are omitted from [`Self::stream`] yields, and any prior
 /// reminder-shaped messages are stripped from inbound history before each request so user-managed
 /// chat history never accumulates them.
 #[derive(Clone)]
 pub struct Agent {
     runtime: Arc<XlaiRuntime>,
     chat: Chat,
-    agent_loop_enabled: bool,
     max_tool_round_trips: usize,
     context_compressor: Option<Arc<ContextCompressorFn>>,
     system_reminder: Option<Arc<SystemReminderFn>>,
@@ -125,7 +96,6 @@ impl Agent {
         Ok(Self {
             runtime,
             chat,
-            agent_loop_enabled: true,
             max_tool_round_trips: 8,
             context_compressor: None,
             system_reminder: None,
@@ -212,27 +182,8 @@ impl Agent {
         self
     }
 
-    /// Controls the automatic multi-call agent loop on **streaming** APIs only
+    /// Registers an async hook that runs **before each model call** in the streaming tool loop
     /// ([`Self::stream`], [`Self::stream_prompt`], etc.).
-    ///
-    /// When `false`, those streams perform a single model turn and do not run tool callbacks.
-    ///
-    /// When `true` (default), streams keep issuing follow-up model calls, executing any tool calls
-    /// returned along the way. The loop stops only after two consecutive model responses both
-    /// produce an assistant message with no further tool calls (bounded by
-    /// [`Self::with_max_tool_round_trips`]).
-    ///
-    /// [`Self::execute`] and [`Self::prompt`] always perform exactly one model call and never run
-    /// tool callbacks here (use streaming if you need the agent tool loop).
-    #[must_use]
-    pub fn with_agent_loop_enabled(mut self, agent_loop_enabled: bool) -> Self {
-        self.agent_loop_enabled = agent_loop_enabled;
-        self
-    }
-
-    /// Registers an async hook that runs **before each model call** in the streaming agent loop
-    /// ([`Self::stream`], [`Self::stream_prompt`], etc.), when [`Self::with_agent_loop_enabled`]
-    /// is `true`.
     ///
     /// The callback receives the full accumulated [`ChatMessage`] history for this stream and a
     /// best-effort [`Option<u32>`] input-token estimate derived from JSON-serialized request size
@@ -243,9 +194,7 @@ impl Agent {
     ///
     /// If the hook returns an empty vector, the stream fails with [`ErrorKind::Provider`].
     ///
-    /// Unary [`Self::prompt`] / [`Self::execute`] do not invoke this hook. When the agent loop is
-    /// disabled on streaming, [`Self::stream`] delegates to [`Chat::stream`] and the hook is not
-    /// used.
+    /// Unary [`Self::prompt`] / [`Self::execute`] do not invoke this hook.
     pub fn register_context_compressor<F, Fut>(&mut self, f: F) -> &mut Self
     where
         F: Fn(Vec<ChatMessage>, Option<u32>) -> Fut + RuntimeBound + 'static,
@@ -273,7 +222,7 @@ impl Agent {
     }
 
     /// Registers an async hook invoked before **every** model call ([`Self::execute`], [`Self::prompt`],
-    /// and [`Self::stream`] / agent-loop rounds).
+    /// and [`Self::stream`] / tool-loop rounds).
     ///
     /// The callback receives the current **transcript** for that request (never including internal
     /// reminder rows) and returns additional reminder text. The runtime merges that string with
@@ -350,7 +299,6 @@ impl Agent {
     async fn prepare_outgoing_with_reminder(
         &self,
         messages: Vec<ChatMessage>,
-        ensure_user_message: bool,
     ) -> Result<Vec<ChatMessage>, XlaiError> {
         let messages = system_reminder::strip_internal_reminders(messages);
 
@@ -373,12 +321,6 @@ impl Agent {
             user_fragment.as_deref(),
         )
         .await?;
-
-        let messages = if ensure_user_message {
-            ensure_agent_loop_user_message(messages)
-        } else {
-            messages
-        };
 
         let Some(body) = body else {
             return Ok(messages);
@@ -435,7 +377,7 @@ impl Agent {
     ///
     /// Returns an error if the configured model request fails.
     pub async fn execute(&self, messages: Vec<ChatMessage>) -> Result<ChatResponse, XlaiError> {
-        let messages = self.prepare_outgoing_with_reminder(messages, false).await?;
+        let messages = self.prepare_outgoing_with_reminder(messages).await?;
         self.chat.execute(messages).await
     }
 
@@ -487,29 +429,16 @@ impl Agent {
         messages: Vec<ChatMessage>,
     ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
         let agent = self.clone();
-
-        if !agent.agent_loop_enabled {
-            return Box::pin(try_stream! {
-                let to_send = agent.prepare_outgoing_with_reminder(messages, false).await?;
-                let mut inner = agent.chat.stream(to_send);
-                while let Some(item) = inner.next().await {
-                    let item = item?;
-                    yield item;
-                }
-            });
-        }
-
         let chat = agent.chat.clone();
         let max = agent.max_tool_round_trips;
         let compressor = agent.context_compressor.clone();
 
         Box::pin(try_stream! {
             let mut messages = messages;
-            let mut consecutive_assistant_messages_without_tool_calls = 0usize;
             for _ in 0..max {
                 let mut to_send =
-                    prepare_messages_for_agent_round(&chat, &messages, &compressor).await?;
-                to_send = agent.prepare_outgoing_with_reminder(to_send, true).await?;
+                    prepare_messages_for_tool_round(&chat, &messages, &compressor).await?;
+                to_send = agent.prepare_outgoing_with_reminder(to_send).await?;
 
                 let mut final_response: Option<ChatResponse> = None;
                 let mut inner = chat.stream(to_send);
@@ -535,33 +464,19 @@ impl Agent {
                     .with_assistant_tool_calls(&response.tool_calls);
                 messages.push(assistant_message);
 
-                let is_assistant_message = response.message.role == MessageRole::Assistant;
-                let is_non_final_round = if response.tool_calls.is_empty() {
-                    if is_assistant_message {
-                        consecutive_assistant_messages_without_tool_calls += 1;
-                        consecutive_assistant_messages_without_tool_calls < 2
-                    } else {
-                        consecutive_assistant_messages_without_tool_calls = 0;
-                        true
-                    }
-                } else {
-                    consecutive_assistant_messages_without_tool_calls = 0;
-                    true
-                };
-
-                if is_non_final_round {
-                    if is_assistant_message {
-                        yield ChatExecutionEvent::Thinking(response.clone());
-                    } else {
-                        for event in round_events {
-                            yield event;
-                        }
-                    }
-                } else {
+                if response.tool_calls.is_empty() {
                     for event in round_events {
                         yield event;
                     }
                     return;
+                }
+
+                if response.message.role == MessageRole::Assistant {
+                    yield ChatExecutionEvent::Thinking(response.clone());
+                } else {
+                    for event in round_events {
+                        yield event;
+                    }
                 }
 
                 for call in &response.tool_calls {

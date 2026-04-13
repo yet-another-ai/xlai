@@ -69,7 +69,6 @@ pub(crate) fn parse_transformers_session_options(
         temperature: optional_js_f32_field(&options, "temperature")?,
         max_output_tokens: optional_js_u32_field(&options, "maxOutputTokens")?,
         reasoning_effort,
-        agent_loop: optional_js_bool_field(&options, "agentLoop")?,
         retry_policy,
         #[cfg(feature = "qts")]
         qts,
@@ -107,18 +106,6 @@ fn optional_js_f32_field(target: &JsValue, field: &str) -> Result<Option<f32>, J
         .as_f64()
         .map(|n| n as f32)
         .ok_or_else(|| js_error(format!("`{field}` must be a number when set")))
-        .map(Some)
-}
-
-fn optional_js_bool_field(target: &JsValue, field: &str) -> Result<Option<bool>, JsValue> {
-    let value = Reflect::get(target, &JsValue::from_str(field))
-        .map_err(|e| js_error(format!("failed to read `{field}`: {e:?}")))?;
-    if value.is_null() || value.is_undefined() {
-        return Ok(None);
-    }
-    value
-        .as_bool()
-        .ok_or_else(|| js_error(format!("`{field}` must be a boolean when set")))
         .map(Some)
 }
 

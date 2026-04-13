@@ -104,7 +104,7 @@ async fn agent_skill_tool_uses_configured_skill_store() -> Result<(), XlaiError>
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 3);
+    assert_eq!(requests.len(), 2);
     // Second model round: [user, assistant, system_reminder, tool]
     assert_eq!(requests[1].messages.len(), 4);
     assert_eq!(requests[1].messages[3].tool_name.as_deref(), Some("skill"));
@@ -247,7 +247,7 @@ async fn agent_mcp_registry_executes_registered_tool_calls() -> Result<(), XlaiE
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 3);
+    assert_eq!(requests.len(), 2);
     assert_eq!(requests[1].messages.len(), 3);
     assert_eq!(
         requests[1].messages[2].tool_name.as_deref(),
@@ -367,7 +367,7 @@ async fn agent_register_tool_shorthand_routes_through_mcp_registry() -> Result<(
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 3);
+    assert_eq!(requests.len(), 2);
     assert!(
         requests[0]
             .available_tools
@@ -474,7 +474,7 @@ async fn agent_context_compressor_runs_once_per_stream_round() -> Result<(), Xla
     });
 
     agent_stream_prompt_final_response(&agent, "What's the weather in Paris?").await?;
-    assert_eq!(calls.load(Ordering::SeqCst), 3);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
     Ok(())
 }
 
@@ -536,7 +536,7 @@ async fn agent_context_compressor_sees_growing_history() -> Result<(), XlaiError
 
     agent_stream_prompt_final_response(&agent, "Paris weather?").await?;
     let seen = lock_unpoisoned(&lens);
-    assert_eq!(&*seen, &vec![1_usize, 3, 4]);
+    assert_eq!(&*seen, &vec![1_usize, 3]);
     Ok(())
 }
 
@@ -603,113 +603,17 @@ async fn agent_context_compressor_rewritten_messages_reach_model() -> Result<(),
 
     agent_stream_prompt_final_response(&agent, "Paris?").await?;
     let reqs = lock_unpoisoned(&requests);
-    assert_eq!(reqs.len(), 3);
+    assert_eq!(reqs.len(), 2);
     assert_eq!(reqs[0].messages.len(), 1);
     assert_eq!(reqs[0].messages[0].role, MessageRole::User);
     assert_eq!(reqs[1].messages.len(), 1);
     assert_eq!(reqs[1].messages[0].role, MessageRole::User);
-    assert_eq!(reqs[2].messages.len(), 1);
-    assert_eq!(reqs[2].messages[0].role, MessageRole::User);
     Ok(())
 }
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
-async fn agent_loop_injects_continue_only_when_last_message_is_assistant() -> Result<(), XlaiError>
-{
-    let requests = Arc::new(Mutex::new(Vec::new()));
-    let rounds = Arc::new(AtomicUsize::new(0));
-    let model = Arc::new(RecordingChatModel::new(
-        requests.clone(),
-        vec![
-            ChatResponse {
-                message: assistant_message(""),
-                tool_calls: vec![ToolCall {
-                    id: "t1".to_owned(),
-                    tool_name: "lookup_weather".to_owned(),
-                    arguments: json!({ "city": "Paris" }),
-                }],
-                usage: None,
-                finish_reason: FinishReason::ToolCalls,
-                metadata: empty_metadata(),
-            },
-            ChatResponse {
-                message: assistant_message("final"),
-                tool_calls: Vec::new(),
-                usage: None,
-                finish_reason: FinishReason::Completed,
-                metadata: empty_metadata(),
-            },
-            ChatResponse {
-                message: assistant_message("final"),
-                tool_calls: Vec::new(),
-                usage: None,
-                finish_reason: FinishReason::Completed,
-                metadata: empty_metadata(),
-            },
-        ],
-    ));
-
-    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
-    let rounds_cb = Arc::clone(&rounds);
-    let mut agent = runtime
-        .agent_session()?
-        .with_context_compressor(move |msgs, _est| {
-            let round = rounds_cb.fetch_add(1, Ordering::SeqCst);
-            async move {
-                if round == 0 {
-                    Ok(vec![
-                        msgs.into_iter()
-                            .find(|message| message.role == MessageRole::User)
-                            .ok_or_else(|| {
-                                XlaiError::new(
-                                    ErrorKind::Provider,
-                                    "context compressor test: missing user message",
-                                )
-                            })?,
-                    ])
-                } else {
-                    Ok(msgs
-                        .into_iter()
-                        .filter(|message| message.role != MessageRole::User)
-                        .collect())
-                }
-            }
-        });
-    agent.register_tool(weather_tool_definition(), |_arguments| async move {
-        Ok(xlai_core::ToolResult {
-            tool_name: "lookup_weather".to_owned(),
-            content: "tool ok".to_owned(),
-            is_error: false,
-            metadata: empty_metadata(),
-        })
-    });
-
-    agent_stream_prompt_final_response(&agent, "Paris?").await?;
-
-    let reqs = lock_unpoisoned(&requests);
-    assert_eq!(reqs.len(), 3);
-    assert_eq!(reqs[1].messages.len(), 2);
-    assert_eq!(reqs[1].messages[0].role, MessageRole::Assistant);
-    assert_eq!(reqs[1].messages[1].role, MessageRole::Tool);
-    assert_eq!(reqs[2].messages.len(), 4);
-    assert_eq!(reqs[2].messages[0].role, MessageRole::Assistant);
-    assert_eq!(reqs[2].messages[1].role, MessageRole::Tool);
-    assert_eq!(reqs[2].messages[2].role, MessageRole::Assistant);
-    assert_eq!(reqs[2].messages[3].role, MessageRole::User);
-    assert_eq!(
-        reqs[2].messages[3].content.as_single_text(),
-        Some(
-            "Continue. If you feel nothing else could be further done, just summarize your work without any tool calling."
-        )
-    );
-    Ok(())
-}
-
-#[allow(clippy::panic_in_result_fn)]
-#[tokio::test]
-async fn agent_loop_does_not_inject_continue_when_user_message_still_exists()
--> Result<(), XlaiError> {
+async fn agent_tool_loop_stops_after_first_non_tool_response() -> Result<(), XlaiError> {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let model = Arc::new(RecordingChatModel::new(
         requests.clone(),
@@ -723,13 +627,6 @@ async fn agent_loop_does_not_inject_continue_when_user_message_still_exists()
                 }],
                 usage: None,
                 finish_reason: FinishReason::ToolCalls,
-                metadata: empty_metadata(),
-            },
-            ChatResponse {
-                message: assistant_message("final"),
-                tool_calls: Vec::new(),
-                usage: None,
-                finish_reason: FinishReason::Completed,
                 metadata: empty_metadata(),
             },
             ChatResponse {
@@ -756,7 +653,7 @@ async fn agent_loop_does_not_inject_continue_when_user_message_still_exists()
     agent_stream_prompt_final_response(&agent, "Paris?").await?;
 
     let reqs = lock_unpoisoned(&requests);
-    assert_eq!(reqs.len(), 3);
+    assert_eq!(reqs.len(), 2);
     assert_eq!(reqs[1].messages.len(), 3);
     assert_eq!(reqs[1].messages[0].role, MessageRole::User);
     assert_eq!(reqs[1].messages[1].role, MessageRole::Assistant);
@@ -864,7 +761,7 @@ async fn agent_context_compressor_empty_output_errors_stream() -> Result<(), Xla
 
 #[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
-async fn agent_context_compressor_skipped_when_agent_loop_disabled() -> Result<(), XlaiError> {
+async fn agent_context_compressor_runs_on_streaming_tool_loop() -> Result<(), XlaiError> {
     let calls = Arc::new(AtomicUsize::new(0));
     let chunks = vec![xlai_core::ChatChunk::Finished(ChatResponse {
         message: assistant_message("one shot"),
@@ -879,17 +776,16 @@ async fn agent_context_compressor_skipped_when_agent_loop_disabled() -> Result<(
     let calls_cb = Arc::clone(&calls);
     let agent = runtime
         .agent_session()?
-        .with_agent_loop_enabled(false)
         .with_context_compressor(move |_msgs, _est| {
             let calls_cb = Arc::clone(&calls_cb);
             async move {
                 calls_cb.fetch_add(1, Ordering::SeqCst);
-                Ok(vec![user_message("should not run")])
+                Ok(vec![user_message("rewritten")])
             }
         });
 
     let _ = agent_stream_prompt_final_response(&agent, "x").await?;
-    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
     Ok(())
 }
 
@@ -1186,10 +1082,10 @@ async fn agent_system_reminder_stream_runs_once_per_loop_round() -> Result<(), X
     });
 
     agent_stream_prompt_final_response(&agent, "Paris?").await?;
-    assert_eq!(calls.load(Ordering::SeqCst), 3);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
 
     let reqs = lock_unpoisoned(&requests);
-    assert_eq!(reqs.len(), 3);
+    assert_eq!(reqs.len(), 2);
     for r in reqs.iter() {
         assert!(
             r.messages.iter().any(|m| {

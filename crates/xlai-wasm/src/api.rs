@@ -63,7 +63,6 @@ pub async fn chat(options: JsValue) -> Result<JsValue, JsValue> {
         temperature,
         max_output_tokens,
         reasoning_effort,
-        agent_loop: None,
         retry_policy,
         #[cfg(feature = "qts")]
         qts: None,
@@ -85,7 +84,6 @@ pub async fn agent(options: JsValue) -> Result<JsValue, JsValue> {
         temperature,
         max_output_tokens,
         reasoning_effort,
-        agent_loop,
         retry_policy,
     } = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
     let user_content = content.unwrap_or_else(|| ChatContent::text(prompt.clone()));
@@ -97,7 +95,6 @@ pub async fn agent(options: JsValue) -> Result<JsValue, JsValue> {
         temperature,
         max_output_tokens,
         reasoning_effort,
-        agent_loop,
         retry_policy,
         #[cfg(feature = "qts")]
         qts: None,

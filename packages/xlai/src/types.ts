@@ -75,15 +75,7 @@ export interface ChatOptions {
   retryPolicy?: ChatRetryPolicy;
 }
 
-export interface AgentOptions extends ChatOptions {
-  /**
-   * Applies to **streaming** agent APIs when exposed by the WASM build. When `true` or omitted,
-   * the stream can run multiple model rounds with tool execution until the last response has no
-   * tool calls. When `false`, the stream stops after one model turn (no tool execution).
-   * Unary `agent()` / `prompt` use a single model call regardless of this flag.
-   */
-  agentLoop?: boolean;
-}
+export type AgentOptions = ChatOptions;
 
 export interface ChatUsage {
   inputTokens: number;
@@ -121,7 +113,7 @@ export interface ChatMessage {
 
 /**
  * One event from `AgentSession.streamPrompt` / `streamPromptWithContent` (WASM JSON).
- * Intermediate agent-loop assistant rounds are surfaced as `thinking` so consumers can render
+ * Intermediate tool-loop assistant rounds are surfaced as `thinking` so consumers can render
  * them separately from the terminal assistant reply.
  */
 export type ChatExecutionEvent =
@@ -130,7 +122,7 @@ export type ChatExecutionEvent =
   | { kind: 'toolCall'; data: unknown }
   | { kind: 'toolResult'; data: unknown };
 
-/** Async hook before each streamed agent-loop model call (see README). */
+/** Async hook before each streamed tool-loop model call (see README). */
 export type AgentContextCompressor = (
   messages: ChatMessage[],
   estimatedInputTokens: number | null,
@@ -252,12 +244,7 @@ export interface ChatSessionOptions {
   qts?: QtsSessionConfig;
 }
 
-export interface AgentSessionOptions extends ChatSessionOptions {
-  /**
-   * Same semantics as {@link AgentOptions.agentLoop} for sessions (streaming only when supported).
-   */
-  agentLoop?: boolean;
-}
+export type AgentSessionOptions = ChatSessionOptions;
 
 export type ImageGenerationQuality = 'low' | 'medium' | 'high';
 

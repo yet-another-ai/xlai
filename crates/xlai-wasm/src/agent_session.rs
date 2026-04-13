@@ -53,7 +53,7 @@ impl WasmAgentSession {
         Ok(())
     }
 
-    /// Registers a JS async callback invoked before each **streamed** agent-loop model call
+    /// Registers a JS async callback invoked before each **streamed** tool-loop model call
     /// (see `streamPrompt` / `streamPromptWithContent`). Signature:
     /// `(messages: ChatMessage[], estimatedInputTokens: number | null) => Promise<ChatMessage[]>`.
     #[cfg(target_arch = "wasm32")]
@@ -109,7 +109,7 @@ impl WasmAgentSession {
     }
 
     /// Runs the agent streaming loop and returns all execution events as a JSON array (`kind` +
-    /// `data` per item). Intermediate agent-loop assistant rounds are surfaced as `thinking`
+    /// `data` per item). Intermediate tool-loop assistant rounds are surfaced as `thinking`
     /// events instead of normal `model` chunks.
     #[wasm_bindgen(js_name = streamPrompt)]
     pub async fn stream_prompt(&self, content: String) -> Result<JsValue, JsValue> {

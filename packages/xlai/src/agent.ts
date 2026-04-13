@@ -63,7 +63,7 @@ export class AgentSession extends ToolSession {
   }
 
   /**
-   * Registers a JS async callback run before each **streamed** agent-loop model call
+   * Registers a JS async callback run before each **streamed** tool-loop model call
    * (`streamPrompt` / `streamPromptWithContent`). Receives full message history and a best-effort
    * input token count (`null` when the runtime could not estimate).
    */
@@ -108,7 +108,7 @@ export class AgentSession extends ToolSession {
     });
   }
 
-  /** Agent streaming loop; collects all execution events (model chunks, tool call/result). */
+  /** Agent streaming tool loop; collects all execution events (model chunks, tool call/result). */
   async streamPrompt(content: string): Promise<ChatExecutionEvent[]> {
     if (this.inner.streamPrompt === undefined) {
       throw new Error('streamPrompt is not available in this xlai WASM build');
