@@ -124,10 +124,6 @@ pub(crate) fn create_agent_session_with_dyn_file_system(
         agent = agent.with_reasoning_effort(reasoning_effort);
     }
 
-    if options.agent_loop == Some(false) {
-        agent = agent.with_agent_loop_enabled(false);
-    }
-
     if let Some(ref rp) = options.retry_policy {
         agent = agent.with_retry_policy(Some(rp.clone().into()));
     }

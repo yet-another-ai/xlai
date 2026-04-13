@@ -33,8 +33,6 @@ export type ResolvedRequestOptions = {
   maxOutputTokens?: number;
   reasoningEffort?: ReasoningEffort;
   retryPolicy?: ChatRetryPolicy;
-  /** Streaming agent loop toggle when the WASM layer supports it; unary `agent()` is always one model call. */
-  agentLoop?: boolean;
 };
 
 export type ResolvedSessionOptions = Omit<ResolvedRequestOptions, 'prompt'> & {
@@ -158,13 +156,11 @@ export function resolveRequestOptions(
   };
 }
 
-/** Resolves options for the one-shot `agent()` helper (includes `agentLoop` when set). */
+/** Resolves options for the one-shot `agent()` helper. */
 export function resolveAgentRequestOptions(
   options: AgentOptions,
 ): ResolvedRequestOptions {
-  const { agentLoop, ...chatLike } = options;
-  const resolved = resolveRequestOptions(chatLike);
-  return agentLoop === undefined ? resolved : { ...resolved, agentLoop };
+  return resolveRequestOptions(options);
 }
 
 export function resolveSessionOptions(
@@ -183,10 +179,6 @@ export function resolveSessionOptions(
       : {}),
     ...(options.qts !== undefined ? { qts: options.qts } : {}),
   };
-
-  if ('agentLoop' in options && typeof options.agentLoop === 'boolean') {
-    return { ...base, agentLoop: options.agentLoop };
-  }
 
   return base;
 }
