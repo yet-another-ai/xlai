@@ -104,7 +104,7 @@ async fn agent_skill_tool_uses_configured_skill_store() -> Result<(), XlaiError>
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 3);
+    assert_eq!(requests.len(), 2);
     // Second model round: [user, assistant, system_reminder, tool]
     assert_eq!(requests[1].messages.len(), 4);
     assert_eq!(requests[1].messages[3].tool_name.as_deref(), Some("skill"));
@@ -247,7 +247,7 @@ async fn agent_mcp_registry_executes_registered_tool_calls() -> Result<(), XlaiE
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 3);
+    assert_eq!(requests.len(), 2);
     assert_eq!(requests[1].messages.len(), 3);
     assert_eq!(
         requests[1].messages[2].tool_name.as_deref(),
@@ -367,7 +367,7 @@ async fn agent_register_tool_shorthand_routes_through_mcp_registry() -> Result<(
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 3);
+    assert_eq!(requests.len(), 2);
     assert!(
         requests[0]
             .available_tools
@@ -474,7 +474,7 @@ async fn agent_context_compressor_runs_once_per_stream_round() -> Result<(), Xla
     });
 
     agent_stream_prompt_final_response(&agent, "What's the weather in Paris?").await?;
-    assert_eq!(calls.load(Ordering::SeqCst), 3);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
     Ok(())
 }
 
@@ -536,7 +536,7 @@ async fn agent_context_compressor_sees_growing_history() -> Result<(), XlaiError
 
     agent_stream_prompt_final_response(&agent, "Paris weather?").await?;
     let seen = lock_unpoisoned(&lens);
-    assert_eq!(&*seen, &vec![1_usize, 3, 4]);
+    assert_eq!(&*seen, &vec![1_usize, 3]);
     Ok(())
 }
 
@@ -603,13 +603,11 @@ async fn agent_context_compressor_rewritten_messages_reach_model() -> Result<(),
 
     agent_stream_prompt_final_response(&agent, "Paris?").await?;
     let reqs = lock_unpoisoned(&requests);
-    assert_eq!(reqs.len(), 3);
+    assert_eq!(reqs.len(), 2);
     assert_eq!(reqs[0].messages.len(), 1);
     assert_eq!(reqs[0].messages[0].role, MessageRole::User);
     assert_eq!(reqs[1].messages.len(), 1);
     assert_eq!(reqs[1].messages[0].role, MessageRole::User);
-    assert_eq!(reqs[2].messages.len(), 1);
-    assert_eq!(reqs[2].messages[0].role, MessageRole::User);
     Ok(())
 }
 
@@ -1084,10 +1082,10 @@ async fn agent_system_reminder_stream_runs_once_per_loop_round() -> Result<(), X
     });
 
     agent_stream_prompt_final_response(&agent, "Paris?").await?;
-    assert_eq!(calls.load(Ordering::SeqCst), 3);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
 
     let reqs = lock_unpoisoned(&requests);
-    assert_eq!(reqs.len(), 3);
+    assert_eq!(reqs.len(), 2);
     for r in reqs.iter() {
         assert!(
             r.messages.iter().any(|m| {

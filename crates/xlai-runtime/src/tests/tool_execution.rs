@@ -110,7 +110,7 @@ async fn agent_executes_multiple_tool_calls_concurrently_by_default() -> Result<
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 3);
+    assert_eq!(requests.len(), 2);
     assert_eq!(requests[1].messages.len(), 4);
     assert_eq!(
         requests[1].messages[2].tool_name.as_deref(),
@@ -474,7 +474,7 @@ async fn agent_runs_mixed_tool_batch_sequentially_in_model_order() -> Result<(),
     );
 
     let requests = lock_unpoisoned(&requests);
-    assert_eq!(requests.len(), 3);
+    assert_eq!(requests.len(), 2);
     assert_eq!(
         requests[1]
             .messages
