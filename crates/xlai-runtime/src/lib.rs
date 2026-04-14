@@ -403,6 +403,21 @@ impl XlaiRuntime {
         skill_store.list_skills().await
     }
 
+    /// Reads a file from the configured skill store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no skill store is configured or if the file read
+    /// fails.
+    pub async fn read_skill_file(&self, path: &FsPath) -> Result<Vec<u8>, XlaiError> {
+        let skill_store = self
+            .skill_store
+            .as_ref()
+            .ok_or_else(|| missing_dependency("skill store"))?;
+
+        skill_store.read(path).await
+    }
+
     /// Searches the configured knowledge store.
     ///
     /// # Errors

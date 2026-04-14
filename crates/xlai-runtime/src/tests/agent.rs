@@ -49,6 +49,13 @@ async fn agent_session_injects_skill_tool_when_skill_store_is_configured() -> Re
             .any(|tool| tool.name == "skill"),
         "expected agent sessions to expose the built-in skill tool"
     );
+    assert!(
+        requests[0]
+            .available_tools
+            .iter()
+            .any(|tool| tool.name == "skill_resource"),
+        "expected agent sessions to expose the skill_resource built-in tool"
+    );
 
     Ok(())
 }
@@ -121,6 +128,142 @@ async fn agent_skill_tool_uses_configured_skill_store() -> Result<(), XlaiError>
             .text_parts_concatenated()
             .contains("Focus on correctness."),
         "expected the skill tool result to include the supplied skill arguments"
+    );
+
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_skill_tool_includes_eager_resources_and_lists_optional_ones() -> Result<(), XlaiError>
+{
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![
+            ChatResponse {
+                message: assistant_message(""),
+                tool_calls: vec![ToolCall {
+                    id: "skill_1".to_owned(),
+                    tool_name: "skill".to_owned(),
+                    arguments: json!({
+                        "skill": "review.code"
+                    }),
+                }],
+                usage: None,
+                finish_reason: FinishReason::ToolCalls,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("skill loaded"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("skill loaded"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
+        ],
+    ));
+
+    let runtime = RuntimeBuilder::new()
+        .with_chat_model(model)
+        .with_skill_store(seed_markdown_skill_store_with_resources().await?)
+        .build()?;
+
+    let agent = runtime.agent_session()?;
+    let response = agent_stream_prompt_final_response(&agent, "Review this patch").await?;
+    assert_eq!(
+        response.message.content.as_single_text(),
+        Some("skill loaded")
+    );
+
+    let requests = lock_unpoisoned(&requests);
+    let tool_result = requests[1].messages[3].content.text_parts_concatenated();
+    assert!(
+        tool_result.contains("--- references/checklist.md ---\nChecklist item 1"),
+        "expected eager resources to be inlined into the skill tool result"
+    );
+    assert!(
+        tool_result.contains("Optional resources available via `skill_resource`:"),
+        "expected optional resources to be listed"
+    );
+    assert!(
+        tool_result.contains("templates/final.md [markdown] - response template"),
+        "expected the optional resource descriptor to be present"
+    );
+    assert!(
+        !tool_result.contains("--- templates/final.md ---\nTemplate body"),
+        "expected optional resources to stay lazy"
+    );
+
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn agent_skill_resource_tool_reads_declared_files() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![
+            ChatResponse {
+                message: assistant_message(""),
+                tool_calls: vec![ToolCall {
+                    id: "skill_resource_1".to_owned(),
+                    tool_name: "skill_resource".to_owned(),
+                    arguments: json!({
+                        "skill": "review.code",
+                        "path": "templates/final.md"
+                    }),
+                }],
+                usage: None,
+                finish_reason: FinishReason::ToolCalls,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("resource loaded"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
+            ChatResponse {
+                message: assistant_message("resource loaded"),
+                tool_calls: Vec::new(),
+                usage: None,
+                finish_reason: FinishReason::Completed,
+                metadata: empty_metadata(),
+            },
+        ],
+    ));
+
+    let runtime = RuntimeBuilder::new()
+        .with_chat_model(model)
+        .with_skill_store(seed_markdown_skill_store_with_resources().await?)
+        .build()?;
+
+    let agent = runtime.agent_session()?;
+    let response = agent_stream_prompt_final_response(&agent, "Load the template").await?;
+    assert_eq!(
+        response.message.content.as_single_text(),
+        Some("resource loaded")
+    );
+
+    let requests = lock_unpoisoned(&requests);
+    let tool_result = requests[1].messages[3].content.text_parts_concatenated();
+    assert!(
+        tool_result.contains("Resolved skill resource `templates/final.md` from `review.code`"),
+        "expected the skill_resource tool result to identify the resource"
+    );
+    assert!(
+        tool_result.contains("Template body"),
+        "expected the skill_resource tool result to include the resource body"
     );
 
     Ok(())

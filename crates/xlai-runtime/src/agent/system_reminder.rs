@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use serde_json::{Value, json};
 use tera::Context;
-use xlai_core::{ChatMessage, ErrorKind, MessageRole, Skill, SkillId, XlaiError};
+use xlai_core::{ChatMessage, ErrorKind, MessageRole, Skill, SkillId, SkillLoadPolicy, XlaiError};
 
 use crate::{EmbeddedPromptStore, XlaiRuntime};
 
@@ -141,6 +141,9 @@ pub(crate) async fn compose_system_reminder_body(
                             name: id.clone(),
                             description: String::new(),
                             prompt_fragment: String::new(),
+                            resources: Vec::new(),
+                            entrypoints: Vec::new(),
+                            load_policy: Some(SkillLoadPolicy::default()),
                             tags: Vec::new(),
                             metadata: Default::default(),
                         });
@@ -154,6 +157,9 @@ pub(crate) async fn compose_system_reminder_body(
                         name: id.clone(),
                         description: String::new(),
                         prompt_fragment: String::new(),
+                        resources: Vec::new(),
+                        entrypoints: Vec::new(),
+                        load_policy: Some(SkillLoadPolicy::default()),
                         tags: Vec::new(),
                         metadata: Default::default(),
                     });
