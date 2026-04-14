@@ -153,27 +153,24 @@ impl PartialToolCall {
 
 #[derive(Default)]
 pub(crate) struct SseParser {
-    buffer: String,
+    buffer: Vec<u8>,
 }
 
 impl SseParser {
     pub(crate) fn push(&mut self, bytes: &[u8]) -> Vec<String> {
-        self.buffer.push_str(&String::from_utf8_lossy(bytes));
+        self.buffer.extend_from_slice(bytes);
 
         let mut events = Vec::new();
         loop {
-            let boundary = self
-                .buffer
-                .find("\r\n\r\n")
-                .map(|i| (i, 4usize))
-                .or_else(|| self.buffer.find("\n\n").map(|i| (i, 2usize)));
+            let boundary = find_event_boundary(&self.buffer);
             let Some((index, sep_len)) = boundary else {
                 break;
             };
 
-            let raw_event = self.buffer[..index].to_owned();
+            let raw_event = self.buffer[..index].to_vec();
             self.buffer.drain(..index + sep_len);
 
+            let raw_event = String::from_utf8_lossy(&raw_event);
             let data = raw_event
                 .lines()
                 .filter_map(|line| line.strip_prefix("data:"))
@@ -188,6 +185,19 @@ impl SseParser {
 
         events
     }
+}
+
+fn find_event_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
+    buffer
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|index| (index, 4))
+        .or_else(|| {
+            buffer
+                .windows(2)
+                .position(|window| window == b"\n\n")
+                .map(|index| (index, 2))
+        })
 }
 
 pub(crate) fn update_finish_reason(
@@ -253,5 +263,15 @@ mod sse_parser_tests {
         assert!(state.mark_message_started(0));
         assert!(!state.mark_message_started(0));
         assert!(state.mark_message_started(1));
+    }
+
+    #[test]
+    fn preserves_utf8_across_chunk_boundaries() {
+        let mut p = SseParser::default();
+        let first = p.push(b"data: {\"delta\":\"\xE4\xBD");
+        assert!(first.is_empty());
+
+        let second = p.push(b"\xA0\xE5\xA5\xBD\"}\n\n");
+        assert_eq!(second, vec![r#"{"delta":"你好"}"#.to_owned()]);
     }
 }
