@@ -384,6 +384,7 @@ mod tests {
     use super::{MarkdownSkillStore, resolve_skill_resource_path};
     use crate::MemoryFileSystem;
 
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
     async fn markdown_skill_store_resolves_skill_metadata_from_skill_markdown()
     -> Result<(), XlaiError> {
@@ -458,8 +459,18 @@ Prioritize bugs, regressions, and missing tests.
                 "expected resolved skill metadata to include the skill directory",
             ));
         }
-        assert_eq!(skills[0].entrypoints, vec!["SKILL.md".to_owned()]);
-        assert_eq!(skills[0].resources.len(), 0);
+        if skills[0].entrypoints != vec!["SKILL.md".to_owned()] {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                format!("unexpected entrypoints: {:?}", skills[0].entrypoints),
+            ));
+        }
+        if !skills[0].resources.is_empty() {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                format!("expected no resources, got {}", skills[0].resources.len()),
+            ));
+        }
         let extra = skill_store
             .read(&FsPath::from("/skills/review/README.md"))
             .await?;
@@ -473,6 +484,7 @@ Prioritize bugs, regressions, and missing tests.
         Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
     async fn markdown_skill_store_resolves_declared_resources_and_load_policy()
     -> Result<(), XlaiError> {
@@ -525,34 +537,57 @@ Base prompt.
             .resolve_skills(&["review.code".to_owned()])
             .await?;
 
-        assert_eq!(skills.len(), 1);
-        assert_eq!(skills[0].resources.len(), 2);
-        assert!(
-            skills[0]
-                .resources
-                .iter()
-                .any(|resource| resource.path == "references/checklist.md" && resource.required)
-        );
-        assert!(
-            skills[0]
-                .resources
-                .iter()
-                .any(|resource| resource.path == "templates/final.md" && !resource.required)
-        );
-        assert_eq!(
-            skills[0]
-                .load_policy
-                .as_ref()
-                .map(|policy| &policy.eager_paths),
-            Some(&vec![
-                "references/checklist.md".to_owned(),
-                "templates/final.md".to_owned()
-            ])
-        );
+        if skills.len() != 1 {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                format!("expected 1 skill, got {}", skills.len()),
+            ));
+        }
+        if skills[0].resources.len() != 2 {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                format!("expected 2 resources, got {}", skills[0].resources.len()),
+            ));
+        }
+        if !skills[0]
+            .resources
+            .iter()
+            .any(|resource| resource.path == "references/checklist.md" && resource.required)
+        {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                "expected required checklist resource",
+            ));
+        }
+        if !skills[0]
+            .resources
+            .iter()
+            .any(|resource| resource.path == "templates/final.md" && !resource.required)
+        {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                "expected optional template resource",
+            ));
+        }
+        let eager_paths = skills[0]
+            .load_policy
+            .as_ref()
+            .map(|policy| &policy.eager_paths);
+        let expected_paths = vec![
+            "references/checklist.md".to_owned(),
+            "templates/final.md".to_owned(),
+        ];
+        if eager_paths != Some(&expected_paths) {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                format!("unexpected eager paths: {eager_paths:?}"),
+            ));
+        }
 
         Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
     async fn markdown_skill_store_rejects_path_traversal_resources() -> Result<(), XlaiError> {
         let file_system = Arc::new(MemoryFileSystem::new());
@@ -576,17 +611,36 @@ Base prompt.
 
         let file_system_trait: Arc<dyn SkillFileSystem> = file_system;
         let skill_store = MarkdownSkillStore::new(file_system_trait);
-        let error = skill_store
+        let error = match skill_store
             .resolve_skills(&["review.code".to_owned()])
             .await
-            .expect_err("path traversal should fail");
+        {
+            Ok(_) => {
+                return Err(XlaiError::new(
+                    xlai_core::ErrorKind::Skill,
+                    "path traversal should fail",
+                ));
+            }
+            Err(error) => error,
+        };
 
-        assert_eq!(error.kind, xlai_core::ErrorKind::Skill);
-        assert!(error.to_string().contains("invalid segments"));
+        if error.kind != xlai_core::ErrorKind::Skill {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                format!("unexpected error kind: {:?}", error.kind),
+            ));
+        }
+        if !error.to_string().contains("invalid segments") {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                format!("unexpected error: {error}"),
+            ));
+        }
 
         Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
     async fn markdown_skill_store_rejects_missing_declared_resources() -> Result<(), XlaiError> {
         let file_system = Arc::new(MemoryFileSystem::new());
@@ -610,17 +664,36 @@ Base prompt.
 
         let file_system_trait: Arc<dyn SkillFileSystem> = file_system;
         let skill_store = MarkdownSkillStore::new(file_system_trait);
-        let error = skill_store
+        let error = match skill_store
             .resolve_skills(&["review.code".to_owned()])
             .await
-            .expect_err("missing resource should fail");
+        {
+            Ok(_) => {
+                return Err(XlaiError::new(
+                    xlai_core::ErrorKind::Skill,
+                    "missing resource should fail",
+                ));
+            }
+            Err(error) => error,
+        };
 
-        assert_eq!(error.kind, xlai_core::ErrorKind::Skill);
-        assert!(error.to_string().contains("does not exist"));
+        if error.kind != xlai_core::ErrorKind::Skill {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                format!("unexpected error kind: {:?}", error.kind),
+            ));
+        }
+        if !error.to_string().contains("does not exist") {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                format!("unexpected error: {error}"),
+            ));
+        }
 
         Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     #[tokio::test]
     async fn resolve_skill_resource_path_only_allows_declared_files() -> Result<(), XlaiError> {
         let file_system = Arc::new(MemoryFileSystem::new());
@@ -647,20 +720,43 @@ Base prompt.
 
         let file_system_trait: Arc<dyn SkillFileSystem> = file_system;
         let skill_store = MarkdownSkillStore::new(file_system_trait);
-        let skill = skill_store
+        let skill = match skill_store
             .resolve_skills(&["review.code".to_owned()])
             .await?
             .into_iter()
             .next()
-            .expect("skill should resolve");
+        {
+            Some(skill) => skill,
+            None => {
+                return Err(XlaiError::new(
+                    xlai_core::ErrorKind::Skill,
+                    "skill should resolve",
+                ));
+            }
+        };
 
-        assert_eq!(
-            resolve_skill_resource_path(&skill, "README.md")?.as_str(),
-            "/skills/review/README.md"
-        );
-        let error = resolve_skill_resource_path(&skill, "NOT_DECLARED.md")
-            .expect_err("undeclared path should fail");
-        assert!(error.to_string().contains("not declared"));
+        let resolved = resolve_skill_resource_path(&skill, "README.md")?;
+        if resolved.as_str() != "/skills/review/README.md" {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                format!("unexpected resource path: {}", resolved.as_str()),
+            ));
+        }
+        let error = match resolve_skill_resource_path(&skill, "NOT_DECLARED.md") {
+            Ok(path) => {
+                return Err(XlaiError::new(
+                    xlai_core::ErrorKind::Skill,
+                    format!("undeclared path should fail, got {}", path.as_str()),
+                ));
+            }
+            Err(error) => error,
+        };
+        if !error.to_string().contains("not declared") {
+            return Err(XlaiError::new(
+                xlai_core::ErrorKind::Skill,
+                format!("unexpected error: {error}"),
+            ));
+        }
 
         Ok(())
     }
