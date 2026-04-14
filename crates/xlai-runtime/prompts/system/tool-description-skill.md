@@ -18,4 +18,5 @@ Important:
 - NEVER mention a skill without actually calling this tool
 - Do not invoke a skill that is already running
 - Do not use this tool for built-in CLI commands (like /help, /clear, etc.)
+- Skills may expose optional package resources after they are resolved; use `skill_resource` to load those lazily when needed
 - If you see a {{ skill_tag_name }} tag in the current conversation turn, the skill has ALREADY been loaded - follow the instructions directly instead of calling this tool again

@@ -12,9 +12,32 @@ pub struct Skill {
     pub name: String,
     pub description: String,
     pub prompt_fragment: String,
+    #[serde(default)]
+    pub resources: Vec<SkillResource>,
+    #[serde(default)]
+    pub entrypoints: Vec<String>,
+    #[serde(default)]
+    pub load_policy: Option<SkillLoadPolicy>,
     pub tags: Vec<String>,
     #[serde(default)]
     pub metadata: Metadata,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SkillResource {
+    pub path: String,
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub purpose: Option<String>,
+    #[serde(default)]
+    pub required: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct SkillLoadPolicy {
+    #[serde(default)]
+    pub eager_paths: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

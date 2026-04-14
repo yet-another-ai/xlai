@@ -5,9 +5,10 @@ use futures_util::{StreamExt, stream};
 use xlai_core::{
     BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
     ChatResponse, FsPath, GeneratedImage, ImageGenerationModel, ImageGenerationRequest,
-    ImageGenerationResponse, MediaSource, MessageRole, Metadata, Skill, SkillStore,
-    ToolCallExecutionMode, ToolDefinition, ToolSchema, TranscriptionModel, TranscriptionRequest,
-    TranscriptionResponse, TtsModel, TtsRequest, TtsResponse, XlaiError,
+    ImageGenerationResponse, MediaSource, MessageRole, Metadata, Skill, SkillLoadPolicy,
+    SkillResource, SkillStore, ToolCallExecutionMode, ToolDefinition, ToolSchema,
+    TranscriptionModel, TranscriptionRequest, TranscriptionResponse, TtsModel, TtsRequest,
+    TtsResponse, XlaiError,
 };
 
 use crate::{Agent, ChatExecutionEvent, MarkdownSkillStore, MemoryFileSystem};
@@ -106,6 +107,14 @@ pub(super) fn sample_skill() -> Skill {
         name: "review.code".to_owned(),
         description: "Reviews code with a bug-finding mindset.".to_owned(),
         prompt_fragment: "Prioritize bugs, regressions, and missing tests.".to_owned(),
+        resources: vec![SkillResource {
+            path: "README.md".to_owned(),
+            kind: None,
+            purpose: None,
+            required: false,
+        }],
+        entrypoints: vec!["SKILL.md".to_owned()],
+        load_policy: Some(SkillLoadPolicy::default()),
         tags: vec!["review".to_owned(), "quality".to_owned()],
         metadata: empty_metadata(),
     }
@@ -140,6 +149,57 @@ pub(super) async fn seed_markdown_skill_store() -> Result<Arc<dyn SkillStore>, X
             b"Extra skill file".to_vec(),
         )
         .await?;
+    Ok(skill_store)
+}
+
+pub(super) async fn seed_markdown_skill_store_with_resources()
+-> Result<Arc<dyn SkillStore>, XlaiError> {
+    let file_system = Arc::new(MemoryFileSystem::new());
+    let file_system_trait: Arc<dyn xlai_core::SkillFileSystem> = file_system.clone();
+    let skill_store = Arc::new(MarkdownSkillStore::new(file_system_trait));
+
+    file_system
+        .create_dir_all(&FsPath::from("/skills/review/references"))
+        .await?;
+    file_system
+        .create_dir_all(&FsPath::from("/skills/review/templates"))
+        .await?;
+    file_system
+        .write(
+            &FsPath::from("/skills/review/SKILL.md"),
+            br#"---
+name: review.code
+description: Reviews code with a bug-finding mindset.
+tags:
+  - review
+  - quality
+resources:
+  - path: references/checklist.md
+    kind: markdown
+    purpose: review checklist
+    required: true
+  - path: templates/final.md
+    kind: markdown
+    purpose: response template
+---
+Prioritize bugs, regressions, and missing tests.
+"#
+            .to_vec(),
+        )
+        .await?;
+    file_system
+        .write(
+            &FsPath::from("/skills/review/references/checklist.md"),
+            b"Checklist item 1".to_vec(),
+        )
+        .await?;
+    file_system
+        .write(
+            &FsPath::from("/skills/review/templates/final.md"),
+            b"Template body".to_vec(),
+        )
+        .await?;
+
     Ok(skill_store)
 }
 
