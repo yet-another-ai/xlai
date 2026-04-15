@@ -121,79 +121,69 @@ impl GeminiImageGenerationResponse {
     ) -> Result<ImageGenerationResponse, XlaiError> {
         let mut images = Vec::new();
 
-        if let Some(candidates) = self.candidates {
-            if let Some(candidate) = candidates.into_iter().next() {
-                if let Some(content) = candidate.content {
-                    if let Some(parts) = content.parts {
-                        for part in parts {
-                            if let Some(inline_data) = part.inline_data {
-                                if let (Some(mime_type), Some(data)) =
-                                    (inline_data.mime_type, inline_data.data)
-                                {
-                                    let mut decoded = STANDARD.decode(data).map_err(|error| {
-                                        XlaiError::new(
-                                            ErrorKind::Provider,
-                                            format!(
-                                                "failed to decode Gemini image payload: {error}"
-                                            ),
-                                        )
-                                    })?;
+        if let Some(candidates) = self.candidates
+            && let Some(candidate) = candidates.into_iter().next()
+            && let Some(content) = candidate.content
+            && let Some(parts) = content.parts
+        {
+            for part in parts {
+                if let Some(inline_data) = part.inline_data
+                    && let (Some(mime_type), Some(data)) = (inline_data.mime_type, inline_data.data)
+                {
+                    let mut decoded = STANDARD.decode(data).map_err(|error| {
+                        XlaiError::new(
+                            ErrorKind::Provider,
+                            format!("failed to decode Gemini image payload: {error}"),
+                        )
+                    })?;
 
-                                    let mut final_mime_type = mime_type.clone();
+                    let mut final_mime_type = mime_type.clone();
 
-                                    if let Some(format) = requested_format {
-                                        let target_mime = match format {
-                                            ImageGenerationOutputFormat::Png => "image/png",
-                                            ImageGenerationOutputFormat::Jpeg => "image/jpeg",
-                                            ImageGenerationOutputFormat::Webp => "image/webp",
-                                        };
+                    if let Some(format) = requested_format {
+                        let target_mime = match format {
+                            ImageGenerationOutputFormat::Png => "image/png",
+                            ImageGenerationOutputFormat::Jpeg => "image/jpeg",
+                            ImageGenerationOutputFormat::Webp => "image/webp",
+                        };
 
-                                        if target_mime != mime_type {
-                                            let img = image::load_from_memory(&decoded).map_err(|error| {
-                                                XlaiError::new(
-                                                    ErrorKind::Provider,
-                                                    format!("failed to decode image for format conversion: {error}"),
-                                                )
-                                            })?;
+                        if target_mime != mime_type {
+                            let img = image::load_from_memory(&decoded).map_err(|error| {
+                                XlaiError::new(
+                                    ErrorKind::Provider,
+                                    format!(
+                                        "failed to decode image for format conversion: {error}"
+                                    ),
+                                )
+                            })?;
 
-                                            let mut cursor = std::io::Cursor::new(Vec::new());
-                                            let output_format = match format {
-                                                ImageGenerationOutputFormat::Png => {
-                                                    image::ImageFormat::Png
-                                                }
-                                                ImageGenerationOutputFormat::Jpeg => {
-                                                    image::ImageFormat::Jpeg
-                                                }
-                                                ImageGenerationOutputFormat::Webp => {
-                                                    image::ImageFormat::WebP
-                                                }
-                                            };
+                            let mut cursor = std::io::Cursor::new(Vec::new());
+                            let output_format = match format {
+                                ImageGenerationOutputFormat::Png => image::ImageFormat::Png,
+                                ImageGenerationOutputFormat::Jpeg => image::ImageFormat::Jpeg,
+                                ImageGenerationOutputFormat::Webp => image::ImageFormat::WebP,
+                            };
 
-                                            img.write_to(&mut cursor, output_format).map_err(|error| {
-                                                XlaiError::new(
-                                                    ErrorKind::Provider,
-                                                    format!("failed to encode image to requested format: {error}"),
-                                                )
-                                            })?;
+                            img.write_to(&mut cursor, output_format).map_err(|error| {
+                                XlaiError::new(
+                                    ErrorKind::Provider,
+                                    format!("failed to encode image to requested format: {error}"),
+                                )
+                            })?;
 
-                                            decoded = cursor.into_inner();
-                                            final_mime_type = target_mime.to_owned();
-                                        }
-                                    }
-
-                                    images.push(GeneratedImage {
-                                        image: MediaSource::InlineData {
-                                            mime_type: final_mime_type.clone(),
-                                            data: decoded,
-                                        },
-                                        mime_type: Some(final_mime_type),
-                                        revised_prompt: None,
-                                        metadata: Default::default(),
-                                    });
-                                }
-                            }
+                            decoded = cursor.into_inner();
+                            final_mime_type = target_mime.to_owned();
                         }
                     }
+
+                    images.push(GeneratedImage {
+                        image: MediaSource::InlineData {
+                            mime_type: final_mime_type.clone(),
+                            data: decoded,
+                        },
+                        mime_type: Some(final_mime_type),
+                        revised_prompt: None,
+                        metadata: Default::default(),
+                    });
                 }
             }
         }

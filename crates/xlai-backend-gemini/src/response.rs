@@ -50,21 +50,19 @@ impl GeminiChatResponse {
                 for part in gemini_parts {
                     if let Some(text) = part.text {
                         parts.push(ContentPart::Text { text });
-                    } else if let Some(inline_data) = part.inline_data {
-                        if let (Some(mime_type), Some(data)) =
+                    } else if let Some(inline_data) = part.inline_data
+                        && let (Some(mime_type), Some(data)) =
                             (inline_data.mime_type, inline_data.data)
-                        {
-                            if let Ok(decoded) = STANDARD.decode(data) {
-                                parts.push(ContentPart::Image {
-                                    source: xlai_core::MediaSource::InlineData {
-                                        mime_type: mime_type.clone(),
-                                        data: decoded,
-                                    },
-                                    mime_type: Some(mime_type),
-                                    detail: None,
-                                });
-                            }
-                        }
+                        && let Ok(decoded) = STANDARD.decode(data)
+                    {
+                        parts.push(ContentPart::Image {
+                            source: xlai_core::MediaSource::InlineData {
+                                mime_type: mime_type.clone(),
+                                data: decoded,
+                            },
+                            mime_type: Some(mime_type),
+                            detail: None,
+                        });
                     }
                 }
             }
