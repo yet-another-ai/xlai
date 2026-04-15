@@ -4,6 +4,7 @@
 
 pub use xlai_core as core;
 
+pub use xlai_backend_gemini::{GeminiChatModel, GeminiConfig};
 pub use xlai_backend_openai::{
     OpenAiChatModel, OpenAiConfig, OpenAiImageGenerationModel, OpenAiTranscriptionModel,
     OpenAiTtsModel,

@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/xlai-backend-gemini",
     "crates/xlai-backend-llama-cpp",
     "crates/xlai-backend-openai",
     "crates/xlai-backend-transformersjs",
@@ -73,6 +74,7 @@ xlai-local-common = { path = "crates/xlai-local-common", version = "0.1.0" }
 xlai-runtime = { path = "crates/xlai-runtime", version = "0.1.0" }
 xlai-backend-openai = { path = "crates/xlai-backend-openai", version = "0.1.0" }
 xlai-backend-transformersjs = { path = "crates/xlai-backend-transformersjs", version = "0.1.0" }
+xlai-backend-gemini = { path = "crates/xlai-backend-gemini", version = "0.1.0" }
 xlai-backend-llama-cpp = { path = "crates/xlai-backend-llama-cpp", version = "0.1.0" }
 xlai-ffi = { path = "crates/xlai-ffi", version = "0.1.0" }
 xlai-facade = { path = "crates/xlai-facade", version = "0.1.0", default-features = false }
