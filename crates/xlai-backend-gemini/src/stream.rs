@@ -52,33 +52,35 @@ impl StreamState {
         })?;
 
         if let Some(candidates) = value.get("candidates").and_then(Value::as_array)
-            && let Some(candidate) = candidates.first() {
-                if let Some(content) = candidate.get("content")
-                    && let Some(parts) = content.get("parts").and_then(Value::as_array) {
-                        for part in parts {
-                            if let Some(text) = part.get("text").and_then(Value::as_str) {
-                                if !self.message_started {
-                                    self.message_started = true;
-                                    chunks.push(ChatChunk::MessageStart {
-                                        role: MessageRole::Assistant,
-                                        message_index: 0,
-                                    });
-                                }
-
-                                self.content.push_str(text);
-                                chunks.push(ChatChunk::ContentDelta(StreamTextDelta {
-                                    message_index: 0,
-                                    part_index: 0,
-                                    delta: text.to_owned(),
-                                }));
-                            }
+            && let Some(candidate) = candidates.first()
+        {
+            if let Some(content) = candidate.get("content")
+                && let Some(parts) = content.get("parts").and_then(Value::as_array)
+            {
+                for part in parts {
+                    if let Some(text) = part.get("text").and_then(Value::as_str) {
+                        if !self.message_started {
+                            self.message_started = true;
+                            chunks.push(ChatChunk::MessageStart {
+                                role: MessageRole::Assistant,
+                                message_index: 0,
+                            });
                         }
-                    }
 
-                if let Some(finish_reason) = candidate.get("finishReason").and_then(Value::as_str) {
-                    self.finish_reason = Some(finish_reason.to_owned());
+                        self.content.push_str(text);
+                        chunks.push(ChatChunk::ContentDelta(StreamTextDelta {
+                            message_index: 0,
+                            part_index: 0,
+                            delta: text.to_owned(),
+                        }));
+                    }
                 }
             }
+
+            if let Some(finish_reason) = candidate.get("finishReason").and_then(Value::as_str) {
+                self.finish_reason = Some(finish_reason.to_owned());
+            }
+        }
 
         Ok(chunks)
     }

@@ -31,17 +31,19 @@ impl GeminiChatResponse {
         let mut finish_reason_str = None;
 
         if let Some(candidates) = self.candidates
-            && let Some(candidate) = candidates.into_iter().next() {
-                finish_reason_str = candidate.finish_reason;
-                if let Some(content) = candidate.content
-                    && let Some(gemini_parts) = content.parts {
-                        for part in gemini_parts {
-                            if let Some(text) = part.text {
-                                parts.push(ContentPart::Text { text });
-                            }
-                        }
+            && let Some(candidate) = candidates.into_iter().next()
+        {
+            finish_reason_str = candidate.finish_reason;
+            if let Some(content) = candidate.content
+                && let Some(gemini_parts) = content.parts
+            {
+                for part in gemini_parts {
+                    if let Some(text) = part.text {
+                        parts.push(ContentPart::Text { text });
                     }
+                }
             }
+        }
 
         let finish_reason = match finish_reason_str.as_deref() {
             Some("STOP") => FinishReason::Completed,
