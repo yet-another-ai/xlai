@@ -3,9 +3,11 @@ use futures_util::stream::StreamExt;
 use reqwest::Client;
 use xlai_core::{
     BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatModel, ChatRequest, ChatResponse, ErrorKind,
+    ImageGenerationBackend, ImageGenerationModel, ImageGenerationRequest, ImageGenerationResponse,
     XlaiError,
 };
 
+mod image_generation;
 mod request;
 mod response;
 mod stream;
@@ -13,6 +15,7 @@ mod stream;
 #[cfg(test)]
 mod tests;
 
+use image_generation::{GeminiImageGenerationRequest, GeminiImageGenerationResponse};
 use request::GeminiChatRequest;
 use response::GeminiChatResponse;
 use stream::{SseParser, StreamState};
@@ -22,6 +25,7 @@ pub struct GeminiConfig {
     pub base_url: String,
     pub api_key: String,
     pub model: String,
+    pub image_model: Option<String>,
 }
 
 impl GeminiConfig {
@@ -35,7 +39,14 @@ impl GeminiConfig {
             base_url: base_url.into(),
             api_key: api_key.into(),
             model: model.into(),
+            image_model: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_image_model(mut self, model: impl Into<String>) -> Self {
+        self.image_model = Some(model.into());
+        self
     }
 
     fn generate_content_url(&self) -> String {
@@ -43,6 +54,14 @@ impl GeminiConfig {
             "{}/models/{}:generateContent",
             self.base_url.trim_end_matches('/'),
             self.model
+        )
+    }
+
+    fn generate_image_url(&self, model: &str) -> String {
+        format!(
+            "{}/models/{}:generateContent",
+            self.base_url.trim_end_matches('/'),
+            model
         )
     }
 
@@ -71,11 +90,82 @@ impl GeminiChatModel {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct GeminiImageGenerationModel {
+    client: Client,
+    config: GeminiConfig,
+}
+
+impl GeminiImageGenerationModel {
+    #[must_use]
+    pub fn new(config: GeminiConfig) -> Self {
+        Self {
+            client: Client::new(),
+            config,
+        }
+    }
+}
+
 impl ChatBackend for GeminiConfig {
     type Model = GeminiChatModel;
 
     fn into_chat_model(self) -> Self::Model {
         GeminiChatModel::new(self)
+    }
+}
+
+impl ImageGenerationBackend for GeminiConfig {
+    type Model = GeminiImageGenerationModel;
+
+    fn into_image_generation_model(self) -> Self::Model {
+        GeminiImageGenerationModel::new(self)
+    }
+}
+
+impl ImageGenerationModel for GeminiImageGenerationModel {
+    fn provider_name(&self) -> &'static str {
+        "gemini"
+    }
+
+    fn generate_image(
+        &self,
+        request: ImageGenerationRequest,
+    ) -> BoxFuture<'_, Result<ImageGenerationResponse, XlaiError>> {
+        Box::pin(async move {
+            let requested_format = request.output_format;
+            let model_name = request
+                .model
+                .clone()
+                .or_else(|| self.config.image_model.clone())
+                .unwrap_or_else(|| self.config.model.clone());
+            let endpoint = self.config.generate_image_url(&model_name);
+            let payload = GeminiImageGenerationRequest::from_core_request(request)?;
+
+            let response = self
+                .client
+                .post(&endpoint)
+                .header("x-goog-api-key", &self.config.api_key)
+                .json(&payload)
+                .send()
+                .await
+                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+
+            let status = response.status();
+            if !status.is_success() {
+                let text = response.text().await.unwrap_or_default();
+                return Err(XlaiError::new(
+                    ErrorKind::Provider,
+                    format!("Gemini API error ({}): {}", status, text),
+                ));
+            }
+
+            let response: GeminiImageGenerationResponse = response
+                .json()
+                .await
+                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+
+            response.into_core_response(requested_format)
+        })
     }
 }
 
