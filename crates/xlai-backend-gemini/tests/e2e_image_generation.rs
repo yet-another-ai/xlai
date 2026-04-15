@@ -6,7 +6,9 @@ async fn gemini_image_generation_smoke_test() -> Result<(), XlaiError> {
     let api_key = match std::env::var("GEMINI_API_KEY") {
         Ok(key) => key,
         Err(_) => {
-            println!("Skipping gemini_image_generation_smoke_test because GEMINI_API_KEY is not set");
+            println!(
+                "Skipping gemini_image_generation_smoke_test because GEMINI_API_KEY is not set"
+            );
             return Ok(());
         }
     };
@@ -31,9 +33,15 @@ async fn gemini_image_generation_smoke_test() -> Result<(), XlaiError> {
     };
 
     let response = model.generate_image(request).await?;
-    assert!(!response.images.is_empty(), "Response should contain at least one image");
     assert!(
-        matches!(response.images[0].image, xlai_core::MediaSource::InlineData { .. }),
+        !response.images.is_empty(),
+        "Response should contain at least one image"
+    );
+    assert!(
+        matches!(
+            response.images[0].image,
+            xlai_core::MediaSource::InlineData { .. }
+        ),
         "Image should be inline data"
     );
 

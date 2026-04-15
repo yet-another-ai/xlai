@@ -1,8 +1,8 @@
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::Deserialize;
 use xlai_core::{
     ChatContent, ChatMessage, ChatResponse, ContentPart, FinishReason, MessageRole, XlaiError,
 };
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct GeminiChatResponse {
@@ -47,24 +47,26 @@ impl GeminiChatResponse {
             if let Some(content) = candidate.content
                 && let Some(gemini_parts) = content.parts
             {
-                        for part in gemini_parts {
-                            if let Some(text) = part.text {
-                                parts.push(ContentPart::Text { text });
-                            } else if let Some(inline_data) = part.inline_data {
-                                if let (Some(mime_type), Some(data)) = (inline_data.mime_type, inline_data.data) {
-                                    if let Ok(decoded) = STANDARD.decode(data) {
-                                        parts.push(ContentPart::Image {
-                                            source: xlai_core::MediaSource::InlineData {
-                                                mime_type: mime_type.clone(),
-                                                data: decoded,
-                                            },
-                                            mime_type: Some(mime_type),
-                                            detail: None,
-                                        });
-                                    }
-                                }
+                for part in gemini_parts {
+                    if let Some(text) = part.text {
+                        parts.push(ContentPart::Text { text });
+                    } else if let Some(inline_data) = part.inline_data {
+                        if let (Some(mime_type), Some(data)) =
+                            (inline_data.mime_type, inline_data.data)
+                        {
+                            if let Ok(decoded) = STANDARD.decode(data) {
+                                parts.push(ContentPart::Image {
+                                    source: xlai_core::MediaSource::InlineData {
+                                        mime_type: mime_type.clone(),
+                                        data: decoded,
+                                    },
+                                    mime_type: Some(mime_type),
+                                    detail: None,
+                                });
                             }
                         }
+                    }
+                }
             }
         }
 

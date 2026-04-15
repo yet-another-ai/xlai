@@ -133,7 +133,9 @@ impl GeminiImageGenerationResponse {
                                     let mut decoded = STANDARD.decode(data).map_err(|error| {
                                         XlaiError::new(
                                             ErrorKind::Provider,
-                                            format!("failed to decode Gemini image payload: {error}"),
+                                            format!(
+                                                "failed to decode Gemini image payload: {error}"
+                                            ),
                                         )
                                     })?;
 
@@ -156,9 +158,15 @@ impl GeminiImageGenerationResponse {
 
                                             let mut cursor = std::io::Cursor::new(Vec::new());
                                             let output_format = match format {
-                                                ImageGenerationOutputFormat::Png => image::ImageFormat::Png,
-                                                ImageGenerationOutputFormat::Jpeg => image::ImageFormat::Jpeg,
-                                                ImageGenerationOutputFormat::Webp => image::ImageFormat::WebP,
+                                                ImageGenerationOutputFormat::Png => {
+                                                    image::ImageFormat::Png
+                                                }
+                                                ImageGenerationOutputFormat::Jpeg => {
+                                                    image::ImageFormat::Jpeg
+                                                }
+                                                ImageGenerationOutputFormat::Webp => {
+                                                    image::ImageFormat::WebP
+                                                }
                                             };
 
                                             img.write_to(&mut cursor, output_format).map_err(|error| {
