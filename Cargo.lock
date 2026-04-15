@@ -4803,6 +4803,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
 
 [[package]]
+name = "xlai-backend-gemini"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "base64",
+ "futures-util",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "xlai-core",
+]
+
+[[package]]
 name = "xlai-backend-llama-cpp"
 version = "0.1.0"
 dependencies = [
@@ -4867,6 +4881,7 @@ dependencies = [
 name = "xlai-facade"
 version = "0.1.0"
 dependencies = [
+ "xlai-backend-gemini",
  "xlai-backend-llama-cpp",
  "xlai-backend-openai",
  "xlai-backend-transformersjs",
