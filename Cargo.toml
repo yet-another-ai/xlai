@@ -42,6 +42,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 getrandom = "0.2"
 gray_matter = "0.3.2"
 hound = "3.5.1"
+image = "0.25"
 jsonschema = { version = "0.45.0", default-features = false }
 js-sys = "0.3"
 libc = "0.2"
