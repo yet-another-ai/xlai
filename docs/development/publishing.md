@@ -61,7 +61,8 @@ These workspace members are **`publish = false`** (Cargo will refuse `cargo publ
 
 | Crate / area                                         | Reason                                                                                                                                                       |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `xlai-sys-llama`, `xlai-sys-ggml`                    | Vendored native builds; not on crates.io                                                                                                                     |
+| `xlai-build-native`                                  | Internal build helpers for native sys crates; not on crates.io                                                                                               |
+| `xlai-sys-llama`, `xlai-sys-ggml`                    | Vendored native builds (`vendor/native/*`); not on crates.io                                                                                               |
 | `xlai-backend-llama-cpp`                             | Depends on `xlai-sys-llama`                                                                                                                                  |
 | `xlai-native`, `xlai-ffi`                            | Depend on `xlai-backend-llama-cpp` / aggregate of internal backends                                                                                          |
 | `xlai-wasm`                                          | Built for the npm package; not published as its own crate                                                                                                    |

@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/xlai-build-native",
     "crates/xlai-backend-gemini",
     "crates/xlai-backend-llama-cpp",
     "crates/xlai-backend-openai",
@@ -82,6 +83,7 @@ xlai-facade = { path = "crates/xlai-facade", version = "0.1.0", default-features
 xlai-native = { path = "crates/xlai-native", version = "0.1.0" }
 xlai-qts-core = { path = "crates/xlai-qts-core", version = "0.1.0" }
 xlai-qts-manifest = { path = "crates/xlai-qts-manifest", version = "0.1.0" }
+xlai-build-native = { path = "crates/xlai-build-native", version = "0.1.0" }
 xlai-sys-ggml = { path = "crates/xlai-sys-ggml", version = "0.1.0" }
 xlai-sys-llama = { path = "crates/xlai-sys-llama", version = "0.1.0" }
 xlai-wasm = { path = "crates/xlai-wasm", version = "0.1.0" }

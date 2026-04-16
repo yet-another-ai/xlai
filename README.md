@@ -27,6 +27,8 @@ Already implemented:
 
 ```text
 xlai/
+├── vendor/
+│   └── native/          # git submodules: llama.cpp, ggml (for xlai-sys-*)
 ├── crates/
 │   ├── xlai-backend-llama-cpp/
 │   ├── xlai-backend-openai/
@@ -40,6 +42,7 @@ xlai/
 │   ├── xlai-qts-core/
 │   ├── xlai-qts-manifest/
 │   ├── xlai-runtime/
+│   ├── xlai-build-native/
 │   ├── xlai-sys-ggml/
 │   ├── xlai-sys-llama/
 │   └── xlai-wasm/
@@ -68,6 +71,8 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). F
   Browser-facing `wasm-bindgen` facade crate for web integration. Default Cargo feature `qts` enables local QTS entrypoints (`qtsBrowserTts`, manifest validation); the in-browser engine is still a stub until GGML/ORT WASM work lands (see `docs/qts/wasm-browser-runtime.md`).
 - `crates/xlai-backend-llama-cpp`
   Native `llama.cpp` chat backend for local GGUF inference.
+- `crates/xlai-build-native`
+  Shared `build.rs` helpers for native CMake/OpenBLAS/Vulkan and llama.cpp CMake patches (build-dependency only).
 - `crates/xlai-sys-llama`
   Vendored `llama.cpp` native stack for the local chat backend.
 - `crates/xlai-sys-ggml`

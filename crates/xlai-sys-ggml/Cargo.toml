@@ -37,6 +37,7 @@ virtgpu = []
 [build-dependencies]
 bindgen.workspace = true
 cmake.workspace = true
+xlai-build-native.workspace = true
 
 [lints]
 workspace = true

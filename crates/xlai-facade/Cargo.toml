@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 description = "Shared re-exports of xlai runtime and backends for native and wasm facade crates"
 publish = false
+build = "build.rs"
 
 [lints]
 workspace = true

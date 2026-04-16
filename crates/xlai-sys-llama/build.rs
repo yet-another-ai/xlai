@@ -4,10 +4,13 @@
 
 use std::env;
 use std::error::Error;
-use std::ffi::OsStr;
-use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
+
+use xlai_build_native::{
+    apply_cmake_env_overrides, emit_llama_vulkan_sdk_paths, emit_openblas_search_paths,
+    emit_search_path_variants, feature_enabled, native_vendor_llama_cpp,
+    prepare_patched_llama_source, workspace_root_from_sys_crate_manifest,
+};
 
 type BuildResult<T> = Result<T, Box<dyn Error>>;
 
@@ -33,7 +36,7 @@ impl BackendFeatureSet {
         };
 
         if feature_set.metal && target_os != "macos" {
-            return Err(io::Error::other(
+            return Err(std::io::Error::other(
                 "the `metal` Cargo feature is only supported on macOS targets",
             )
             .into());
@@ -71,8 +74,15 @@ impl BackendFeatureSet {
 }
 
 fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
-    let vendor_source_dir = llama_vendor_dir(manifest_dir);
-    let source_dir = prepare_llama_source(&vendor_source_dir)?;
+    let workspace_root = workspace_root_from_sys_crate_manifest(manifest_dir)?;
+    let vendor_source_dir = env::var("LLAMA_CPP_SRC")
+        .map(PathBuf::from)
+        .map(xlai_build_native::normalize_source_path)
+        .unwrap_or_else(|_| native_vendor_llama_cpp(&workspace_root));
+
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap_or_default());
+    let source_dir =
+        prepare_patched_llama_source(&vendor_source_dir, &out_dir, feature_enabled("vulkan"))?;
     let include_dir = source_dir.join("include");
     let common_dir = source_dir.join("common");
     let vendor_dir = source_dir.join("vendor");
@@ -86,6 +96,7 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
 
     println!("cargo:rerun-if-changed={}", vendor_source_dir.display());
     println!("cargo:rerun-if-changed={}", wrapper_cpp.display());
+    println!("cargo:rerun-if-env-changed=LLAMA_CPP_SRC");
     println!("cargo:rerun-if-env-changed=CMAKE_GENERATOR");
     println!("cargo:rerun-if-env-changed=CMAKE_PREFIX_PATH");
     println!("cargo:rerun-if-env-changed=CMAKE_TOOLCHAIN_FILE");
@@ -233,21 +244,9 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
     Ok(())
 }
 
-fn llama_vendor_dir(manifest_dir: &Path) -> PathBuf {
-    manifest_dir.join("../xlai-sys/vendor/llama.cpp")
-}
-
 fn short_cmake_out_dir(feature_set: BackendFeatureSet) -> BuildResult<PathBuf> {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
-    let workspace_root = manifest_dir
-        .parent()
-        .and_then(Path::parent)
-        .ok_or_else(|| {
-            io::Error::other(format!(
-                "unexpected CARGO_MANIFEST_DIR layout: {}",
-                manifest_dir.display()
-            ))
-        })?;
+    let workspace_root = workspace_root_from_sys_crate_manifest(&manifest_dir)?;
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| "unknown".to_string());
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_else(|_| "unknown".to_string());
     let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
@@ -279,29 +278,6 @@ fn emit_llama_search_paths(dst: &Path, feature_set: BackendFeatureSet, enable_op
     }
 }
 
-fn emit_llama_vulkan_sdk_paths(enable_vulkan: bool, target_os: &str) {
-    if !enable_vulkan {
-        return;
-    }
-
-    let Some(vulkan_sdk) = env::var_os("VULKAN_SDK") else {
-        return;
-    };
-    let vulkan_sdk = PathBuf::from(vulkan_sdk);
-
-    match target_os {
-        "windows" => {
-            emit_search_path(&vulkan_sdk.join("Lib"));
-        }
-        "macos" | "ios" | "linux" | "android" => {
-            emit_search_path(&vulkan_sdk.join("lib"));
-            emit_search_path(&vulkan_sdk.join("macOS/lib"));
-            emit_search_path(&vulkan_sdk.join("Lib"));
-        }
-        _ => {}
-    }
-}
-
 fn llguidance_output_dir(dst: &Path) -> PathBuf {
     let target_root = if let Ok(cargo_target_dir) = env::var("CARGO_TARGET_DIR") {
         PathBuf::from(cargo_target_dir)
@@ -314,171 +290,6 @@ fn llguidance_output_dir(dst: &Path) -> PathBuf {
     } else {
         target_root.join("release")
     }
-}
-
-fn prepare_llama_source(vendor_source_dir: &Path) -> BuildResult<PathBuf> {
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap_or_default());
-    let patched_source_dir = out_dir.join("llama.cpp-patched");
-
-    if patched_source_dir.exists() {
-        fs::remove_dir_all(&patched_source_dir).map_err(|error| {
-            io::Error::other(format!(
-                "failed to clear patched llama.cpp source directory `{}`: {error}",
-                patched_source_dir.display()
-            ))
-        })?;
-    }
-
-    copy_dir_all(vendor_source_dir, &patched_source_dir).map_err(|error| {
-        io::Error::other(format!(
-            "failed to copy llama.cpp sources from `{}` to `{}`: {error}",
-            vendor_source_dir.display(),
-            patched_source_dir.display()
-        ))
-    })?;
-
-    patch_llama_common_cmake(&patched_source_dir.join("common/CMakeLists.txt"))?;
-    patch_llama_ggml_vulkan_cmake(&patched_source_dir.join("ggml/src/ggml-vulkan/CMakeLists.txt"))?;
-    Ok(patched_source_dir)
-}
-
-fn copy_dir_all(src: &Path, dst: &Path) -> io::Result<()> {
-    fs::create_dir_all(dst)?;
-
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let path = entry.path();
-        let file_name = entry.file_name();
-
-        if file_name == OsStr::new(".git") {
-            continue;
-        }
-
-        let destination = dst.join(entry.file_name());
-        let file_type = entry.file_type()?;
-
-        if file_type.is_dir() {
-            copy_dir_all(&path, &destination)?;
-        } else if file_type.is_symlink() {
-            copy_symlink(&path, &destination)?;
-        } else {
-            fs::copy(&path, &destination)?;
-        }
-    }
-
-    Ok(())
-}
-
-#[cfg(unix)]
-fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
-    use std::os::unix::fs::symlink;
-
-    let target = fs::read_link(src)?;
-    symlink(target, dst)
-}
-
-#[cfg(windows)]
-fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
-    use std::os::windows::fs::{symlink_dir, symlink_file};
-
-    let target = fs::read_link(src)?;
-    if src.is_dir() {
-        symlink_dir(target, dst)
-    } else {
-        symlink_file(target, dst)
-    }
-}
-
-#[cfg(not(any(unix, windows)))]
-fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
-    let metadata = fs::metadata(src)?;
-    if metadata.is_dir() {
-        copy_dir_all(src, dst)
-    } else {
-        fs::copy(src, dst).map(|_| ())
-    }
-}
-
-fn patch_llama_common_cmake(path: &Path) -> BuildResult<()> {
-    let mut contents = fs::read_to_string(path).map_err(|error| {
-        io::Error::other(format!(
-            "failed to read patched llama.cpp CMake file `{}`: {error}",
-            path.display()
-        ))
-    })?;
-    contents = normalize_newlines(&contents);
-
-    contents = replace_once(
-        &contents,
-        "    set(LLGUIDANCE_PATH ${LLGUIDANCE_SRC}/target/release)\n    set(LLGUIDANCE_LIB_NAME \"${CMAKE_STATIC_LIBRARY_PREFIX}llguidance${CMAKE_STATIC_LIBRARY_SUFFIX}\")\n",
-        "    set(LLGUIDANCE_LIB_NAME \"${CMAKE_STATIC_LIBRARY_PREFIX}llguidance${CMAKE_STATIC_LIBRARY_SUFFIX}\")\n\n    if (DEFINED ENV{CARGO_TARGET_DIR} AND NOT \"$ENV{CARGO_TARGET_DIR}\" STREQUAL \"\")\n        set(LLGUIDANCE_TARGET_DIR $ENV{CARGO_TARGET_DIR})\n    else()\n        set(LLGUIDANCE_TARGET_DIR ${LLGUIDANCE_SRC}/target)\n    endif()\n\n    if (DEFINED ENV{TARGET} AND NOT \"$ENV{TARGET}\" STREQUAL \"\")\n        set(LLGUIDANCE_PATH ${LLGUIDANCE_TARGET_DIR}/$ENV{TARGET}/release)\n        set(LLGUIDANCE_CARGO_TARGET_ARGS --target $ENV{TARGET})\n    else()\n        set(LLGUIDANCE_PATH ${LLGUIDANCE_TARGET_DIR}/release)\n        set(LLGUIDANCE_CARGO_TARGET_ARGS)\n    endif()\n",
-        path,
-    )?;
-
-    contents = replace_once(
-        &contents,
-        "    add_dependencies(llguidance llguidance_ext)\n\n    target_include_directories(${TARGET} PRIVATE ${LLGUIDANCE_PATH})\n",
-        "    add_dependencies(llguidance llguidance_ext)\n    add_dependencies(${TARGET} llguidance_ext)\n\n    target_include_directories(${TARGET} PRIVATE ${LLGUIDANCE_PATH})\n",
-        path,
-    )?;
-
-    contents = replace_once(
-        &contents,
-        "        BUILD_COMMAND cargo build --release --package llguidance\n",
-        "        BUILD_COMMAND ${CMAKE_COMMAND} -E env --unset=RUSTC --unset=RUSTC_WRAPPER --unset=RUSTC_WORKSPACE_WRAPPER --unset=CLIPPY_ARGS --unset=RUSTFLAGS --unset=CARGO_ENCODED_RUSTFLAGS --unset=CARGO_BUILD_RUSTFLAGS cargo build --release --package llguidance ${LLGUIDANCE_CARGO_TARGET_ARGS}\n",
-        path,
-    )?;
-
-    fs::write(path, contents).map_err(|error| {
-        io::Error::other(format!(
-            "failed to write patched llama.cpp CMake file `{}`: {error}",
-            path.display()
-        ))
-    })?;
-
-    Ok(())
-}
-
-fn patch_llama_ggml_vulkan_cmake(path: &Path) -> BuildResult<()> {
-    let mut contents = fs::read_to_string(path).map_err(|error| {
-        io::Error::other(format!(
-            "failed to read patched llama.cpp Vulkan CMake file `{}`: {error}",
-            path.display()
-        ))
-    })?;
-    contents = normalize_newlines(&contents);
-
-    contents = replace_once(
-        &contents,
-        "    ExternalProject_Add(\n        vulkan-shaders-gen\n        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vulkan-shaders\n",
-        "    ExternalProject_Add(\n        vulkan-shaders-gen\n        PREFIX ${CMAKE_BINARY_DIR}/vkgen\n        TMP_DIR ${CMAKE_BINARY_DIR}/vkgen-tmp\n        STAMP_DIR ${CMAKE_BINARY_DIR}/vkgen-stamp\n        BINARY_DIR ${CMAKE_BINARY_DIR}/vkgen-build\n        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vulkan-shaders\n",
-        path,
-    )?;
-
-    fs::write(path, contents).map_err(|error| {
-        io::Error::other(format!(
-            "failed to write patched llama.cpp Vulkan CMake file `{}`: {error}",
-            path.display()
-        ))
-    })?;
-
-    Ok(())
-}
-
-fn normalize_newlines(contents: &str) -> String {
-    contents.replace("\r\n", "\n").replace('\r', "\n")
-}
-
-fn replace_once(contents: &str, from: &str, to: &str, path: &Path) -> BuildResult<String> {
-    if !contents.contains(from) {
-        return Err(io::Error::other(format!(
-            "expected to patch `{}` but the target snippet was not found; upstream llama.cpp layout may have changed",
-            path.display()
-        ))
-        .into());
-    }
-
-    Ok(contents.replacen(from, to, 1))
 }
 
 fn build_wrapper(
@@ -511,109 +322,13 @@ fn generate_llama_bindings(include_dir: &Path, ggml_include_dir: &Path) -> Build
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .map_err(|error| {
-            io::Error::other(format!("failed to generate llama.cpp bindings: {error}"))
+            std::io::Error::other(format!("failed to generate llama.cpp bindings: {error}"))
         })?;
 
     let output = out_dir.join("llama_bindings.rs");
     bindings.write_to_file(output).map_err(|error| {
-        io::Error::other(format!("failed to write llama.cpp bindings: {error}"))
+        std::io::Error::other(format!("failed to write llama.cpp bindings: {error}"))
     })?;
 
     Ok(())
-}
-
-fn apply_cmake_env_overrides(config: &mut cmake::Config, enable_openblas: bool) {
-    if let Ok(toolchain_file) = env::var("CMAKE_TOOLCHAIN_FILE") {
-        config.define("CMAKE_TOOLCHAIN_FILE", toolchain_file);
-    }
-
-    if let Ok(prefix_path) = env::var("CMAKE_PREFIX_PATH") {
-        config.define("CMAKE_PREFIX_PATH", prefix_path);
-    }
-
-    if let Ok(openblas_root) = env::var("OpenBLAS_ROOT") {
-        config.define("OpenBLAS_ROOT", openblas_root);
-    }
-
-    if let Ok(vcpkg_triplet) = env::var("VCPKG_TARGET_TRIPLET") {
-        config.define("VCPKG_TARGET_TRIPLET", vcpkg_triplet);
-    }
-
-    if enable_openblas && let Some(include_dir) = resolve_openblas_include_dir() {
-        let include_dir = include_dir.display().to_string();
-        config.define("BLAS_INCLUDE_DIRS", &include_dir);
-        config.define("OpenBLAS_INCLUDE_DIR", include_dir);
-    }
-}
-
-fn resolve_openblas_include_dir() -> Option<PathBuf> {
-    if let Ok(openblas_root) = env::var("OpenBLAS_ROOT")
-        && let Some(include_dir) = find_openblas_include_dir(&PathBuf::from(openblas_root))
-    {
-        return Some(include_dir);
-    }
-
-    let Ok(vcpkg_root) = env::var("VCPKG_INSTALLATION_ROOT") else {
-        return None;
-    };
-    let Ok(vcpkg_triplet) = env::var("VCPKG_TARGET_TRIPLET") else {
-        return None;
-    };
-
-    find_openblas_include_dir(&Path::new(&vcpkg_root).join("installed").join(vcpkg_triplet))
-}
-
-fn find_openblas_include_dir(root: &Path) -> Option<PathBuf> {
-    let candidates = [
-        root.join("include"),
-        root.join("include/openblas"),
-        root.join("include/OpenBLAS"),
-        root.join("include/openblas/include"),
-    ];
-
-    candidates
-        .into_iter()
-        .find(|dir| dir.join("cblas.h").exists())
-}
-
-fn emit_openblas_search_paths() {
-    if let Ok(openblas_root) = env::var("OpenBLAS_ROOT") {
-        let openblas_root = PathBuf::from(openblas_root);
-        emit_search_path_variants(&openblas_root.join("lib"));
-        emit_search_path_variants(&openblas_root.join("lib64"));
-        emit_search_path_variants(&openblas_root.join("bin"));
-    }
-
-    let Ok(vcpkg_root) = env::var("VCPKG_INSTALLATION_ROOT") else {
-        return;
-    };
-    let Ok(vcpkg_triplet) = env::var("VCPKG_TARGET_TRIPLET") else {
-        return;
-    };
-
-    let installed_dir = Path::new(&vcpkg_root).join("installed").join(vcpkg_triplet);
-    emit_search_path_variants(&installed_dir.join("lib"));
-    emit_search_path_variants(&installed_dir.join("bin"));
-}
-
-fn emit_search_path(path: &Path) {
-    if path.exists() {
-        println!("cargo:rustc-link-search=native={}", path.display());
-    }
-}
-
-fn emit_search_path_variants(path: &Path) {
-    emit_search_path(path);
-
-    for config in ["Release", "RelWithDebInfo", "Debug", "MinSizeRel"] {
-        emit_search_path(&path.join(config));
-    }
-}
-
-fn feature_enabled(name: &str) -> bool {
-    env::var(format!(
-        "CARGO_FEATURE_{}",
-        name.to_ascii_uppercase().replace('-', "_")
-    ))
-    .is_ok()
 }
