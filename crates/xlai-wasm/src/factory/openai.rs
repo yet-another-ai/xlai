@@ -6,8 +6,29 @@ use xlai_runtime::{FileSystem, MemoryFileSystem, RuntimeBuilder};
 
 use crate::agent_session::WasmAgentSession;
 use crate::chat_session::WasmChatSession;
-use crate::types::{DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL, WasmChatSessionOptions};
+use crate::types::{
+    DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL, WasmChatExecutionOverrides,
+    WasmChatSessionOptions, WasmTtsExecutionOverrides,
+};
 use crate::wasm_helpers::js_error;
+
+pub(crate) fn apply_runtime_execution_overrides(
+    mut runtime_builder: RuntimeBuilder,
+    runtime_chat_execution_defaults: Option<&WasmChatExecutionOverrides>,
+    runtime_tts_execution_defaults: Option<&WasmTtsExecutionOverrides>,
+    default_max_tool_round_trips: Option<usize>,
+) -> RuntimeBuilder {
+    if let Some(d) = runtime_chat_execution_defaults {
+        runtime_builder = runtime_builder.with_chat_execution_defaults(d.clone().into());
+    }
+    if let Some(d) = runtime_tts_execution_defaults {
+        runtime_builder = runtime_builder.with_tts_execution_defaults(d.clone().into());
+    }
+    if let Some(n) = default_max_tool_round_trips {
+        runtime_builder = runtime_builder.with_default_max_tool_round_trips(n);
+    }
+    runtime_builder
+}
 
 pub(crate) fn create_chat_session_inner(
     options: WasmChatSessionOptions,
@@ -40,6 +61,12 @@ pub(crate) fn create_chat_session_with_dyn_file_system(
             .clone()
             .unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_owned()),
     ));
+    runtime_builder = apply_runtime_execution_overrides(
+        runtime_builder,
+        options.runtime_chat_execution_defaults.as_ref(),
+        options.runtime_tts_execution_defaults.as_ref(),
+        options.default_max_tool_round_trips,
+    );
 
     if let Some(file_system) = file_system {
         runtime_builder = runtime_builder.with_file_system(file_system);
@@ -75,6 +102,10 @@ pub(crate) fn create_chat_session_with_dyn_file_system(
         chat = chat.with_retry_policy(Some(rp.clone().into()));
     }
 
+    if let Some(ref o) = options.chat_execution {
+        chat = chat.with_chat_execution_overrides(o.clone().into());
+    }
+
     Ok(WasmChatSession { inner: chat })
 }
 
@@ -93,6 +124,12 @@ pub(crate) fn create_agent_session_with_dyn_file_system(
             .clone()
             .unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_owned()),
     ));
+    runtime_builder = apply_runtime_execution_overrides(
+        runtime_builder,
+        options.runtime_chat_execution_defaults.as_ref(),
+        options.runtime_tts_execution_defaults.as_ref(),
+        options.default_max_tool_round_trips,
+    );
 
     if let Some(file_system) = file_system {
         runtime_builder = runtime_builder.with_file_system(file_system);
@@ -126,6 +163,10 @@ pub(crate) fn create_agent_session_with_dyn_file_system(
 
     if let Some(ref rp) = options.retry_policy {
         agent = agent.with_retry_policy(Some(rp.clone().into()));
+    }
+
+    if let Some(ref o) = options.chat_execution {
+        agent = agent.with_chat_execution_overrides(o.clone().into());
     }
 
     Ok(WasmAgentSession { inner: agent })

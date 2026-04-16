@@ -3,6 +3,7 @@
 mod agent;
 mod chat;
 mod common;
+mod execution_config;
 mod image_generation;
 mod runtime_io;
 mod streaming;

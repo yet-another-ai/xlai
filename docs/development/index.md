@@ -4,6 +4,7 @@ Contributor-focused documentation: continuous integration, publishing to registr
 
 ## Topics
 
+- [Architecture / runtime execution](/architecture/) — crate boundaries; **Runtime execution hints** covers game-oriented defaults, merge order, cancellation, and WASM option fields (`chatExecution`, `runtimeChatExecutionDefaults`, …).
 - [CI and testing](./ci-and-testing) — workflows, test lanes, and e2e environments
 - [Publishing](./publishing) — crates.io and npm release order and automation
 - [Crate taxonomy](./crates-taxonomy) — which crates ship to crates.io vs stay internal

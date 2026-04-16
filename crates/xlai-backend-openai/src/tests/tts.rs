@@ -26,6 +26,7 @@ fn sample_tts_request() -> TtsRequest {
         instructions: None,
         delivery: TtsDeliveryMode::Unary,
         metadata: BTreeMap::new(),
+        ..Default::default()
     }
 }
 
@@ -80,6 +81,7 @@ fn tts_json_body_maps_provider_ref_voice_to_id_object() {
         instructions: None,
         delivery: TtsDeliveryMode::Unary,
         metadata: BTreeMap::new(),
+        ..Default::default()
     };
     let body_result = build_speech_json_body(&config, &request, None);
     assert!(body_result.is_ok(), "build body: {:?}", body_result.err());
@@ -115,6 +117,7 @@ fn tts_rejects_clone_voice_spec() {
         instructions: None,
         delivery: TtsDeliveryMode::Unary,
         metadata: BTreeMap::new(),
+        ..Default::default()
     };
     let result = build_speech_json_body(&config, &request, None);
     assert!(result.is_err(), "clone voice should be rejected");
@@ -139,6 +142,7 @@ fn tts_rejects_non_openai_voice_provider() {
         instructions: None,
         delivery: TtsDeliveryMode::Unary,
         metadata: BTreeMap::new(),
+        ..Default::default()
     };
     let result = build_speech_json_body(&config, &request, None);
     assert!(result.is_err(), "non-openai provider should be rejected");

@@ -11,8 +11,8 @@ use xlai_backend_openai::{OpenAiConfig, OpenAiImageGenerationModel, OpenAiTtsMod
 #[cfg(feature = "qts")]
 use xlai_core::XlaiError;
 use xlai_core::{
-    ChatContent, ImageGenerationModel, ImageGenerationRequest, TtsChunk, TtsDeliveryMode, TtsModel,
-    TtsRequest,
+    ChatContent, ImageGenerationModel, ImageGenerationRequest, TtsChunk, TtsDeliveryMode,
+    TtsExecutionConfig, TtsExecutionOverrides, TtsModel, TtsRequest,
 };
 
 use crate::agent_session::WasmAgentSession;
@@ -53,6 +53,10 @@ pub async fn chat(options: JsValue) -> Result<JsValue, JsValue> {
         max_output_tokens,
         reasoning_effort,
         retry_policy,
+        chat_execution,
+        runtime_chat_execution_defaults,
+        runtime_tts_execution_defaults,
+        default_max_tool_round_trips,
     } = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
     let user_content = content.unwrap_or_else(|| ChatContent::text(prompt.clone()));
     let session_options = WasmChatSessionOptions {
@@ -64,6 +68,10 @@ pub async fn chat(options: JsValue) -> Result<JsValue, JsValue> {
         max_output_tokens,
         reasoning_effort,
         retry_policy,
+        chat_execution,
+        runtime_chat_execution_defaults,
+        runtime_tts_execution_defaults,
+        default_max_tool_round_trips,
         #[cfg(feature = "qts")]
         qts: None,
     };
@@ -85,6 +93,10 @@ pub async fn agent(options: JsValue) -> Result<JsValue, JsValue> {
         max_output_tokens,
         reasoning_effort,
         retry_policy,
+        chat_execution,
+        runtime_chat_execution_defaults,
+        runtime_tts_execution_defaults,
+        default_max_tool_round_trips,
     } = serde_wasm_bindgen::from_value(options).map_err(js_error)?;
     let user_content = content.unwrap_or_else(|| ChatContent::text(prompt.clone()));
     let session_options = WasmChatSessionOptions {
@@ -96,6 +108,10 @@ pub async fn agent(options: JsValue) -> Result<JsValue, JsValue> {
         max_output_tokens,
         reasoning_effort,
         retry_policy,
+        chat_execution,
+        runtime_chat_execution_defaults,
+        runtime_tts_execution_defaults,
+        default_max_tool_round_trips,
         #[cfg(feature = "qts")]
         qts: None,
     };
@@ -257,7 +273,7 @@ fn openai_image_generation_model(
 }
 
 fn tts_request_from_opts(opts: &WasmTtsCallOptions, delivery: TtsDeliveryMode) -> TtsRequest {
-    TtsRequest {
+    let mut request = TtsRequest {
         model: None,
         input: opts.input.clone(),
         voice: opts.voice.clone(),
@@ -266,7 +282,16 @@ fn tts_request_from_opts(opts: &WasmTtsCallOptions, delivery: TtsDeliveryMode) -
         instructions: opts.instructions.clone(),
         delivery,
         metadata: Default::default(),
+        ..Default::default()
+    };
+    if let Some(ref w) = opts.tts_execution {
+        let layer: TtsExecutionOverrides = w.clone().into();
+        let merged = TtsExecutionConfig::merge_optional_layers(None, None, Some(&layer));
+        if merged != TtsExecutionConfig::default() {
+            request.execution = Some(merged);
+        }
     }
+    request
 }
 
 fn image_generation_request_from_opts(
@@ -345,7 +370,7 @@ pub(crate) fn tts_request_from_qts_opts(
     opts: &WasmQtsTtsCallOptions,
     delivery: TtsDeliveryMode,
 ) -> TtsRequest {
-    TtsRequest {
+    let mut request = TtsRequest {
         model: None,
         input: opts.input.clone(),
         voice: opts.voice.clone(),
@@ -354,7 +379,16 @@ pub(crate) fn tts_request_from_qts_opts(
         instructions: None,
         delivery,
         metadata: Default::default(),
+        ..Default::default()
+    };
+    if let Some(ref w) = opts.tts_execution {
+        let layer: TtsExecutionOverrides = w.clone().into();
+        let merged = TtsExecutionConfig::merge_optional_layers(None, None, Some(&layer));
+        if merged != TtsExecutionConfig::default() {
+            request.execution = Some(merged);
+        }
     }
+    request
 }
 
 /// Unary local QTS synthesis (stub: returns structured error until engines are integrated).

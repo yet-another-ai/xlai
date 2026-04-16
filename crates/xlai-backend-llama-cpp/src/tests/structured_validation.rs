@@ -33,6 +33,8 @@ fn prepared_request_rejects_combined_tools_and_structured_output() {
         }))),
         temperature: 0.8,
         max_output_tokens: 64,
+        execution: None,
+        cancellation: None,
     };
 
     let result = validate_prepared_for_llama(&request, &config);

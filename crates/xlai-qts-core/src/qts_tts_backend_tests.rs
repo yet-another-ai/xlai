@@ -21,6 +21,7 @@ fn maps_metadata_into_synthesize_request() {
         ]
         .into_iter()
         .collect(),
+        ..Default::default()
     };
     let sr = synthesize_request_from_tts(&req).expect("map");
     assert_eq!(sr.text, "hello");

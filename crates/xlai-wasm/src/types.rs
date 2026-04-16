@@ -3,9 +3,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use xlai_core::{
-    ChatContent, ChatResponse, ChatRetryPolicy, FinishReason, FsEntry, FsEntryKind,
-    ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality, MessageRole,
-    ReasoningEffort, TokenUsage, TtsAudioFormat, TtsDeliveryMode, VoiceSpec,
+    ChatContent, ChatExecutionOverrides, ChatResponse, ChatRetryPolicy, ExecutionLatencyMode,
+    FinishReason, FsEntry, FsEntryKind, ImageGenerationBackground, ImageGenerationOutputFormat,
+    ImageGenerationQuality, MessageRole, ReasoningEffort, TokenUsage, TtsAudioFormat,
+    TtsDeliveryMode, TtsExecutionOverrides, VoiceSpec,
 };
 
 pub(crate) const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
@@ -44,6 +45,65 @@ impl From<WasmChatRetryPolicy> for ChatRetryPolicy {
     }
 }
 
+/// Chat execution hints from JS (session `chatExecution` or builder `runtimeChatExecutionDefaults`).
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WasmChatExecutionOverrides {
+    #[serde(default)]
+    pub(crate) latency_mode: Option<ExecutionLatencyMode>,
+    #[serde(default)]
+    pub(crate) streaming_preferred: Option<bool>,
+    #[serde(default)]
+    pub(crate) warmup_on_create: Option<bool>,
+    #[serde(default)]
+    pub(crate) cancel_on_drop: Option<bool>,
+    #[serde(default)]
+    pub(crate) max_tokens_per_second: Option<f32>,
+    #[serde(default)]
+    pub(crate) backend_preference: Option<String>,
+    #[serde(default)]
+    pub(crate) backend_fallback_order: Option<Vec<String>>,
+}
+
+impl From<WasmChatExecutionOverrides> for ChatExecutionOverrides {
+    fn from(wasm: WasmChatExecutionOverrides) -> Self {
+        Self {
+            latency_mode: wasm.latency_mode,
+            streaming_preferred: wasm.streaming_preferred,
+            warmup_on_create: wasm.warmup_on_create,
+            cancel_on_drop: wasm.cancel_on_drop,
+            max_tokens_per_second: wasm.max_tokens_per_second,
+            backend_preference: wasm.backend_preference,
+            backend_fallback_order: wasm.backend_fallback_order,
+        }
+    }
+}
+
+/// TTS execution hints from JS (`ttsExecution`).
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WasmTtsExecutionOverrides {
+    #[serde(default)]
+    pub(crate) latency_mode: Option<ExecutionLatencyMode>,
+    #[serde(default)]
+    pub(crate) cancel_on_drop: Option<bool>,
+    #[serde(default)]
+    pub(crate) backend_preference: Option<String>,
+    #[serde(default)]
+    pub(crate) backend_fallback_order: Option<Vec<String>>,
+}
+
+impl From<WasmTtsExecutionOverrides> for TtsExecutionOverrides {
+    fn from(wasm: WasmTtsExecutionOverrides) -> Self {
+        Self {
+            latency_mode: wasm.latency_mode,
+            cancel_on_drop: wasm.cancel_on_drop,
+            backend_preference: wasm.backend_preference,
+            backend_fallback_order: wasm.backend_fallback_order,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WasmChatRequest {
@@ -66,6 +126,14 @@ pub(crate) struct WasmChatRequest {
     pub(crate) content: Option<ChatContent>,
     #[serde(default)]
     pub(crate) retry_policy: Option<WasmChatRetryPolicy>,
+    #[serde(default)]
+    pub(crate) chat_execution: Option<WasmChatExecutionOverrides>,
+    #[serde(default)]
+    pub(crate) runtime_chat_execution_defaults: Option<WasmChatExecutionOverrides>,
+    #[serde(default)]
+    pub(crate) runtime_tts_execution_defaults: Option<WasmTtsExecutionOverrides>,
+    #[serde(default)]
+    pub(crate) default_max_tool_round_trips: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -89,6 +157,14 @@ pub(crate) struct WasmAgentRequest {
     pub(crate) content: Option<ChatContent>,
     #[serde(default)]
     pub(crate) retry_policy: Option<WasmChatRetryPolicy>,
+    #[serde(default)]
+    pub(crate) chat_execution: Option<WasmChatExecutionOverrides>,
+    #[serde(default)]
+    pub(crate) runtime_chat_execution_defaults: Option<WasmChatExecutionOverrides>,
+    #[serde(default)]
+    pub(crate) runtime_tts_execution_defaults: Option<WasmTtsExecutionOverrides>,
+    #[serde(default)]
+    pub(crate) default_max_tool_round_trips: Option<usize>,
 }
 
 /// Optional local QTS config on chat/agent sessions (`manifest` only for now).
@@ -118,6 +194,14 @@ pub(crate) struct WasmChatSessionOptions {
     pub(crate) reasoning_effort: Option<ReasoningEffort>,
     #[serde(default)]
     pub(crate) retry_policy: Option<WasmChatRetryPolicy>,
+    #[serde(default)]
+    pub(crate) chat_execution: Option<WasmChatExecutionOverrides>,
+    #[serde(default)]
+    pub(crate) runtime_chat_execution_defaults: Option<WasmChatExecutionOverrides>,
+    #[serde(default)]
+    pub(crate) runtime_tts_execution_defaults: Option<WasmTtsExecutionOverrides>,
+    #[serde(default)]
+    pub(crate) default_max_tool_round_trips: Option<usize>,
     /// When set, the runtime behind this session includes local QTS (`QtsBrowserTtsModel`).
     #[cfg(feature = "qts")]
     #[serde(default)]
@@ -144,6 +228,8 @@ pub(crate) struct WasmTtsCallOptions {
     pub(crate) instructions: Option<String>,
     #[serde(default)]
     pub(crate) delivery: Option<TtsDeliveryMode>,
+    #[serde(default)]
+    pub(crate) tts_execution: Option<WasmTtsExecutionOverrides>,
 }
 
 #[derive(Deserialize)]
@@ -182,6 +268,8 @@ pub(crate) struct WasmQtsTtsCallOptions {
     pub(crate) delivery: Option<TtsDeliveryMode>,
     #[serde(default)]
     pub(crate) manifest: Option<crate::qts_browser::QtsModelManifest>,
+    #[serde(default)]
+    pub(crate) tts_execution: Option<WasmTtsExecutionOverrides>,
 }
 
 impl From<WasmChatRequest> for WasmChatSessionOptions {
@@ -195,6 +283,10 @@ impl From<WasmChatRequest> for WasmChatSessionOptions {
             max_output_tokens: value.max_output_tokens,
             reasoning_effort: value.reasoning_effort,
             retry_policy: value.retry_policy,
+            chat_execution: value.chat_execution,
+            runtime_chat_execution_defaults: value.runtime_chat_execution_defaults,
+            runtime_tts_execution_defaults: value.runtime_tts_execution_defaults,
+            default_max_tool_round_trips: value.default_max_tool_round_trips,
             #[cfg(feature = "qts")]
             qts: None,
         }
@@ -212,6 +304,10 @@ impl From<WasmAgentRequest> for WasmChatSessionOptions {
             max_output_tokens: value.max_output_tokens,
             reasoning_effort: value.reasoning_effort,
             retry_policy: value.retry_policy,
+            chat_execution: value.chat_execution,
+            runtime_chat_execution_defaults: value.runtime_chat_execution_defaults,
+            runtime_tts_execution_defaults: value.runtime_tts_execution_defaults,
+            default_max_tool_round_trips: value.default_max_tool_round_trips,
             #[cfg(feature = "qts")]
             qts: None,
         }
@@ -230,6 +326,10 @@ pub(crate) struct WasmTransformersSessionOptions {
     pub(crate) max_output_tokens: Option<u32>,
     pub(crate) reasoning_effort: Option<ReasoningEffort>,
     pub(crate) retry_policy: Option<WasmChatRetryPolicy>,
+    pub(crate) chat_execution: Option<WasmChatExecutionOverrides>,
+    pub(crate) runtime_chat_execution_defaults: Option<WasmChatExecutionOverrides>,
+    pub(crate) runtime_tts_execution_defaults: Option<WasmTtsExecutionOverrides>,
+    pub(crate) default_max_tool_round_trips: Option<usize>,
     #[cfg(feature = "qts")]
     pub(crate) qts: Option<WasmQtsSessionConfig>,
 }

@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 
 use crate::content::{ChatContent, MessageRole, StreamTextDelta};
 use crate::error::XlaiError;
+use crate::execution::{CancellationSignal, ChatExecutionConfig};
 use crate::metadata::Metadata;
 use crate::runtime::{BoxFuture, BoxStream, RuntimeBound};
 
@@ -512,7 +513,7 @@ impl ChatRetryPolicy {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
 pub struct ChatRequest {
     pub model: Option<String>,
     pub system_prompt: Option<String>,
@@ -528,6 +529,12 @@ pub struct ChatRequest {
     pub reasoning_effort: Option<ReasoningEffort>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_policy: Option<ChatRetryPolicy>,
+    /// Advisory execution hints merged from runtime/session/request layers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<ChatExecutionConfig>,
+    /// In-process cancellation; omitted from JSON and CBOR wire formats.
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub cancellation: Option<CancellationSignal>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -569,6 +576,11 @@ pub trait ChatModel: RuntimeBound {
         Box::pin(stream::once(async move {
             self.generate(request).await.map(ChatChunk::Finished)
         }))
+    }
+
+    /// Best-effort warmup for local providers (e.g. load weights). Default is a no-op.
+    fn warmup(&self) -> BoxFuture<'_, Result<(), XlaiError>> {
+        Box::pin(async { Ok(()) })
     }
 }
 

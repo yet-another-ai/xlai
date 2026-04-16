@@ -20,10 +20,16 @@ pub use xlai_backend_llama_cpp::{LlamaCppChatModel, LlamaCppConfig};
 pub use xlai_qts_core::{QtsTtsConfig, QtsTtsModel};
 
 pub use xlai_runtime::{
-    Agent, Chat, ChatExecutionEvent, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath,
-    GeneratedImage, ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality,
-    ImageGenerationRequest, ImageGenerationResponse, McpRegistry, MemoryFileSystem,
-    ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode, WritableFileSystem, XlaiRuntime,
+    Agent, Chat, ChatExecutionEvent, ChatExecutionHandle, DirectoryFileSystem, FileSystem, FsEntry,
+    FsEntryKind, FsPath, GeneratedImage, ImageGenerationBackground, ImageGenerationOutputFormat,
+    ImageGenerationQuality, ImageGenerationRequest, ImageGenerationResponse, McpRegistry,
+    MemoryFileSystem, ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode,
+    WritableFileSystem, XlaiRuntime,
+};
+
+pub use xlai_core::{
+    CancellationSignal, ChatExecutionConfig, ChatExecutionOverrides, ExecutionLatencyMode,
+    TtsExecutionConfig, TtsExecutionOverrides,
 };
 
 #[cfg(not(target_arch = "wasm32"))]

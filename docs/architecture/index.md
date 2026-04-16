@@ -35,6 +35,14 @@ The same content lives in the repository as [`ARCHITECTURE.md`](https://github.c
 2. `Chat` / `Agent` in `xlai-runtime` maintains history and tool registry, then calls `ChatModel::generate` or streaming APIs on the configured backend.
 3. Backends translate `xlai_core::ChatRequest` into provider-specific payloads and map responses (and errors) back to `xlai_core` types.
 
+## Runtime execution hints (game / interactive workloads)
+
+- **`xlai-core`** defines advisory `ChatExecutionOverrides` / `ChatExecutionConfig`, `TtsExecutionOverrides` / `TtsExecutionConfig`, and a shared `CancellationSignal`. `ChatRequest` / `TtsRequest` carry optional `execution` plus in-process-only `cancellation` (not serialized on the wire).
+- **Merge order** for chat: `RuntimeBuilder::with_chat_execution_defaults` → `Chat::with_chat_execution_overrides` / `Agent::with_chat_execution_overrides` → optional per-call layer on `begin_stream` / `stream_with_options`. Session `Some(_)` fields override runtime defaults per field.
+- **`xlai-runtime`** merges into every `Chat::build_request`, exposes `ChatExecutionHandle` (`next_event`, `cancel_on_drop`) alongside existing streams, and checks `cancellation` in `XlaiRuntime::stream_chat`. `with_default_max_tool_round_trips` seeds new `Agent` sessions unless overridden with `with_max_tool_round_trips`.
+- **Local backends**: `PreparedLocalChatRequest` carries `execution` + `cancellation` for llama.cpp / transformers.js prep. **llama.cpp** honors cooperative cancel in the token loop, optional `max_tokens_per_second` pacing, and `ChatModel::warmup()` preloads weights. **QTS** checks cancellation on unary/stream paths and in streaming PCM chunks; `TtsModel::warmup()` ensures the worker is spawned.
+- **WASM** session options accept camelCase `chatExecution`, `runtimeChatExecutionDefaults`, `runtimeTtsExecutionDefaults`, `defaultMaxToolRoundTrips`, and `ttsExecution` on TTS calls (see `crates/xlai-wasm/src/types.rs`). Remote OpenAI-style backends ignore unsupported hints.
+
 ## Errors
 
 `xlai_core::XlaiError` carries a `kind`, human-readable `message`, and optional structured fields (`http_status`, `request_id`, `provider_code`, `retryable`, `details`) for observability. Backends should attach HTTP context when available (see `xlai-backend-openai::provider_response`).

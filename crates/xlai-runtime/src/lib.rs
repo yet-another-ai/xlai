@@ -1,5 +1,6 @@
 mod agent;
 mod chat;
+mod execution_handle;
 mod fs;
 pub mod local_common;
 mod prompt;
@@ -10,15 +11,17 @@ use std::sync::Arc;
 use async_stream::try_stream;
 use futures_util::StreamExt;
 use xlai_core::{
-    BoxStream, ChatChunk, ChatModel, ChatRequest, ChatResponse, EmbeddingModel, EmbeddingRequest,
-    EmbeddingResponse, ErrorKind, ImageGenerationModel, KnowledgeHit, KnowledgeQuery,
-    KnowledgeStore, RuntimeCapability, Skill, SkillId, SkillStore, ToolCall, ToolExecutor,
-    ToolResult, TranscriptionModel, TtsModel, VectorSearchHit, VectorSearchQuery, VectorStore,
+    BoxStream, ChatChunk, ChatExecutionOverrides, ChatModel, ChatRequest, ChatResponse,
+    EmbeddingModel, EmbeddingRequest, EmbeddingResponse, ErrorKind, ImageGenerationModel,
+    KnowledgeHit, KnowledgeQuery, KnowledgeStore, RuntimeCapability, Skill, SkillId, SkillStore,
+    ToolCall, ToolExecutor, ToolResult, TranscriptionModel, TtsExecutionConfig,
+    TtsExecutionOverrides, TtsModel, TtsRequest, VectorSearchHit, VectorSearchQuery, VectorStore,
     XlaiError,
 };
 
 pub use agent::{Agent, McpRegistry};
 pub use chat::{Chat, ChatExecutionEvent};
+pub use execution_handle::ChatExecutionHandle;
 #[cfg(not(target_arch = "wasm32"))]
 pub use fs::LocalFileSystem;
 pub use fs::{MemoryFileSystem, boxed_file_system};
@@ -26,14 +29,14 @@ pub use prompt::EmbeddedPromptStore;
 pub use skill_store::MarkdownSkillStore;
 pub use tera::Context as PromptContext;
 pub use xlai_core::{
-    ChatBackend, ChatContent, ChatRetryPolicy, ContentPart, DirectoryFileSystem, FileSystem,
-    FsEntry, FsEntryKind, FsPath, GeneratedImage, ImageDetail, ImageGenerationBackend,
-    ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality,
-    ImageGenerationRequest, ImageGenerationResponse, MediaSource, ReadableFileSystem,
-    ReasoningEffort, StreamTextDelta, ToolCallExecutionMode, ToolSchema, ToolSchemaKind,
-    TranscriptionBackend, TranscriptionRequest, TranscriptionResponse, TtsAudioFormat, TtsBackend,
-    TtsChunk, TtsDeliveryMode, TtsRequest, TtsResponse, VoiceReferenceSample, VoiceSpec,
-    WritableFileSystem,
+    CancellationSignal, ChatBackend, ChatContent, ChatExecutionConfig, ChatRetryPolicy,
+    ContentPart, DirectoryFileSystem, ExecutionLatencyMode, FileSystem, FsEntry, FsEntryKind,
+    FsPath, GeneratedImage, ImageDetail, ImageGenerationBackend, ImageGenerationBackground,
+    ImageGenerationOutputFormat, ImageGenerationQuality, ImageGenerationRequest,
+    ImageGenerationResponse, MediaSource, ReadableFileSystem, ReasoningEffort, StreamTextDelta,
+    ToolCallExecutionMode, ToolSchema, ToolSchemaKind, TranscriptionBackend, TranscriptionRequest,
+    TranscriptionResponse, TtsAudioFormat, TtsBackend, TtsChunk, TtsDeliveryMode, TtsResponse,
+    VoiceReferenceSample, VoiceSpec, WritableFileSystem,
 };
 
 #[derive(Clone, Default)]
@@ -49,6 +52,9 @@ pub struct RuntimeBuilder {
     vector_store: Option<Arc<dyn VectorStore>>,
     file_system: Option<Arc<dyn FileSystem>>,
     capabilities: Vec<RuntimeCapability>,
+    chat_execution_defaults: ChatExecutionOverrides,
+    tts_execution_defaults: TtsExecutionOverrides,
+    default_max_tool_round_trips: Option<usize>,
 }
 
 impl RuntimeBuilder {
@@ -165,6 +171,27 @@ impl RuntimeBuilder {
         self
     }
 
+    /// Default advisory chat execution hints applied to every [`Chat`] / [`Agent`] session.
+    #[must_use]
+    pub fn with_chat_execution_defaults(mut self, defaults: ChatExecutionOverrides) -> Self {
+        self.chat_execution_defaults = defaults;
+        self
+    }
+
+    /// Default advisory TTS execution hints merged into outgoing [`TtsRequest`] values.
+    #[must_use]
+    pub fn with_tts_execution_defaults(mut self, defaults: TtsExecutionOverrides) -> Self {
+        self.tts_execution_defaults = defaults;
+        self
+    }
+
+    /// Default maximum automatic tool round-trips for [`Agent`] sessions created from this runtime.
+    #[must_use]
+    pub fn with_default_max_tool_round_trips(mut self, max_round_trips: usize) -> Self {
+        self.default_max_tool_round_trips = Some(max_round_trips);
+        self
+    }
+
     /// Builds an `XlaiRuntime` from the configured capabilities.
     ///
     /// # Errors
@@ -183,6 +210,9 @@ impl RuntimeBuilder {
             vector_store: self.vector_store,
             file_system: self.file_system,
             capabilities: dedup_capabilities(self.capabilities),
+            chat_execution_defaults: self.chat_execution_defaults,
+            tts_execution_defaults: self.tts_execution_defaults,
+            default_max_tool_round_trips: self.default_max_tool_round_trips,
         };
 
         if runtime.capabilities.is_empty() {
@@ -209,6 +239,9 @@ pub struct XlaiRuntime {
     vector_store: Option<Arc<dyn VectorStore>>,
     file_system: Option<Arc<dyn FileSystem>>,
     capabilities: Vec<RuntimeCapability>,
+    pub(crate) chat_execution_defaults: ChatExecutionOverrides,
+    pub(crate) tts_execution_defaults: TtsExecutionOverrides,
+    pub(crate) default_max_tool_round_trips: Option<usize>,
 }
 
 impl XlaiRuntime {
@@ -236,6 +269,47 @@ impl XlaiRuntime {
     #[must_use]
     pub fn has_capability(&self, capability: RuntimeCapability) -> bool {
         self.capabilities.contains(&capability)
+    }
+
+    #[must_use]
+    pub fn chat_execution_defaults(&self) -> &ChatExecutionOverrides {
+        &self.chat_execution_defaults
+    }
+
+    #[must_use]
+    pub fn tts_execution_defaults(&self) -> &TtsExecutionOverrides {
+        &self.tts_execution_defaults
+    }
+
+    #[must_use]
+    pub fn default_max_tool_round_trips(&self) -> Option<usize> {
+        self.default_max_tool_round_trips
+    }
+
+    /// Best-effort warmup for the configured chat model (no-op when absent or unsupported).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the underlying model warmup fails.
+    pub async fn warmup_chat(&self) -> Result<(), XlaiError> {
+        let Some(chat_model) = self.chat_model.as_ref() else {
+            return Ok(());
+        };
+
+        chat_model.warmup().await
+    }
+
+    /// Best-effort warmup for the configured TTS model (no-op when absent or unsupported).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the underlying model warmup fails.
+    pub async fn warmup_tts(&self) -> Result<(), XlaiError> {
+        let Some(tts_model) = self.tts_model.as_ref() else {
+            return Ok(());
+        };
+
+        tts_model.warmup().await
     }
 
     /// Executes a single chat request with the configured chat model.
@@ -267,9 +341,17 @@ impl XlaiRuntime {
             .clone()
             .ok_or_else(|| missing_dependency("chat model"))?;
 
+        let cancel = request.cancellation.clone();
+
         Ok(Box::pin(try_stream! {
             let mut stream = chat_model.generate_stream(request);
             while let Some(chunk) = stream.next().await {
+                if cancel.as_ref().is_some_and(|signal| signal.is_cancelled()) {
+                    Err(XlaiError::new(
+                        ErrorKind::Cancelled,
+                        "chat stream was cancelled",
+                    ))?;
+                }
                 yield chunk?;
             }
         }))
@@ -331,11 +413,22 @@ impl XlaiRuntime {
     /// # Errors
     ///
     /// Returns an error if no TTS model is configured or if the provider request fails.
-    pub async fn synthesize(&self, request: TtsRequest) -> Result<TtsResponse, XlaiError> {
+    pub async fn synthesize(&self, mut request: TtsRequest) -> Result<TtsResponse, XlaiError> {
         let tts_model = self
             .tts_model
             .as_ref()
             .ok_or_else(|| missing_dependency("tts model"))?;
+
+        let request_layer = request
+            .execution
+            .as_ref()
+            .map(TtsExecutionConfig::to_overrides);
+        let merged = TtsExecutionConfig::merge_optional_layers(
+            Some(&self.tts_execution_defaults),
+            None,
+            request_layer.as_ref(),
+        );
+        request.execution = (merged != TtsExecutionConfig::default()).then_some(merged);
 
         tts_model.synthesize(request).await
     }
@@ -347,12 +440,23 @@ impl XlaiRuntime {
     /// Returns an error if no TTS model is configured.
     pub fn stream_synthesize(
         &self,
-        request: TtsRequest,
+        mut request: TtsRequest,
     ) -> Result<BoxStream<'static, Result<TtsChunk, XlaiError>>, XlaiError> {
         let tts_model = self
             .tts_model
             .clone()
             .ok_or_else(|| missing_dependency("tts model"))?;
+
+        let request_layer = request
+            .execution
+            .as_ref()
+            .map(TtsExecutionConfig::to_overrides);
+        let merged = TtsExecutionConfig::merge_optional_layers(
+            Some(&self.tts_execution_defaults),
+            None,
+            request_layer.as_ref(),
+        );
+        request.execution = (merged != TtsExecutionConfig::default()).then_some(merged);
 
         Ok(Box::pin(try_stream! {
             let mut stream = tts_model.synthesize_stream(request);

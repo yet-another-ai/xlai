@@ -80,6 +80,7 @@ fn clone_request(
         instructions: None,
         delivery,
         metadata,
+        ..Default::default()
     }
 }
 
@@ -121,6 +122,7 @@ fn e2e_synthesize_via_runtime() {
                 instructions: None,
                 delivery: Default::default(),
                 metadata: Default::default(),
+                ..Default::default()
             })
             .await
             .expect("synthesize");

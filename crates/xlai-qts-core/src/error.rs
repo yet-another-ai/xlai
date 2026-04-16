@@ -29,6 +29,9 @@ pub enum Qwen3TtsError {
     #[error("invalid input: {0}")]
     InvalidInput(String),
 
+    #[error("synthesis cancelled")]
+    Cancelled,
+
     #[error("missing GGUF tensor: {0}")]
     MissingTensor(String),
 

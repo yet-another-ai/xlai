@@ -43,6 +43,7 @@ fn serializes_multimodal_user_message_as_content_array() {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy: None,
+        ..Default::default()
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -83,6 +84,7 @@ fn serializes_plain_text_user_message_as_string_content() {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy: None,
+        ..Default::default()
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -132,6 +134,7 @@ fn serializes_inline_audio_as_file_content_part() {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy: None,
+        ..Default::default()
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -178,6 +181,7 @@ fn serializes_json_schema_structured_output_as_text_format() {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy: None,
+        ..Default::default()
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -222,6 +226,7 @@ fn json_schema_structured_output_defaults_response_format_name() {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy: None,
+        ..Default::default()
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -265,6 +270,7 @@ fn rejects_lark_structured_output_for_openai_compatible_backend() {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy: None,
+        ..Default::default()
     };
 
     let result = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -312,6 +318,7 @@ fn serializes_assistant_tool_calls_for_follow_up_rounds() {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy: None,
+        ..Default::default()
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -357,6 +364,7 @@ fn serializes_reasoning_effort_for_openai_requests() {
         max_output_tokens: None,
         reasoning_effort: Some(ReasoningEffort::High),
         retry_policy: None,
+        ..Default::default()
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
@@ -416,6 +424,7 @@ fn serializes_nested_tool_schema_for_openai_tools() {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy: None,
+        ..Default::default()
     };
 
     let payload = OpenAiChatRequest::from_core_request(&config, request, false);
