@@ -12,6 +12,7 @@ use xlai_core::{
 use super::common::*;
 use crate::RuntimeBuilder;
 
+#[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
 async fn execution_defaults_merge_into_outgoing_request() -> Result<(), XlaiError> {
     let reqs = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -50,12 +51,18 @@ async fn execution_defaults_merge_into_outgoing_request() -> Result<(), XlaiErro
 
     let r = lock_unpoisoned(&reqs);
     let req = &r[0];
-    let exec = req.execution.as_ref().expect("execution merged");
+    let exec = req.execution.as_ref().ok_or_else(|| {
+        XlaiError::new(
+            ErrorKind::Provider,
+            "expected merged execution on outgoing ChatRequest",
+        )
+    })?;
     assert_eq!(exec.latency_mode, ExecutionLatencyMode::Interactive);
     assert!(exec.cancel_on_drop);
     Ok(())
 }
 
+#[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
 async fn stream_chat_stops_on_cancellation_signal() -> Result<(), XlaiError> {
     let model = Arc::new(StreamingChatModel::new(vec![vec![
@@ -99,17 +106,27 @@ async fn stream_chat_stops_on_cancellation_signal() -> Result<(), XlaiError> {
     request.execution = Some(ChatExecutionConfig::default());
 
     let mut stream = runtime.stream_chat(request)?;
-    let _ = stream.next().await.expect("stream item")?;
-    cancel.cancel();
-    let err = stream
+    let first = stream
         .next()
         .await
-        .expect("stream should yield")
-        .expect_err("cancelled");
+        .ok_or_else(|| XlaiError::new(ErrorKind::Provider, "stream ended before first chunk"))?;
+    first?;
+    cancel.cancel();
+    let second = stream
+        .next()
+        .await
+        .ok_or_else(|| XlaiError::new(ErrorKind::Provider, "stream ended before cancel error"))?;
+    let err = second.err().ok_or_else(|| {
+        XlaiError::new(
+            ErrorKind::Provider,
+            "expected cancelled error on second chunk, got Ok",
+        )
+    })?;
     assert_eq!(err.kind, ErrorKind::Cancelled);
     Ok(())
 }
 
+#[allow(clippy::panic_in_result_fn)]
 #[tokio::test]
 async fn runtime_exposes_default_max_tool_round_trips() -> Result<(), XlaiError> {
     let runtime = RuntimeBuilder::new()
