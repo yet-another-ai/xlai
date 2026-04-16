@@ -52,6 +52,8 @@ fn prepared_request_allows_tool_calls() {
         structured_output: None,
         temperature: 0.8,
         max_output_tokens: 64,
+        execution: None,
+        cancellation: None,
     };
 
     let result = validate_prepared_for_llama(&request, &config);
@@ -128,6 +130,8 @@ fn structured_output_instruction_is_added_as_system_message() {
         ),
         temperature: 0.8,
         max_output_tokens: 64,
+        execution: None,
+        cancellation: None,
     };
 
     let messages = prompt_messages_with_constraints(&prepared);
@@ -157,6 +161,8 @@ fn lark_structured_output_instruction_is_added_as_system_message() {
         ),
         temperature: 0.8,
         max_output_tokens: 64,
+        execution: None,
+        cancellation: None,
     };
 
     let messages = prompt_messages_with_constraints(&prepared);
@@ -194,6 +200,8 @@ fn tool_instruction_is_added_as_system_message() {
         structured_output: None,
         temperature: 0.8,
         max_output_tokens: 64,
+        execution: None,
+        cancellation: None,
     };
 
     let messages = prompt_messages_with_constraints(&prepared);
