@@ -17,7 +17,7 @@ All members live under [`crates/`](https://github.com/yetanother.ai/xlai/tree/ma
 | ------------------------ | ---------------------------------------------------------------------------- |
 | `xlai-build-native`      | Internal build-script helpers (CMake, OpenBLAS, Vulkan, llama.cpp patches)   |
 | `xlai-sys-llama`         | Vendored `llama.cpp` build (CMake + bindgen); sources under `vendor/native/` |
-| `xlai-sys-ggml`          | Vendored standalone `ggml` build for QTS (CMake + bindgen)                     |
+| `xlai-sys-ggml`          | Vendored standalone `ggml` build for QTS (CMake + bindgen)                   |
 | `xlai-local-common`      | Local chat prompt + tool JSON (used by llama.cpp / transformers.js backends) |
 | `xlai-backend-llama-cpp` | Native llama.cpp chat backend                                                |
 | `xlai-backend-gemini`    | Google Gemini HTTP backend                                                   |
