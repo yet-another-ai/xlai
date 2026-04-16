@@ -16,7 +16,7 @@ env:
   SCCACHE_GHA_ENABLED: 'true'
   RUSTC_WRAPPER: sccache
   CARGO_INCREMENTAL: '0'
-  # crates.io publish order (must match docs/publishing.md)
+  # crates.io publish order (must match docs/development/publishing.md)
   PUBLISH_CRATES_ORDER: >-
     xlai-core
     xlai-runtime

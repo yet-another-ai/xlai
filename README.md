@@ -1,5 +1,7 @@
 # XLAI
 
+**Documentation site:** the VitePress site lives under [`docs/`](docs/). Build and preview locally with `pnpm docs:dev` and `pnpm docs:build`.
+
 `xlai` is a Rust-first AI integration workspace for building reusable AI calling flows across native applications and the browser.
 The name was inspired by [moeru-ai/xsai](https://github.com/moeru-ai/xsai), which focuses on extra-small AI SDK.
 
@@ -46,7 +48,7 @@ xlai/
 └── .github/workflows/
 ```
 
-For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). For publish vs internal crates, see [docs/crates-taxonomy.md](docs/crates-taxonomy.md).
+For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). For publish vs internal crates, see [docs/development/crates-taxonomy.md](docs/development/crates-taxonomy.md).
 
 ### Crates And Packages
 
@@ -63,7 +65,7 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). F
 - `crates/xlai-native`
   Native Rust-facing facade crate (thin re-export of `xlai-facade`).
 - `crates/xlai-wasm`
-  Browser-facing `wasm-bindgen` facade crate for web integration. Default Cargo feature `qts` enables local QTS entrypoints (`qtsBrowserTts`, manifest validation); the in-browser engine is still a stub until GGML/ORT WASM work lands (see `docs/qts-wasm-browser-runtime.md`).
+  Browser-facing `wasm-bindgen` facade crate for web integration. Default Cargo feature `qts` enables local QTS entrypoints (`qtsBrowserTts`, manifest validation); the in-browser engine is still a stub until GGML/ORT WASM work lands (see `docs/qts/wasm-browser-runtime.md`).
 - `crates/xlai-backend-llama-cpp`
   Native `llama.cpp` chat backend for local GGUF inference.
 - `crates/xlai-sys-llama`
@@ -79,7 +81,7 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). F
 - `crates/xlai-qts-manifest`
   Serde types for browser QTS model manifests and capability JSON (no GGML/ORT); used by `xlai-wasm` (feature `qts`) and re-exported as `xlai_qts_core::browser`.
 - `crates/xlai-qts-core`
-  Qwen3 TTS engine; links standalone `ggml` through `xlai-sys-ggml`. Exposes native `TtsModel` (`QtsTtsModel`, WAV output; tuning via `TtsRequest` metadata `xlai.qts.*`). **`VoiceSpec::Clone`** uses the first reference sample (inline WAV only): x-vector and ICL prompts, with optional `xlai.qts.voice_clone_mode` (`xvector` \| `icl`). ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts-export-and-hf-publish.md`). Pipelined vocoder chunking and overlap are documented in `docs/qts-vocoder-streaming.md`. `xlai_qts_core::browser` re-exports `xlai-qts-manifest`.
+  Qwen3 TTS engine; links standalone `ggml` through `xlai-sys-ggml`. Exposes native `TtsModel` (`QtsTtsModel`, WAV output; tuning via `TtsRequest` metadata `xlai.qts.*`). **`VoiceSpec::Clone`** uses the first reference sample (inline WAV only): x-vector and ICL prompts, with optional `xlai.qts.voice_clone_mode` (`xvector` \| `icl`). ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts/export-and-hf-publish.md`). Pipelined vocoder chunking and overlap are documented in `docs/qts/vocoder-streaming.md`. `xlai_qts_core::browser` re-exports `xlai-qts-manifest`.
 - `crates/xlai-qts-cli`
   Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without voice-clone flags, `synthesize` uses `xlai-runtime` + `xlai-qts-core` (`QtsTtsModel`). With `--voice-clone-prompt` or `--ref-audio`, it uses the direct engine path. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
 
@@ -421,10 +423,10 @@ transcription-capable model such as `gpt-4o-mini-transcribe`.
 
 `.github/workflows/publish.yml` runs **crates.io** and **npm** checks:
 
-- On **pull requests** and pushes to **`main`**: `cargo publish --dry-run` for the [publishable Rust crate subset](docs/publishing.md) (in dependency order) and `npm publish --dry-run` for `@yai-xlai/xlai` after a full package build.
+- On **pull requests** and pushes to **`main`**: `cargo publish --dry-run` for the [publishable Rust crate subset](docs/development/publishing.md) (in dependency order) and `npm publish --dry-run` for `@yai-xlai/xlai` after a full package build.
 - On pushes to tags matching **`v*`**: real `cargo publish` and `npm publish` using secrets on the GitHub **`publish`** environment (`CRATES_IO_TOKEN`, `NPM_TOKEN`).
 
-See [`docs/publishing.md`](docs/publishing.md) for ordering, version bumps, and crates that are not on crates.io yet.
+See [`docs/development/publishing.md`](docs/development/publishing.md) for ordering, version bumps, and crates that are not on crates.io yet.
 
 ### E2E workflow
 
@@ -448,7 +450,7 @@ CI downloads that fixture with the Hugging Face CLI and caches it between runs.
 
 Ignored QTS integration tests in `xlai-qts-core` expect a full Qwen3 TTS model directory:
 
-- `XLAI_QTS_MODEL_DIR` pointing at a folder containing the GGUF talker, ONNX vocoder (`qwen3-tts-vocoder.onnx`), tokenizer, and `config.json` (see `xlai_qts_core::ModelPaths`). For **ICL** voice clone, also add `qwen3-tts-reference-codec.onnx` and `qwen3-tts-reference-codec-psreprocess.json` (export with `uv run export-model-artifacts`; see `docs/qts-export-and-hf-publish.md`).
+- `XLAI_QTS_MODEL_DIR` pointing at a folder containing the GGUF talker, ONNX vocoder (`qwen3-tts-vocoder.onnx`), tokenizer, and `config.json` (see `xlai_qts_core::ModelPaths`). For **ICL** voice clone, also add `qwen3-tts-reference-codec.onnx` and `qwen3-tts-reference-codec-psreprocess.json` (export with `uv run export-model-artifacts`; see `docs/qts/export-and-hf-publish.md`).
 
 CI e2e currently **skips** those tests because no Hugging Face download step is wired yet; run them locally after downloading weights.
 

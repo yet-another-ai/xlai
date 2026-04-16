@@ -28,7 +28,7 @@ function qtsErrorCode(err: unknown): string | undefined {
  * Browser matrix (Chromium / Firefox / WebKit) is covered by Playwright projects in
  * playwright.config.ts. This spec does not require WebGPU or real models: it asserts the
  * stub wiring and stable error codes until GGML/ORT WASM engines land
- * (see docs/qts-wasm-browser-runtime.md).
+ * (see docs/qts/wasm-browser-runtime.md).
  */
 test('qtsBrowserTtsCapabilities reports stub engine_pending', async () => {
   const cap = await qtsBrowserTtsCapabilities();

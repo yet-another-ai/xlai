@@ -69,7 +69,7 @@ wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4.67"
 windows-sys = "0.61"
 
-# Path + version for workspace members that are published to crates.io (see docs/publishing.md).
+# Path + version for workspace members that are published to crates.io (see docs/development/publishing.md).
 xlai-core = { path = "crates/xlai-core", version = "0.1.0" }
 xlai-local-common = { path = "crates/xlai-local-common", version = "0.1.0" }
 xlai-runtime = { path = "crates/xlai-runtime", version = "0.1.0" }

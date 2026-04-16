@@ -10,17 +10,18 @@ This document summarizes crate boundaries and data flow. The **stable public con
 | `xlai-local-common` | Local (non-API) chat prep: prompt templates, tool JSON envelope, `PreparedLocalChatRequest`. Used by `xlai-backend-llama-cpp` / `xlai-backend-transformersjs`; re-exported as `xlai_runtime::local_common` for compatibility. |
 | `xlai-runtime` | `RuntimeBuilder` / `XlaiRuntime`, `Chat` and `Agent` sessions, tool execution, streaming, embedded prompts/skills. |
 | `xlai-backend-openai` | OpenAI-compatible HTTP client (chat, transcription, TTS). |
+| `xlai-backend-gemini` | Google Gemini HTTP client. |
 | `xlai-backend-llama-cpp` | Local GGUF inference via llama.cpp; maps `xlai-core` requests into local prompt/tool formats. |
 | `xlai-backend-transformersjs` | Browser-side chat via a JS adapter (WASM only). |
 | `xlai-qts-manifest` | Browser QTS manifest / capability serde types (no GGML/ORT). Re-exported from `xlai_qts_core::browser`; `xlai-wasm` (feature `qts`) depends on it directly. |
 | `xlai-qts-core` | Qwen3 TTS engine (GGUF + GGML talker, ONNX vocoder, optional ONNX reference-codec encoder for ICL `ref_code`, tokenizer, streaming) **and** native `TtsModel` bridge (`QtsTtsModel`): maps `TtsRequest` to the engine; `VoiceSpec::Clone` (inline WAV) builds native `VoiceClonePromptV2` (x-vector / ICL). |
-| `scripts/qts` (root `pyproject.toml`) | Python export: `uv run export-model-artifacts`, `uv run xlai-qts-hf-release` — see `docs/qts-export-and-hf-publish.md`. |
+| `scripts/qts` (root `pyproject.toml`) | Python export: `uv run export-model-artifacts`, `uv run xlai-qts-hf-release` — see `docs/qts/export-and-hf-publish.md`. |
 | `xlai-sys-llama` | Vendored `llama.cpp` build (CMake + bindgen) for the llama backend. |
 | `xlai-sys-ggml` | Vendored standalone `ggml` build (CMake + bindgen) for QTS. |
 | `xlai-qts-cli` | `synthesize` / `profile` / `tui` binary (`xlai-qts`) for local TTS workflows. |
-| `xlai-facade` | Internal: shared re-exports of `xlai-core`, `xlai-runtime`, OpenAI + transformers.js backends, optional `llama` + `qts` for native. Consumed by `xlai-native` (with `llama` + accelerators) and `xlai-wasm` (no `llama`, no `qts` engine — WASM QTS stays stub + `xlai-qts-manifest` only). |
+| `xlai-facade` | Internal: shared re-exports of `xlai-core`, `xlai-runtime`, OpenAI + Gemini + transformers.js backends, optional `llama` + `qts` for native. Consumed by `xlai-native` (with `llama` + accelerators) and `xlai-wasm` (no `llama`, no `qts` engine — WASM QTS stays stub + `xlai-qts-manifest` only). |
 | `xlai-native` | Native Rust facade: thin re-export of `xlai-facade`. Enable optional `qts` for `QtsTtsModel` (avoids linking QTS/ggml unless needed). |
-| `xlai-wasm` | `wasm-bindgen` entry points and JS-facing session factories. Default feature `qts` enables local QTS WASM surface (stub `TtsModel`, shared browser manifest types, `qtsBrowserTts*`; see `docs/qts-wasm-browser-runtime.md`). |
+| `xlai-wasm` | `wasm-bindgen` entry points and JS-facing session factories. Default feature `qts` enables local QTS WASM surface (stub `TtsModel`, shared browser manifest types, `qtsBrowserTts*`; see `docs/qts/wasm-browser-runtime.md`). |
 | `xlai-ffi` | C ABI facade for future native interop. |
 
 ## Request flow (chat)

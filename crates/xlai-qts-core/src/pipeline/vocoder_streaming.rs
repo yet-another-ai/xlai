@@ -2,7 +2,7 @@
 //!
 //! Qwen3-TTS-12Hz targets a causal codec; chunking the vocoder for throughput still benefits from
 //! a small temporal overlap between chunks. See [`QTS12HZ_RECOMMENDED_VOCODER_CHUNK_FRAMES`] and
-//! `docs/qts-vocoder-streaming.md`.
+//! `docs/qts/vocoder-streaming.md`.
 
 use crate::Qwen3TtsError;
 use crate::pipeline::tts_transformer::VocoderChunk;

@@ -13,7 +13,7 @@ pub mod logical_names {
     pub const REFERENCE_CODEC_PREPROCESS_JSON: &str = "reference_codec_preprocess_json";
 }
 
-/// One file in a QTS model bundle (see `docs/qts-wasm-model-manifest.md`).
+/// One file in a QTS model bundle (see `docs/qts/wasm-model-manifest.md`).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct QtsModelFileEntry {
     pub logical_name: String,
@@ -66,7 +66,7 @@ impl QtsModelManifest {
     }
 }
 
-/// Reported engine / GPU tier for browser UIs (see `docs/qts-wasm-browser-runtime.md`).
+/// Reported engine / GPU tier for browser UIs (see `docs/qts/wasm-browser-runtime.md`).
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum QtsBrowserGpuTier {

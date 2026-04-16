@@ -10,7 +10,7 @@
 //! - Override with metadata `xlai.qts.voice_clone_mode`: `icl` or `xvector`.
 //!
 //! ICL requires `qwen3-tts-reference-codec.onnx` + `qwen3-tts-reference-codec-preprocess.json` in the model dir
-//! (export with `uv run export-model-artifacts`; see `docs/qts-export-and-hf-publish.md` in the repo root).
+//! (export with `uv run export-model-artifacts`; see `docs/qts/export-and-hf-publish.md` in the repo root).
 //!
 //! ## QTS tuning via metadata
 //!
@@ -23,7 +23,7 @@
 //! - `xlai.qts.repetition_penalty` (number)
 //! - `xlai.qts.language_id` (number)
 //! - `xlai.qts.vocoder_thread_count` (number)
-//! - `xlai.qts.vocoder_chunk_size` (number; `> 0` enables pipelining — use **4** for 12Hz, see `QTS12HZ_RECOMMENDED_VOCODER_CHUNK_FRAMES` / `docs/qts-vocoder-streaming.md`)
+//! - `xlai.qts.vocoder_chunk_size` (number; `> 0` enables pipelining — use **4** for 12Hz, see `QTS12HZ_RECOMMENDED_VOCODER_CHUNK_FRAMES` / `docs/qts/vocoder-streaming.md`)
 //! - `xlai.qts.talker_kv_mode` (string: `f16` or `turboquant`)
 //! - `xlai.qts.voice_clone_mode` (string: `icl` or `xvector`)
 
