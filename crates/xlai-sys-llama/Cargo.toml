@@ -26,6 +26,7 @@ vulkan = []
 bindgen.workspace = true
 cmake.workspace = true
 cc = "1.2.58"
+xlai-build-native.workspace = true
 
 [lints]
 workspace = true

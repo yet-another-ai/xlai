@@ -1,6 +1,6 @@
 //! Browser-side QTS manifest and capability types.
 //!
-//! Shared by `xlai-qts-core` (as `xlai_qts_core::browser`) and `xlai-wasm`. No `xlai-sys`, ORT, or disk GGUF.
+//! Shared by `xlai-qts-core` (as `xlai_qts_core::browser`) and `xlai-wasm`. No native sys crates, ORT, or disk GGUF.
 
 /// Logical names for artifacts referenced by a [`QtsModelManifest`].
 ///

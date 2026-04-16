@@ -1,0 +1,15 @@
+[package]
+name = "xlai-build-native"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared helpers for xlai native build scripts (CMake, OpenBLAS, Vulkan, llama.cpp patches)."
+publish = false
+
+[dependencies]
+cmake = { workspace = true }
+
+[lints]
+workspace = true

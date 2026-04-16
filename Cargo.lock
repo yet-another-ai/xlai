@@ -5394,6 +5394,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "xlai-build-native"
+version = "0.1.0"
+dependencies = [
+ "cmake",
+]
+
+[[package]]
 name = "xlai-core"
 version = "0.1.0"
 dependencies = [
@@ -5520,6 +5527,7 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cmake",
+ "xlai-build-native",
 ]
 
 [[package]]
@@ -5530,6 +5538,7 @@ dependencies = [
  "cc",
  "cmake",
  "tracing",
+ "xlai-build-native",
 ]
 
 [[package]]

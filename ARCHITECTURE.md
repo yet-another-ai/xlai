@@ -16,8 +16,9 @@ This document summarizes crate boundaries and data flow. The **stable public con
 | `xlai-qts-manifest` | Browser QTS manifest / capability serde types (no GGML/ORT). Re-exported from `xlai_qts_core::browser`; `xlai-wasm` (feature `qts`) depends on it directly. |
 | `xlai-qts-core` | Qwen3 TTS engine (GGUF + GGML talker, ONNX vocoder, optional ONNX reference-codec encoder for ICL `ref_code`, tokenizer, streaming) **and** native `TtsModel` bridge (`QtsTtsModel`): maps `TtsRequest` to the engine; `VoiceSpec::Clone` (inline WAV) builds native `VoiceClonePromptV2` (x-vector / ICL). |
 | `scripts/qts` (root `pyproject.toml`) | Python export: `uv run export-model-artifacts`, `uv run xlai-qts-hf-release` — see `docs/qts/export-and-hf-publish.md`. |
-| `xlai-sys-llama` | Vendored `llama.cpp` build (CMake + bindgen) for the llama backend. |
-| `xlai-sys-ggml` | Vendored standalone `ggml` build (CMake + bindgen) for QTS. |
+| `xlai-build-native` | Internal: shared CMake / OpenBLAS / Vulkan helpers for native `build.rs` scripts (`xlai-sys-*`). |
+| `xlai-sys-llama` | Vendored `llama.cpp` build (CMake + bindgen) for the llama backend. Sources: `vendor/native/llama.cpp`. |
+| `xlai-sys-ggml` | Vendored standalone `ggml` build (CMake + bindgen) for QTS. Sources: `vendor/native/ggml`. |
 | `xlai-qts-cli` | `synthesize` / `profile` / `tui` binary (`xlai-qts`) for local TTS workflows. |
 | `xlai-facade` | Internal: shared re-exports of `xlai-core`, `xlai-runtime`, OpenAI + Gemini + transformers.js backends, optional `llama` + `qts` for native. Consumed by `xlai-native` (with `llama` + accelerators) and `xlai-wasm` (no `llama`, no `qts` engine — WASM QTS stays stub + `xlai-qts-manifest` only). |
 | `xlai-native` | Native Rust facade: thin re-export of `xlai-facade`. Enable optional `qts` for `QtsTtsModel` (avoids linking QTS/ggml unless needed). |

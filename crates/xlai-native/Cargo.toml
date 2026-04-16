@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 description = "Aggregate native xlai backends (llama.cpp, OpenAI, QTS, transformers.js)."
 publish = false
+build = "build.rs"
 
 [features]
 default = ["openblas"]
