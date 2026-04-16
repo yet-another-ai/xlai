@@ -214,6 +214,7 @@ async fn runtime_synthesize_uses_configured_backend() -> Result<(), XlaiError> {
             instructions: None,
             delivery: xlai_core::TtsDeliveryMode::Unary,
             metadata: empty_metadata(),
+            ..Default::default()
         })
         .await?;
 
@@ -253,6 +254,7 @@ async fn runtime_synthesize_errors_without_backend() -> Result<(), XlaiError> {
             instructions: None,
             delivery: xlai_core::TtsDeliveryMode::Unary,
             metadata: empty_metadata(),
+            ..Default::default()
         })
         .await
     {
@@ -307,6 +309,7 @@ async fn runtime_stream_synthesize_uses_trait_default_for_unary_only_model() -> 
             instructions: None,
             delivery: xlai_core::TtsDeliveryMode::Stream,
             metadata: empty_metadata(),
+            ..Default::default()
         })?
         .boxed();
 

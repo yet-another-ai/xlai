@@ -9,12 +9,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tera::Context;
 use xlai_core::{
-    BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatRequest, ChatResponse,
-    ChatRetryPolicy, ContentPart, ErrorKind, MaybeSend, MessageRole, ReasoningEffort, RuntimeBound,
-    StructuredOutput, ToolCall, ToolCallExecutionMode, ToolDefinition, ToolResult, XlaiError,
+    BoxFuture, BoxStream, CancellationSignal, ChatChunk, ChatContent, ChatExecutionConfig,
+    ChatExecutionOverrides, ChatMessage, ChatRequest, ChatResponse, ChatRetryPolicy, ContentPart,
+    ErrorKind, MaybeSend, MessageRole, ReasoningEffort, RuntimeBound, StructuredOutput, ToolCall,
+    ToolCallExecutionMode, ToolDefinition, ToolResult, XlaiError,
 };
 
-use crate::{EmbeddedPromptStore, XlaiRuntime};
+use crate::{ChatExecutionHandle, EmbeddedPromptStore, XlaiRuntime};
 
 #[cfg(not(target_arch = "wasm32"))]
 type ToolCallback =
@@ -68,6 +69,8 @@ pub struct Chat {
     reasoning_effort: Option<ReasoningEffort>,
     structured_output: Option<StructuredOutput>,
     retry_policy: Option<ChatRetryPolicy>,
+    /// Session-level advisory execution overrides (merged on top of [`XlaiRuntime::chat_execution_defaults`]).
+    execution_overrides: ChatExecutionOverrides,
     tools: BTreeMap<String, RegisteredTool>,
 }
 
@@ -83,8 +86,21 @@ impl Chat {
             reasoning_effort: None,
             structured_output: None,
             retry_policy: None,
+            execution_overrides: ChatExecutionOverrides::default(),
             tools: BTreeMap::new(),
         }
+    }
+
+    #[must_use]
+    pub(crate) fn execution_overrides(&self) -> &ChatExecutionOverrides {
+        &self.execution_overrides
+    }
+
+    /// Session-level advisory execution overrides merged into every outgoing [`ChatRequest`].
+    #[must_use]
+    pub fn with_chat_execution_overrides(mut self, overrides: ChatExecutionOverrides) -> Self {
+        self.execution_overrides = overrides;
+        self
     }
 
     #[must_use]
@@ -258,7 +274,9 @@ impl Chat {
     ///
     /// Returns an error if the configured model request fails.
     pub async fn execute(&self, messages: Vec<ChatMessage>) -> Result<ChatResponse, XlaiError> {
-        self.runtime.chat(self.build_request(messages)).await
+        self.runtime
+            .chat(self.build_request(messages, None, None))
+            .await
     }
 
     /// Runs registered tools and the runtime tool executor for this batch (used by [`crate::Agent`]).
@@ -313,11 +331,22 @@ impl Chat {
         &self,
         messages: Vec<ChatMessage>,
     ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
+        self.stream_with_cancellation(messages, None, None)
+    }
+
+    /// Like [`Self::stream`], but attaches cooperative cancellation to the outgoing [`ChatRequest`].
+    #[must_use]
+    pub fn stream_with_cancellation(
+        &self,
+        messages: Vec<ChatMessage>,
+        cancellation: Option<CancellationSignal>,
+        request_layer: Option<ChatExecutionOverrides>,
+    ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
         let runtime = Arc::clone(&self.runtime);
         let chat = self.clone();
 
         Box::pin(try_stream! {
-            let request = chat.build_request(messages);
+            let request = chat.build_request(messages, request_layer.as_ref(), cancellation);
             let mut response = None;
             let mut model_stream = runtime.stream_chat(request)?;
 
@@ -338,7 +367,44 @@ impl Chat {
         })
     }
 
-    fn build_request(&self, messages: Vec<ChatMessage>) -> ChatRequest {
+    /// Single model-call stream exposed as a pollable [`ChatExecutionHandle`] (game-loop friendly).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the runtime cannot start a chat stream (for example, no chat model).
+    pub fn begin_stream(
+        &self,
+        messages: Vec<ChatMessage>,
+        request_layer: Option<ChatExecutionOverrides>,
+    ) -> Result<ChatExecutionHandle, XlaiError> {
+        let cancel = CancellationSignal::new();
+        let request = self.build_request(messages, request_layer.as_ref(), Some(cancel.clone()));
+        let cancel_on_drop = request
+            .execution
+            .as_ref()
+            .is_some_and(|cfg| cfg.cancel_on_drop);
+        let model_stream = self.runtime.stream_chat(request)?;
+        let mapped = model_stream.map(|r| r.map(ChatExecutionEvent::Model));
+        Ok(ChatExecutionHandle::new(
+            Box::pin(mapped),
+            cancel,
+            cancel_on_drop,
+        ))
+    }
+
+    fn build_request(
+        &self,
+        messages: Vec<ChatMessage>,
+        request_layer: Option<&ChatExecutionOverrides>,
+        cancellation: Option<CancellationSignal>,
+    ) -> ChatRequest {
+        let merged = ChatExecutionConfig::merge_optional_layers(
+            Some(&self.runtime.chat_execution_defaults),
+            Some(&self.execution_overrides),
+            request_layer,
+        );
+        let execution = (merged != ChatExecutionConfig::default()).then_some(merged);
+
         ChatRequest {
             model: self.model.clone(),
             system_prompt: self.system_prompt.clone(),
@@ -350,6 +416,8 @@ impl Chat {
             max_output_tokens: self.max_output_tokens,
             reasoning_effort: self.reasoning_effort,
             retry_policy: self.retry_policy.clone(),
+            execution,
+            cancellation,
         }
     }
 
@@ -361,7 +429,7 @@ impl Chat {
         &self,
         messages: &[ChatMessage],
     ) -> Option<u32> {
-        estimate_chat_request_input_tokens(&self.build_request(messages.to_vec()))
+        estimate_chat_request_input_tokens(&self.build_request(messages.to_vec(), None, None))
     }
 }
 

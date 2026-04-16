@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::content::MediaSource;
 use crate::error::{ErrorKind, XlaiError};
+use crate::execution::{CancellationSignal, TtsExecutionConfig};
 use crate::metadata::Metadata;
 use crate::runtime::{BoxFuture, BoxStream, RuntimeBound};
 
@@ -79,6 +80,29 @@ pub struct TtsRequest {
     pub delivery: TtsDeliveryMode,
     #[serde(default)]
     pub metadata: Metadata,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<TtsExecutionConfig>,
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub cancellation: Option<CancellationSignal>,
+}
+
+impl Default for TtsRequest {
+    fn default() -> Self {
+        Self {
+            model: None,
+            input: String::new(),
+            voice: VoiceSpec::Preset {
+                name: String::new(),
+            },
+            response_format: None,
+            speed: None,
+            instructions: None,
+            delivery: TtsDeliveryMode::default(),
+            metadata: Metadata::default(),
+            execution: None,
+            cancellation: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -112,6 +136,11 @@ pub trait TtsModel: RuntimeBound {
     fn provider_name(&self) -> &'static str;
 
     fn synthesize(&self, request: TtsRequest) -> BoxFuture<'_, Result<TtsResponse, XlaiError>>;
+
+    /// Best-effort warmup for local engines. Default is a no-op.
+    fn warmup(&self) -> BoxFuture<'_, Result<(), XlaiError>> {
+        Box::pin(async { Ok(()) })
+    }
 
     /// Streaming synthesis. Default implementation calls [`Self::synthesize`] once and emits
     /// [`TtsChunk::Started`], one [`TtsChunk::AudioDelta`], then [`TtsChunk::Finished`].

@@ -47,6 +47,7 @@ fn minimal_chat_request(retry_policy: Option<ChatRetryPolicy>) -> ChatRequest {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy,
+        ..Default::default()
     }
 }
 

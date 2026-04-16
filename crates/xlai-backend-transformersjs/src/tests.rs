@@ -38,6 +38,7 @@ fn native_chat_model_generate_is_unsupported() {
             max_output_tokens: None,
             reasoning_effort: None,
             retry_policy: None,
+            ..Default::default()
         }))
         .expect_err("wasm-only backend");
 
@@ -69,6 +70,7 @@ fn prepared_rejects_tools_plus_structured() {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy: None,
+        ..Default::default()
     };
 
     let opts = LocalChatPrepareOptions {

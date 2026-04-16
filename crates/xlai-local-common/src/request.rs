@@ -1,6 +1,6 @@
 use xlai_core::{
-    ChatMessage, ChatRequest, ContentPart, ErrorKind, MessageRole, StructuredOutput,
-    ToolDefinition, XlaiError,
+    CancellationSignal, ChatExecutionConfig, ChatMessage, ChatRequest, ContentPart, ErrorKind,
+    MessageRole, StructuredOutput, ToolDefinition, XlaiError,
 };
 
 use super::schema::validate_structured_output_schema;
@@ -35,6 +35,10 @@ pub struct PreparedLocalChatRequest {
     pub structured_output: Option<StructuredOutput>,
     pub temperature: f32,
     pub max_output_tokens: u32,
+    /// Merged advisory execution hints from the original [`ChatRequest`].
+    pub execution: Option<ChatExecutionConfig>,
+    /// Cooperative cancellation for in-process local generation.
+    pub cancellation: Option<CancellationSignal>,
 }
 
 impl PreparedLocalChatRequest {
@@ -86,6 +90,8 @@ impl PreparedLocalChatRequest {
             max_output_tokens: request
                 .max_output_tokens
                 .unwrap_or(options.default_max_output_tokens),
+            execution: request.execution,
+            cancellation: request.cancellation,
         })
     }
 

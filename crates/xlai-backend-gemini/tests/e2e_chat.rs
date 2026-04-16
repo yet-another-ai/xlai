@@ -37,6 +37,7 @@ async fn gemini_chat_smoke_test() -> Result<(), XlaiError> {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy: None,
+        ..Default::default()
     };
 
     let response = model.generate(request).await?;
@@ -89,6 +90,7 @@ async fn gemini_chat_stream_smoke_test() -> Result<(), XlaiError> {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy: None,
+        ..Default::default()
     };
 
     let mut stream = model.generate_stream(request);

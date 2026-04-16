@@ -213,6 +213,14 @@ impl TtsModel for QtsTtsModel {
             }
         }
     }
+
+    fn warmup(&self) -> BoxFuture<'_, Result<(), XlaiError>> {
+        let model = self.clone();
+        Box::pin(async move {
+            model.load_worker().map(|_| ())?;
+            Ok(())
+        })
+    }
 }
 
 impl QtsWorkerHandle {
@@ -289,6 +297,17 @@ fn run_worker_loop(engine: Qwen3TtsEngine, command_rx: std_mpsc::Receiver<Worker
 }
 
 fn run_synthesis(engine: &Qwen3TtsEngine, request: TtsRequest) -> Result<TtsResponse, XlaiError> {
+    if request
+        .cancellation
+        .as_ref()
+        .is_some_and(|c| c.is_cancelled())
+    {
+        return Err(XlaiError::new(
+            ErrorKind::Cancelled,
+            "QTS synthesis was cancelled",
+        ));
+    }
+
     let req = synthesize_request_from_tts(&request)?;
     let result = if let Some(clone) = voice_clone_params_from_tts(&request)? {
         if matches!(clone.mode, VoiceCloneMode::Icl)
@@ -339,9 +358,24 @@ fn run_stream_synthesis(
         }),
     )?;
 
+    if request
+        .cancellation
+        .as_ref()
+        .is_some_and(|c| c.is_cancelled())
+    {
+        return Err(XlaiError::new(
+            ErrorKind::Cancelled,
+            "QTS synthesis was cancelled",
+        ));
+    }
+
     let req = synthesize_request_from_tts(&request)?;
     let mut full_pcm = Vec::new();
+    let cancel_signal = request.cancellation.clone();
     let mut sink = |pcm_f32: &[f32]| -> Result<(), Qwen3TtsError> {
+        if cancel_signal.as_ref().is_some_and(|c| c.is_cancelled()) {
+            return Err(Qwen3TtsError::Cancelled);
+        }
         full_pcm.extend_from_slice(pcm_f32);
         let wav_chunk =
             pcm_f32_to_wav_bytes(pcm_f32, SAMPLE_RATE_HZ).map_err(Qwen3TtsError::InvalidInput)?;
@@ -405,7 +439,10 @@ fn send_stream_chunk(
 }
 
 fn map_qts_err(err: Qwen3TtsError) -> XlaiError {
-    XlaiError::new(ErrorKind::Provider, err.to_string())
+    match err {
+        Qwen3TtsError::Cancelled => XlaiError::new(ErrorKind::Cancelled, err.to_string()),
+        _ => XlaiError::new(ErrorKind::Provider, err.to_string()),
+    }
 }
 
 fn pcm_f32_to_wav_bytes(pcm_f32: &[f32], sample_rate_hz: u32) -> Result<Vec<u8>, String> {

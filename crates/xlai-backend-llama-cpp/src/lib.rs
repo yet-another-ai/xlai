@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use async_stream::try_stream;
 use tokio::sync::mpsc;
@@ -346,7 +347,26 @@ impl LlamaCppChatModel {
         let mut output_tokens = 0_u32;
         let mut finish_reason = FinishReason::Length;
 
+        let pacing_anchor = prepared
+            .execution
+            .as_ref()
+            .and_then(|e| e.max_tokens_per_second)
+            .filter(|t| *t > 0.0 && t.is_finite())
+            .map(|tps| (tps as f64, Instant::now()));
+        let mut paced_tokens = 0_u32;
+
         for _ in 0..prepared.max_output_tokens {
+            if prepared
+                .cancellation
+                .as_ref()
+                .is_some_and(|c| c.is_cancelled())
+            {
+                return Err(XlaiError::new(
+                    ErrorKind::Cancelled,
+                    "llama.cpp generation was cancelled",
+                ));
+            }
+
             let token = context.sample(&mut sampler).map_err(map_provider_error)?;
             if vocab.is_eog(token) {
                 finish_reason = FinishReason::Stopped;
@@ -373,6 +393,15 @@ impl LlamaCppChatModel {
                 .decode(&mut decode_token)
                 .map_err(map_provider_error)?;
             output_tokens = output_tokens.saturating_add(1);
+
+            if let Some((tps, anchor)) = pacing_anchor.as_ref() {
+                paced_tokens = paced_tokens.saturating_add(1);
+                let expected = Duration::from_secs_f64(f64::from(paced_tokens) / *tps);
+                let elapsed = anchor.elapsed();
+                if expected > elapsed {
+                    std::thread::sleep(expected - elapsed);
+                }
+            }
         }
 
         let (message_text, tool_calls, finish_reason) = if tool_mode {
@@ -490,6 +519,19 @@ impl ChatModel for LlamaCppChatModel {
             while let Some(item) = receiver.recv().await {
                 yield item?;
             }
+        })
+    }
+
+    fn warmup(&self) -> BoxFuture<'_, Result<(), XlaiError>> {
+        let model = self.clone();
+        Box::pin(async move {
+            let parent = Span::current();
+            tokio::task::spawn_blocking(move || {
+                let _enter = parent.enter();
+                model.load_model().map(|_| ())
+            })
+            .await
+            .map_err(map_join_error)?
         })
     }
 }

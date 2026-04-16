@@ -126,6 +126,8 @@ mod tests {
             structured_output: None,
             temperature: 0.8,
             max_output_tokens: 64,
+            execution: None,
+            cancellation: None,
         }
     }
 

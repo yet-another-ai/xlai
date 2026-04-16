@@ -183,6 +183,7 @@ mod tests {
             instructions: None,
             delivery: Default::default(),
             metadata: Metadata::default(),
+            ..Default::default()
         };
         assert!(matches!(
             voice_clone_params_from_tts(&req),
@@ -201,6 +202,7 @@ mod tests {
             instructions: None,
             delivery: Default::default(),
             metadata: Metadata::default(),
+            ..Default::default()
         };
         assert!(synthesize_request_from_tts(&req).is_ok());
     }

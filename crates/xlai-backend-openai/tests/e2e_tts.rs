@@ -25,6 +25,7 @@ async fn openai_tts_unary_smoke_test() -> Result<(), XlaiError> {
             instructions: None,
             delivery: TtsDeliveryMode::Unary,
             metadata: Default::default(),
+            ..Default::default()
         })
         .await?;
 
@@ -63,6 +64,7 @@ async fn openai_tts_stream_smoke_test() -> Result<(), XlaiError> {
             instructions: None,
             delivery: TtsDeliveryMode::Stream,
             metadata: Default::default(),
+            ..Default::default()
         })?
         .boxed();
 

@@ -162,6 +162,10 @@ mod tests {
             reasoning_effort: Some(ReasoningEffort::Medium),
             content: None,
             retry_policy: None,
+            chat_execution: None,
+            runtime_chat_execution_defaults: None,
+            runtime_tts_execution_defaults: None,
+            default_max_tool_round_trips: None,
         });
 
         assert_eq!(options.api_key, "test-key");
@@ -185,6 +189,10 @@ mod tests {
                 max_output_tokens: Some(256),
                 reasoning_effort: Some(ReasoningEffort::Low),
                 retry_policy: None,
+                chat_execution: None,
+                runtime_chat_execution_defaults: None,
+                runtime_tts_execution_defaults: None,
+                default_max_tool_round_trips: None,
                 #[cfg(feature = "qts")]
                 qts: None,
             },
@@ -207,6 +215,10 @@ mod tests {
                 max_output_tokens: None,
                 reasoning_effort: None,
                 retry_policy: None,
+                chat_execution: None,
+                runtime_chat_execution_defaults: None,
+                runtime_tts_execution_defaults: None,
+                default_max_tool_round_trips: None,
                 qts: Some(WasmQtsSessionConfig::default()),
             },
             None,

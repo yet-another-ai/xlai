@@ -11,13 +11,14 @@ use futures_util::StreamExt;
 use serde_json::Value;
 use tera::Context;
 use xlai_core::{
-    BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatResponse, ContentPart,
-    ErrorKind, MaybeSend, MessageRole, ReasoningEffort, RuntimeBound, StructuredOutput,
-    ToolDefinition, ToolResult, XlaiError,
+    BoxFuture, BoxStream, CancellationSignal, ChatChunk, ChatContent, ChatExecutionConfig,
+    ChatExecutionOverrides, ChatMessage, ChatResponse, ContentPart, ErrorKind, MaybeSend,
+    MessageRole, ReasoningEffort, RuntimeBound, StructuredOutput, ToolDefinition, ToolResult,
+    XlaiError,
 };
 
 use crate::chat::Chat;
-use crate::{ChatExecutionEvent, XlaiRuntime};
+use crate::{ChatExecutionEvent, ChatExecutionHandle, XlaiRuntime};
 
 pub use mcp::McpRegistry;
 
@@ -93,10 +94,11 @@ impl Agent {
     pub fn new(runtime: Arc<XlaiRuntime>) -> Result<Self, XlaiError> {
         let mut chat = Chat::new(runtime.clone());
         builtin::register_builtin_tools(&mut chat, runtime.clone())?;
+        let max_tool_round_trips = runtime.default_max_tool_round_trips.unwrap_or(8);
         Ok(Self {
             runtime,
             chat,
-            max_tool_round_trips: 8,
+            max_tool_round_trips,
             context_compressor: None,
             system_reminder: None,
         })
@@ -173,6 +175,13 @@ impl Agent {
     #[must_use]
     pub fn with_retry_policy(mut self, retry_policy: Option<xlai_core::ChatRetryPolicy>) -> Self {
         self.chat = self.chat.with_retry_policy(retry_policy);
+        self
+    }
+
+    /// See [`Chat::with_chat_execution_overrides`].
+    #[must_use]
+    pub fn with_chat_execution_overrides(mut self, overrides: ChatExecutionOverrides) -> Self {
+        self.chat = self.chat.with_chat_execution_overrides(overrides);
         self
     }
 
@@ -428,6 +437,18 @@ impl Agent {
         &self,
         messages: Vec<ChatMessage>,
     ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
+        self.stream_with_options(messages, None, None)
+    }
+
+    /// Like [`Self::stream`], with optional cooperative cancellation and an extra request-level
+    /// execution override layer (merged after runtime defaults and session overrides).
+    #[must_use]
+    pub fn stream_with_options(
+        &self,
+        messages: Vec<ChatMessage>,
+        cancellation: Option<CancellationSignal>,
+        request_layer: Option<ChatExecutionOverrides>,
+    ) -> BoxStream<'static, Result<ChatExecutionEvent, XlaiError>> {
         let agent = self.clone();
         let chat = agent.chat.clone();
         let max = agent.max_tool_round_trips;
@@ -436,12 +457,23 @@ impl Agent {
         Box::pin(try_stream! {
             let mut messages = messages;
             for _ in 0..max {
+                if cancellation.as_ref().is_some_and(|c| c.is_cancelled()) {
+                    Err(XlaiError::new(
+                        ErrorKind::Cancelled,
+                        "agent stream was cancelled",
+                    ))?;
+                }
+
                 let mut to_send =
                     prepare_messages_for_tool_round(&chat, &messages, &compressor).await?;
                 to_send = agent.prepare_outgoing_with_reminder(to_send).await?;
 
                 let mut final_response: Option<ChatResponse> = None;
-                let mut inner = chat.stream(to_send);
+                let mut inner = chat.stream_with_cancellation(
+                    to_send,
+                    cancellation.clone(),
+                    request_layer.clone(),
+                );
                 let mut round_events = Vec::new();
                 while let Some(item) = inner.next().await {
                     let item = item?;
@@ -495,5 +527,27 @@ impl Agent {
                 "agent exceeded the maximum number of automatic response rounds",
             ))?;
         })
+    }
+
+    /// Multi-round agent stream as a [`ChatExecutionHandle`] (shared cancellation across rounds).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the runtime cannot start the underlying chat stream.
+    pub fn begin_stream(
+        &self,
+        messages: Vec<ChatMessage>,
+        request_layer: Option<ChatExecutionOverrides>,
+    ) -> Result<ChatExecutionHandle, XlaiError> {
+        let cancel = CancellationSignal::new();
+        let merged = ChatExecutionConfig::merge_optional_layers(
+            Some(&self.runtime.chat_execution_defaults),
+            Some(self.chat.execution_overrides()),
+            request_layer.as_ref(),
+        );
+        let cancel_on_drop = merged.cancel_on_drop;
+        let stream =
+            self.stream_with_options(messages, Some(cancel.clone()), request_layer.clone());
+        Ok(ChatExecutionHandle::new(stream, cancel, cancel_on_drop))
     }
 }

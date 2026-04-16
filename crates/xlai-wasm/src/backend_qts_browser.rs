@@ -108,6 +108,7 @@ mod tests {
                 instructions: None,
                 delivery: TtsDeliveryMode::Unary,
                 metadata: Default::default(),
+                ..Default::default()
             })
             .await
         else {

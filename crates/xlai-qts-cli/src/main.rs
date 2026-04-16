@@ -256,6 +256,7 @@ fn tts_request_from_common(common: &CommonSynthesisArgs, text: String) -> TtsReq
         instructions: None,
         delivery: Default::default(),
         metadata,
+        ..Default::default()
     }
 }
 

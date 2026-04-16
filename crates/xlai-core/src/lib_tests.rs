@@ -523,6 +523,7 @@ fn chat_request_round_trips_retry_policy() {
                 .with_max_retries(1)
                 .with_initial_backoff_ms(100),
         ),
+        ..Default::default()
     };
     let serialized = serde_json::to_value(&req);
     assert!(

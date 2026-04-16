@@ -15,6 +15,8 @@ pub enum ErrorKind {
     Vector,
     FileSystem,
     Unsupported,
+    /// The caller or runtime cancelled the operation before completion.
+    Cancelled,
 }
 
 /// Structured error for xlai APIs. Optional fields are omitted from JSON when unset so older

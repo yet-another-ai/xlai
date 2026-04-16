@@ -3,12 +3,16 @@
 use std::sync::Arc;
 
 use js_sys::Reflect;
+use serde::de::DeserializeOwned;
 use wasm_bindgen::JsValue;
 use xlai_core::ReasoningEffort;
 use xlai_runtime::FileSystem;
 
 use crate::js_file_system::JsFileSystem;
-use crate::types::{WasmChatRetryPolicy, WasmTransformersSessionOptions};
+use crate::types::{
+    WasmChatExecutionOverrides, WasmChatRetryPolicy, WasmTransformersSessionOptions,
+    WasmTtsExecutionOverrides,
+};
 use crate::wasm_helpers::js_error;
 
 #[cfg(feature = "qts")]
@@ -62,6 +66,18 @@ pub(crate) fn parse_transformers_session_options(
         }
     };
 
+    let chat_execution =
+        optional_js_value_deserialize::<WasmChatExecutionOverrides>(&options, "chatExecution")?;
+    let runtime_chat_execution_defaults = optional_js_value_deserialize::<
+        WasmChatExecutionOverrides,
+    >(&options, "runtimeChatExecutionDefaults")?;
+    let runtime_tts_execution_defaults = optional_js_value_deserialize::<WasmTtsExecutionOverrides>(
+        &options,
+        "runtimeTtsExecutionDefaults",
+    )?;
+    let default_max_tool_round_trips =
+        optional_js_usize_field(&options, "defaultMaxToolRoundTrips")?;
+
     Ok(WasmTransformersSessionOptions {
         model_id,
         adapter,
@@ -70,9 +86,44 @@ pub(crate) fn parse_transformers_session_options(
         max_output_tokens: optional_js_u32_field(&options, "maxOutputTokens")?,
         reasoning_effort,
         retry_policy,
+        chat_execution,
+        runtime_chat_execution_defaults,
+        runtime_tts_execution_defaults,
+        default_max_tool_round_trips,
         #[cfg(feature = "qts")]
         qts,
     })
+}
+
+fn optional_js_value_deserialize<T: DeserializeOwned>(
+    target: &JsValue,
+    field: &str,
+) -> Result<Option<T>, JsValue> {
+    let value = Reflect::get(target, &JsValue::from_str(field))
+        .map_err(|e| js_error(format!("failed to read `{field}`: {e:?}")))?;
+    if value.is_null() || value.is_undefined() {
+        return Ok(None);
+    }
+    Ok(Some(
+        serde_wasm_bindgen::from_value(value).map_err(js_error)?,
+    ))
+}
+
+fn optional_js_usize_field(target: &JsValue, field: &str) -> Result<Option<usize>, JsValue> {
+    let value = Reflect::get(target, &JsValue::from_str(field))
+        .map_err(|e| js_error(format!("failed to read `{field}`: {e:?}")))?;
+    if value.is_null() || value.is_undefined() {
+        return Ok(None);
+    }
+    let n = value
+        .as_f64()
+        .ok_or_else(|| js_error(format!("`{field}` must be a number when set")))?;
+    if n < 0.0 || n.fract() != 0.0 {
+        return Err(js_error(format!(
+            "`{field}` must be a non-negative integer"
+        )));
+    }
+    Ok(Some(n as usize))
 }
 
 fn require_js_string_field(target: &JsValue, field: &str) -> Result<String, JsValue> {

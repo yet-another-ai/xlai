@@ -29,6 +29,7 @@ fn serializes_basic_request() {
         max_output_tokens: None,
         reasoning_effort: None,
         retry_policy: None,
+        ..Default::default()
     };
 
     let gemini_req = GeminiChatRequest::from_core_request(request).unwrap();
