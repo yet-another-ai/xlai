@@ -12,6 +12,10 @@ node_modules/
 .pnpm-store/
 pnpm-debug.log*
 
+# VitePress (docs site)
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
 # wasm-pack (browser builds)
 /pkg/
 wasm-pack.log

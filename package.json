@@ -16,18 +16,23 @@
     "vite": "8.0.3",
     "vite-plugin-dts": "^4.5.4",
     "vite-plugin-wasm": "^3.6.0",
-    "vitest": "4.1.2"
+    "vitepress": "^1.6.4",
+    "vitest": "4.1.2",
+    "vue": "^3.5.32"
   },
   "scripts": {
     "build": "pnpm --filter @yai-xlai/xlai build",
     "build:wasm": "pnpm --filter @yai-xlai/xlai build:wasm",
     "dev": "pnpm --filter @yai-xlai/xlai dev",
-    "format": "prettier --write .github package.json README.md .prettierrc.json eslint.config.mjs packages/xlai",
-    "format:check": "prettier --check .github package.json README.md .prettierrc.json eslint.config.mjs packages/xlai",
+    "format": "prettier --write .github package.json README.md .prettierrc.json eslint.config.mjs packages/xlai docs",
+    "format:check": "prettier --check .github package.json README.md .prettierrc.json eslint.config.mjs packages/xlai docs",
     "lint": "eslint packages/xlai --max-warnings=0",
     "typecheck": "pnpm --filter @yai-xlai/xlai typecheck",
     "test": "pnpm --filter @yai-xlai/xlai test",
     "test:watch": "pnpm --filter @yai-xlai/xlai test:watch",
-    "test:e2e": "pnpm --filter @yai-xlai/xlai test:e2e"
+    "test:e2e": "pnpm --filter @yai-xlai/xlai test:e2e",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   }
 }

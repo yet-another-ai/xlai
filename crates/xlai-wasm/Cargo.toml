@@ -19,7 +19,7 @@ workspace = true
 
 [features]
 default = ["qts"]
-# Local QTS in the browser (stub engine until GGML/ORT WASM integration; see docs/qts-wasm-browser-runtime.md).
+# Local QTS in the browser (stub engine until GGML/ORT WASM integration; see docs/qts/wasm-browser-runtime.md).
 # Browser QTS stub: manifest types from `xlai-qts-manifest` only (no native `xlai-qts-core` / GGML+ORT).
 qts = ["dep:xlai-qts-manifest"]
 

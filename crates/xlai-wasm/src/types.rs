@@ -169,7 +169,7 @@ pub(crate) struct WasmImageGenerationCallOptions {
     pub(crate) count: Option<u32>,
 }
 
-/// Local QTS TTS call options (no OpenAI `apiKey`; see `docs/qts-wasm-browser-runtime.md`).
+/// Local QTS TTS call options (no OpenAI `apiKey`; see `docs/qts/wasm-browser-runtime.md`).
 #[cfg(feature = "qts")]
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

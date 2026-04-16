@@ -297,7 +297,7 @@ def main() -> None:
     readme_template = (
         args.readme_template.expanduser().resolve()
         if args.readme_template
-        else (root / "docs" / "huggingface-qts-model-card.md")
+        else (root / "docs" / "qts" / "huggingface-qts-model-card.md")
     )
 
     main_types = _resolve_release_main_types(args.main_type or [])

@@ -31,7 +31,7 @@ impl QtsBrowserTtsModel {
     fn engine_pending_error() -> XlaiError {
         XlaiError::new(
             ErrorKind::Unsupported,
-            "local QTS engine is not yet available in this WASM build; see docs/qts-wasm-browser-runtime.md",
+            "local QTS engine is not yet available in this WASM build; see docs/qts/wasm-browser-runtime.md",
         )
         .with_details(serde_json::json!({
             "code": "qts_wasm_engine_pending",
