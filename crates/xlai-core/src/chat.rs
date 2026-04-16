@@ -513,7 +513,7 @@ impl ChatRetryPolicy {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
 pub struct ChatRequest {
     pub model: Option<String>,
     pub system_prompt: Option<String>,
@@ -535,25 +535,6 @@ pub struct ChatRequest {
     /// In-process cancellation; omitted from JSON and CBOR wire formats.
     #[serde(default, skip_serializing, skip_deserializing)]
     pub cancellation: Option<CancellationSignal>,
-}
-
-impl Default for ChatRequest {
-    fn default() -> Self {
-        Self {
-            model: None,
-            system_prompt: None,
-            messages: Vec::new(),
-            available_tools: Vec::new(),
-            structured_output: None,
-            metadata: Metadata::default(),
-            temperature: None,
-            max_output_tokens: None,
-            reasoning_effort: None,
-            retry_policy: None,
-            execution: None,
-            cancellation: None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

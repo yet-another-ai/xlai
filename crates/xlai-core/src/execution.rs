@@ -93,7 +93,7 @@ impl ChatExecutionOverrides {
 }
 
 /// Resolved execution configuration after merging override layers.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
 pub struct ChatExecutionConfig {
     pub latency_mode: ExecutionLatencyMode,
     pub streaming_preferred: bool,
@@ -105,20 +105,6 @@ pub struct ChatExecutionConfig {
     pub backend_preference: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub backend_fallback_order: Vec<String>,
-}
-
-impl Default for ChatExecutionConfig {
-    fn default() -> Self {
-        Self {
-            latency_mode: ExecutionLatencyMode::default(),
-            streaming_preferred: false,
-            warmup_on_create: false,
-            cancel_on_drop: false,
-            max_tokens_per_second: None,
-            backend_preference: None,
-            backend_fallback_order: Vec::new(),
-        }
-    }
 }
 
 impl ChatExecutionConfig {
@@ -185,7 +171,7 @@ impl TtsExecutionOverrides {
 }
 
 /// Resolved TTS execution configuration.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
 pub struct TtsExecutionConfig {
     pub latency_mode: ExecutionLatencyMode,
     pub cancel_on_drop: bool,
@@ -193,17 +179,6 @@ pub struct TtsExecutionConfig {
     pub backend_preference: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub backend_fallback_order: Vec<String>,
-}
-
-impl Default for TtsExecutionConfig {
-    fn default() -> Self {
-        Self {
-            latency_mode: ExecutionLatencyMode::default(),
-            cancel_on_drop: false,
-            backend_preference: None,
-            backend_fallback_order: Vec::new(),
-        }
-    }
 }
 
 impl TtsExecutionConfig {
