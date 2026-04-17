@@ -13,10 +13,7 @@ pub fn workspace_root_from_sys_crate_manifest(manifest_dir: &Path) -> io::Result
             continue;
         }
         let contents = fs::read_to_string(&cargo_toml).map_err(|e| {
-            io::Error::other(format!(
-                "failed to read {}: {e}",
-                cargo_toml.display()
-            ))
+            io::Error::other(format!("failed to read {}: {e}", cargo_toml.display()))
         })?;
         if contents.lines().any(|line| line.trim() == "[workspace]") {
             return Ok(ancestor.to_path_buf());
