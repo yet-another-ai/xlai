@@ -5354,7 +5354,6 @@ dependencies = [
  "tokio",
  "tracing",
  "xlai-core",
- "xlai-local-common",
  "xlai-runtime",
  "xlai-sys-llama",
 ]
@@ -5390,7 +5389,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "xlai-core",
- "xlai-local-common",
+ "xlai-runtime",
 ]
 
 [[package]]
@@ -5431,18 +5430,6 @@ name = "xlai-ffi"
 version = "0.1.0"
 dependencies = [
  "xlai-native",
-]
-
-[[package]]
-name = "xlai-local-common"
-version = "0.1.0"
-dependencies = [
- "jsonschema",
- "rust-embed",
- "serde",
- "serde_json",
- "tera",
- "xlai-core",
 ]
 
 [[package]]
@@ -5512,13 +5499,13 @@ dependencies = [
  "futures-util",
  "getrandom 0.2.17",
  "gray_matter",
+ "jsonschema",
  "rust-embed",
  "serde",
  "serde_json",
  "tera",
  "tokio",
  "xlai-core",
- "xlai-local-common",
 ]
 
 [[package]]

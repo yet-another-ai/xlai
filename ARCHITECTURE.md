@@ -2,13 +2,14 @@
 
 This document summarizes crate boundaries and data flow. The **stable public contract** for domain types and traits is `xlai-core`; other crates adapt or orchestrate around it.
 
+Workspace crates are grouped under `crates/core/`, `crates/runtime/`, `crates/backends/`, `crates/qts/`, `crates/sys/`, and `crates/platform/` (see [docs/development/crates-taxonomy.md](docs/development/crates-taxonomy.md)).
+
 ## Crate roles
 
 | Crate | Responsibility |
 |--------|------------------|
 | `xlai-core` | Shared types (`ChatRequest`, `ToolCall`, …), `XlaiError`, and async traits (`ChatModel`, `TtsModel`, …). |
-| `xlai-local-common` | Local (non-API) chat prep: prompt templates, tool JSON envelope, `PreparedLocalChatRequest`. Used by `xlai-backend-llama-cpp` / `xlai-backend-transformersjs`; re-exported as `xlai_runtime::local_common` for compatibility. |
-| `xlai-runtime` | `RuntimeBuilder` / `XlaiRuntime`, `Chat` and `Agent` sessions, tool execution, streaming, embedded prompts/skills. |
+| `xlai-runtime` | `RuntimeBuilder` / `XlaiRuntime`, `Chat` and `Agent` sessions, tool execution, streaming, embedded prompts/skills. Includes `xlai_runtime::local_common` (prompt templates, tool JSON envelope, `PreparedLocalChatRequest`) for `xlai-backend-llama-cpp` / `xlai-backend-transformersjs`. |
 | `xlai-backend-openai` | OpenAI-compatible HTTP client (chat, transcription, TTS). |
 | `xlai-backend-gemini` | Google Gemini HTTP client. |
 | `xlai-backend-llama-cpp` | Local GGUF inference via llama.cpp; maps `xlai-core` requests into local prompt/tool formats. |
@@ -20,7 +21,7 @@ This document summarizes crate boundaries and data flow. The **stable public con
 | `xlai-sys-llama` | Vendored `llama.cpp` build (CMake + bindgen) for the llama backend. Sources: `vendor/native/llama.cpp`. |
 | `xlai-sys-ggml` | Vendored standalone `ggml` build (CMake + bindgen) for QTS. Sources: `vendor/native/ggml`. |
 | `xlai-qts-cli` | `synthesize` / `profile` / `tui` binary (`xlai-qts`) for local TTS workflows. |
-| `xlai-facade` | Internal: shared re-exports of `xlai-core`, `xlai-runtime`, OpenAI + Gemini + transformers.js backends, optional `llama` + `qts` for native. Consumed by `xlai-native` (with `llama` + accelerators) and `xlai-wasm` (no `llama`, no `qts` engine — WASM QTS stays stub + `xlai-qts-manifest` only). |
+| `xlai-facade` | Internal (not on crates.io): integration re-exports of `xlai-core`, `xlai-runtime`, OpenAI + Gemini + transformers.js backends, optional `llama` + `qts` for native. Consumed by `xlai-native` (with `llama` + accelerators) and `xlai-wasm` (no `llama`, no `qts` engine — WASM QTS stays stub + `xlai-qts-manifest` only). |
 | `xlai-native` | Native Rust facade: thin re-export of `xlai-facade`. Enable optional `qts` for `QtsTtsModel` (avoids linking QTS/ggml unless needed). |
 | `xlai-wasm` | `wasm-bindgen` entry points and JS-facing session factories. Default feature `qts` enables local QTS WASM surface (stub `TtsModel`, shared browser manifest types, `qtsBrowserTts*`; see `docs/qts/wasm-browser-runtime.md`). |
 | `xlai-ffi` | C ABI facade for future native interop. |
@@ -37,7 +38,7 @@ This document summarizes crate boundaries and data flow. The **stable public con
 - **Merge order** for chat: `RuntimeBuilder::with_chat_execution_defaults` → `Chat::with_chat_execution_overrides` / `Agent::with_chat_execution_overrides` → optional per-call layer on `begin_stream` / `stream_with_options`. Session `Some(_)` fields override runtime defaults per field.
 - **`xlai-runtime`** merges into every `Chat::build_request`, exposes `ChatExecutionHandle` (`next_event`, `cancel_on_drop`) alongside existing streams, and checks `cancellation` in `XlaiRuntime::stream_chat`. `with_default_max_tool_round_trips` seeds new `Agent` sessions unless overridden with `with_max_tool_round_trips`.
 - **Local backends**: `PreparedLocalChatRequest` carries `execution` + `cancellation` for llama.cpp / transformers.js prep. **llama.cpp** honors cooperative cancel in the token loop, optional `max_tokens_per_second` pacing, and `ChatModel::warmup()` preloads weights. **QTS** checks cancellation on unary/stream paths and in streaming PCM chunks; `TtsModel::warmup()` ensures the worker is spawned.
-- **WASM** session options accept camelCase `chatExecution`, `runtimeChatExecutionDefaults`, `runtimeTtsExecutionDefaults`, `defaultMaxToolRoundTrips`, and `ttsExecution` on TTS calls (see `crates/xlai-wasm/src/types.rs`). Remote OpenAI-style backends ignore unsupported hints.
+- **WASM** session options accept camelCase `chatExecution`, `runtimeChatExecutionDefaults`, `runtimeTtsExecutionDefaults`, `defaultMaxToolRoundTrips`, and `ttsExecution` on TTS calls (see `crates/platform/xlai-wasm/src/types.rs`). Remote OpenAI-style backends ignore unsupported hints.
 
 ## Errors
 

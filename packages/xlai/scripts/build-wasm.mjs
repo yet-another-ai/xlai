@@ -12,7 +12,7 @@ await rm(outputDir, { recursive: true, force: true });
 const command = process.platform === 'win32' ? 'wasm-pack.exe' : 'wasm-pack';
 const args = [
   'build',
-  '../../crates/xlai-wasm',
+  '../../crates/platform/xlai-wasm',
   '--target',
   'web',
   '--out-dir',

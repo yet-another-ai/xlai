@@ -64,9 +64,10 @@ These workspace members are **`publish = false`** (Cargo will refuse `cargo publ
 | `xlai-build-native`                                  | Internal build helpers for native sys crates; not on crates.io                                                                                               |
 | `xlai-sys-llama`, `xlai-sys-ggml`                    | Vendored native builds (`vendor/native/*`); not on crates.io                                                                                                 |
 | `xlai-backend-llama-cpp`                             | Depends on `xlai-sys-llama`                                                                                                                                  |
+| `xlai-backend-gemini`                                | Workspace-only HTTP backend; not in the crates.io publish chain                                                                                               |
 | `xlai-native`, `xlai-ffi`                            | Depend on `xlai-backend-llama-cpp` / aggregate of internal backends                                                                                          |
 | `xlai-wasm`                                          | Built for the npm package; not published as its own crate                                                                                                    |
-| `xlai-facade`, `xlai-local-common`                   | Internal composition / local-backend helpers; `publish = false`                                                                                              |
+| `xlai-facade`                                        | Internal integration re-exports for platform crates; `publish = false`                                                                                         |
 | `xlai-qts-core`, `xlai-qts-cli`, `xlai-qts-manifest` | QTS stack / internal (engine in `xlai-qts-core`; browser manifest serde in `xlai-qts-manifest`; WASM QTS stub uses manifest crate only, not the GGML engine) |
 
 To publish more crates later: remove or relax `publish = false`, ensure every dependency is either on crates.io with a version pin or optional behind features, add `description` / `repository.workspace = true` as needed, extend `[workspace.dependencies]` and `.github/workflows/publish.yml` `PUBLISH_CRATES_ORDER`.

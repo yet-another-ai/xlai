@@ -1,22 +1,21 @@
 [workspace]
 members = [
-    "crates/xlai-build-native",
-    "crates/xlai-backend-gemini",
-    "crates/xlai-backend-llama-cpp",
-    "crates/xlai-backend-openai",
-    "crates/xlai-backend-transformersjs",
-    "crates/xlai-core",
-    "crates/xlai-ffi",
-    "crates/xlai-facade",
-    "crates/xlai-local-common",
-    "crates/xlai-native",
-    "crates/xlai-qts-cli",
-    "crates/xlai-qts-core",
-    "crates/xlai-qts-manifest",
-    "crates/xlai-runtime",
-    "crates/xlai-sys-ggml",
-    "crates/xlai-sys-llama",
-    "crates/xlai-wasm",
+    "crates/sys/xlai-build-native",
+    "crates/backends/xlai-backend-gemini",
+    "crates/backends/xlai-backend-llama-cpp",
+    "crates/backends/xlai-backend-openai",
+    "crates/backends/xlai-backend-transformersjs",
+    "crates/core/xlai-core",
+    "crates/platform/xlai-ffi",
+    "crates/platform/xlai-facade",
+    "crates/platform/xlai-native",
+    "crates/qts/xlai-qts-cli",
+    "crates/qts/xlai-qts-core",
+    "crates/qts/xlai-qts-manifest",
+    "crates/runtime/xlai-runtime",
+    "crates/sys/xlai-sys-ggml",
+    "crates/sys/xlai-sys-llama",
+    "crates/platform/xlai-wasm",
 ]
 exclude = ["reference/qts", "target/_ortfetch", "target/ortcheck"]
 resolver = "3"
@@ -71,22 +70,21 @@ wasm-bindgen-futures = "0.4.67"
 windows-sys = "0.61"
 
 # Path + version for workspace members that are published to crates.io (see docs/development/publishing.md).
-xlai-core = { path = "crates/xlai-core", version = "0.1.0" }
-xlai-local-common = { path = "crates/xlai-local-common", version = "0.1.0" }
-xlai-runtime = { path = "crates/xlai-runtime", version = "0.1.0" }
-xlai-backend-openai = { path = "crates/xlai-backend-openai", version = "0.1.0" }
-xlai-backend-transformersjs = { path = "crates/xlai-backend-transformersjs", version = "0.1.0" }
-xlai-backend-gemini = { path = "crates/xlai-backend-gemini", version = "0.1.0" }
-xlai-backend-llama-cpp = { path = "crates/xlai-backend-llama-cpp", version = "0.1.0" }
-xlai-ffi = { path = "crates/xlai-ffi", version = "0.1.0" }
-xlai-facade = { path = "crates/xlai-facade", version = "0.1.0", default-features = false }
-xlai-native = { path = "crates/xlai-native", version = "0.1.0" }
-xlai-qts-core = { path = "crates/xlai-qts-core", version = "0.1.0" }
-xlai-qts-manifest = { path = "crates/xlai-qts-manifest", version = "0.1.0" }
-xlai-build-native = { path = "crates/xlai-build-native", version = "0.1.0" }
-xlai-sys-ggml = { path = "crates/xlai-sys-ggml", version = "0.1.0" }
-xlai-sys-llama = { path = "crates/xlai-sys-llama", version = "0.1.0" }
-xlai-wasm = { path = "crates/xlai-wasm", version = "0.1.0" }
+xlai-core = { path = "crates/core/xlai-core", version = "0.1.0" }
+xlai-runtime = { path = "crates/runtime/xlai-runtime", version = "0.1.0" }
+xlai-backend-openai = { path = "crates/backends/xlai-backend-openai", version = "0.1.0" }
+xlai-backend-transformersjs = { path = "crates/backends/xlai-backend-transformersjs", version = "0.1.0" }
+xlai-backend-gemini = { path = "crates/backends/xlai-backend-gemini", version = "0.1.0" }
+xlai-backend-llama-cpp = { path = "crates/backends/xlai-backend-llama-cpp", version = "0.1.0" }
+xlai-ffi = { path = "crates/platform/xlai-ffi", version = "0.1.0" }
+xlai-facade = { path = "crates/platform/xlai-facade", version = "0.1.0", default-features = false }
+xlai-native = { path = "crates/platform/xlai-native", version = "0.1.0" }
+xlai-qts-core = { path = "crates/qts/xlai-qts-core", version = "0.1.0" }
+xlai-qts-manifest = { path = "crates/qts/xlai-qts-manifest", version = "0.1.0" }
+xlai-build-native = { path = "crates/sys/xlai-build-native", version = "0.1.0" }
+xlai-sys-ggml = { path = "crates/sys/xlai-sys-ggml", version = "0.1.0" }
+xlai-sys-llama = { path = "crates/sys/xlai-sys-llama", version = "0.1.0" }
+xlai-wasm = { path = "crates/platform/xlai-wasm", version = "0.1.0" }
 
 [workspace.lints.rust]
 unconditional_panic = "deny"

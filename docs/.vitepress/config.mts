@@ -104,6 +104,19 @@ export default defineConfig({
             { text: 'CI and testing', link: '/development/ci-and-testing' },
             { text: 'Publishing', link: '/development/publishing' },
             { text: 'Crate taxonomy', link: '/development/crates-taxonomy' },
+            { text: 'QTS crate split (future)', link: '/development/qts-crate-split' },
+            { text: 'Native vendor layout', link: '/development/native-vendor' },
+          ],
+        },
+      ],
+      '/migration/': [
+        {
+          text: 'Migration',
+          items: [
+            {
+              text: 'Workspace refactor',
+              link: '/migration/workspace-refactor',
+            },
           ],
         },
       ],
