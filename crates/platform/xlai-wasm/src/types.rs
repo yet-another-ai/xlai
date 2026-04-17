@@ -324,6 +324,8 @@ pub(crate) struct WasmTransformersSessionOptions {
     pub(crate) system_prompt: Option<String>,
     pub(crate) temperature: Option<f32>,
     pub(crate) max_output_tokens: Option<u32>,
+    /// Uniform options surface with the OpenAI path; ignored by the transformers.js backend.
+    #[allow(dead_code)]
     pub(crate) reasoning_effort: Option<ReasoningEffort>,
     pub(crate) retry_policy: Option<WasmChatRetryPolicy>,
     pub(crate) chat_execution: Option<WasmChatExecutionOverrides>,

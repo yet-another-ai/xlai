@@ -331,13 +331,11 @@ impl ChatModel for OpenAiChatModel {
                                     .and_then(Value::as_u64)
                                     .unwrap_or(0) as usize;
                                 match item.get("type").and_then(Value::as_str) {
-                                    Some("message") => {
-                                        if state.mark_message_started(index) {
-                                            yield ChatChunk::MessageStart {
-                                                role: MessageRole::Assistant,
-                                                message_index: index,
-                                            };
-                                        }
+                                    Some("message") if state.mark_message_started(index) => {
+                                        yield ChatChunk::MessageStart {
+                                            role: MessageRole::Assistant,
+                                            message_index: index,
+                                        };
                                     }
                                     Some("function_call") => {
                                         let chunk = state.apply_tool_call_added(
