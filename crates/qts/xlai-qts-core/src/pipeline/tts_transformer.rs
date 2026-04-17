@@ -4702,7 +4702,7 @@ fn select_token(
         }
         let mut cumulative = 0.0f32;
         let mut keep = vec![false; adjusted.len()];
-        for ((idx, logit), prob) in ranked.into_iter().zip(exp_values.into_iter()) {
+        for ((idx, logit), prob) in ranked.into_iter().zip(exp_values) {
             if !logit.is_finite() {
                 break;
             }
@@ -4746,7 +4746,7 @@ fn select_token(
         ));
     }
     let mut target = rand::rng().random::<f32>() * total;
-    for ((idx, _), prob) in ranked.into_iter().zip(probs.into_iter()) {
+    for ((idx, _), prob) in ranked.into_iter().zip(probs) {
         target -= prob;
         if target <= 0.0 {
             return Ok(idx as i32);
