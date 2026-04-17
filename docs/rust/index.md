@@ -10,7 +10,7 @@ Application code typically depends on **`xlai-native`** (or **`xlai-wasm`** in t
 | `xlai-wasm`   | `wasm32-unknown-unknown` builds and JavaScript interop.                                       |
 | `xlai-ffi`    | C ABI / shared library embedding (wraps `xlai-native`).                                       |
 
-Domain types and traits live in **`xlai-core`** (semver-stable on crates.io). Session APIs live in **`xlai-runtime`** and are re-exported through **`xlai-native`** / **`xlai-wasm`**. The **`xlai-facade`** crate is an internal workspace helper (not on crates.io) shared by those platform crates.
+Domain types and traits live in **`xlai-core`** (semver-stable on crates.io). Session APIs live in **`xlai-runtime`** and are re-exported through **`xlai-native`** / **`xlai-wasm`**. The **`xlai-facade`** crate is an internal workspace helper (not on crates.io) used **only by `xlai-native`** for native aggregate wiring; **`xlai-wasm` does not depend on it**.
 
 ## Minimal pattern
 

@@ -31,7 +31,7 @@ This doc classifies crates for dependency and release decisions. Authoritative p
 | `xlai-sys-ggml`          | Vendored standalone `ggml` build for QTS (CMake + bindgen)                   |
 | `xlai-backend-llama-cpp` | Native llama.cpp chat backend                                                |
 | `xlai-backend-gemini`    | Google Gemini HTTP backend (`publish = false`; not in the crates.io publish chain) |
-| `xlai-facade`            | Internal integration re-exports for `xlai-native` / `xlai-wasm`            |
+| `xlai-facade`            | Internal integration re-exports for `xlai-native` only (`xlai-wasm` does not depend on it) |
 | `xlai-native`            | Native app entrypoint                                                        |
 | `xlai-wasm`              | `wasm-bindgen` + npm package base                                            |
 | `xlai-ffi`               | C ABI                                                                        |

@@ -18,6 +18,8 @@ vulkan = ["xlai-native/vulkan"]
 crate-type = ["cdylib"]
 
 [dependencies]
+# Full native aggregate is linked today so the cdylib matches `xlai-native` deployments; the C API
+# surface is still minimal (`xlai_version` only).
 xlai-native.workspace = true
 
 [lints]

@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Shared re-exports of xlai runtime and backends for native and wasm facade crates"
+description = "Internal re-exports and feature wiring for the xlai-native aggregate crate"
 publish = false
 build = "build.rs"
 

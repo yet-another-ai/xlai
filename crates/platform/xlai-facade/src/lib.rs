@@ -1,8 +1,11 @@
-//! Internal integration layer: re-exports for `xlai-native` and `xlai-wasm`.
+//! Internal integration layer for **`xlai-native`** (native aggregate features).
 //!
-//! The semver-stable Rust contract is [`xlai_core`]; this crate is **not** published to crates.io
-//! and exists only to keep platform binding crates thin. Keeps re-exports and
-//! [`RuntimeBuilder::new`] wiring in one place.
+//! `xlai-wasm` does **not** depend on this crate; it re-exports directly from `xlai-core`,
+//! `xlai-runtime`, and the browser backends.
+//!
+//! The semver-stable Rust contract is [`xlai_core`]; this crate is **not** published to crates.io.
+//! It centralizes optional native backends (`llama`, `qts`) and shared re-exports used by
+//! `xlai-native`.
 
 pub use xlai_core as core;
 

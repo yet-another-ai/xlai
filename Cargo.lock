@@ -5545,7 +5545,6 @@ dependencies = [
  "xlai-backend-openai",
  "xlai-backend-transformersjs",
  "xlai-core",
- "xlai-facade",
  "xlai-qts-manifest",
  "xlai-runtime",
 ]

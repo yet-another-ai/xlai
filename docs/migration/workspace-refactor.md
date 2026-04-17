@@ -43,6 +43,14 @@ Update any scripts or docs that hard-coded paths such as `crates/xlai-wasm` (for
 
 `xlai-backend-gemini` is explicitly **`publish = false`** to match the internal-only taxonomy; it is not part of the crates.io publish order.
 
-## `xlai-facade` documentation
+## `xlai-facade` and platform entrypoints
 
-`xlai-facade` is documented as an **internal** integration crate (not published to crates.io). Application entrypoints remain **`xlai-native`** (native Rust), **`xlai-wasm`** (browser), and **`xlai-ffi`** (C ABI).
+- **`xlai-facade`** is **internal** (not on crates.io) and is used by **`xlai-native`** only for native feature wiring and shared re-exports.
+- **`xlai-wasm`** has **no** dependency on `xlai-facade`; it re-exports `xlai-core`, `xlai-runtime`, and the browser backends directly.
+- **`xlai-native`** lists **explicit** `pub use` items (not `pub use xlai_facade::*`). Workspace-only **Gemini** types are also available under **`xlai_native::gemini`**; root-level `Gemini*` names remain for compatibility.
+
+Application entrypoints remain **`xlai-native`** (native Rust), **`xlai-wasm`** (browser), and **`xlai-ffi`** (C ABI).
+
+## Workspace policy checks
+
+CI runs `python3 scripts/check_workspace_policy.py` to keep `publish = false`, crate taxonomy, directory layout, and the crates.io publish order in sync.

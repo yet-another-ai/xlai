@@ -36,7 +36,6 @@ xlai-qts-manifest = { workspace = true, optional = true }
 xlai-backend-openai.workspace = true
 xlai-backend-transformersjs.workspace = true
 xlai-core.workspace = true
-xlai-facade.workspace = true
 xlai-runtime.workspace = true
 
 [dev-dependencies]

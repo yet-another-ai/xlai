@@ -68,9 +68,9 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). F
 - `crates/runtime/xlai-runtime`
   Runtime builder, chat session API, streaming, and tool-calling orchestration. Local-backend prompt prep (`PreparedLocalChatRequest`, tool JSON, templates) lives in **`xlai_runtime::local_common`** (used by llama.cpp and transformers.js backends).
 - `crates/platform/xlai-facade`
-  Internal shared re-exports for native and wasm platform crates (OpenAI, Gemini, transformers.js, optional llama + native QTS). Not published to crates.io.
+  Internal native aggregate wiring and re-exports for `xlai-native` only (not used by `xlai-wasm`). Not published to crates.io.
 - `crates/platform/xlai-native`
-  Native Rust-facing entrypoint (thin re-export of `xlai-facade`).
+  Native Rust-facing entrypoint: explicit re-exports, optional `qts`, and `gemini` submodule for workspace-only Gemini types.
 - `crates/platform/xlai-wasm`
   Browser-facing `wasm-bindgen` crate for web integration. Default Cargo feature `qts` enables local QTS entrypoints (`qtsBrowserTts`, manifest validation); the in-browser engine is still a stub until GGML/ORT WASM work lands (see `docs/qts/wasm-browser-runtime.md`).
 - `crates/backends/xlai-backend-llama-cpp`

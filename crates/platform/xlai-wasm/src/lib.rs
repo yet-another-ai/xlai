@@ -1,21 +1,31 @@
 //! WebAssembly bindings for xlai (OpenAI-compatible chat, optional transformers.js).
 //!
-//! This crate is the browser platform entrypoint (built for `@yai-xlai/xlai`). It aligns with the
-//! native `xlai-native` crate via the internal `xlai-facade` re-export layer; internal modules also
-//! use `xlai_core` / `xlai_runtime` directly where needed.
+//! This crate is the browser platform entrypoint (built for `@yai-xlai/xlai`). Public Rust types are
+//! re-exported directly from `xlai-core`, `xlai-runtime`, and the WASM chat backends — there is no
+//! dependency on the internal `xlai-facade` crate (native-only integration layer).
 
-pub use xlai_facade::builder;
-pub use xlai_facade::core;
-pub use xlai_facade::{
+pub use xlai_core as core;
+
+pub use xlai_backend_openai::{
+    OpenAiChatModel, OpenAiConfig, OpenAiImageGenerationModel, OpenAiTranscriptionModel,
+    OpenAiTtsModel,
+};
+#[cfg(target_arch = "wasm32")]
+pub use xlai_backend_transformersjs::{
+    TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
+};
+pub use xlai_runtime::{
     Agent, Chat, ChatExecutionEvent, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath,
     GeneratedImage, ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality,
     ImageGenerationRequest, ImageGenerationResponse, McpRegistry, MemoryFileSystem,
-    OpenAiChatModel, OpenAiConfig, OpenAiImageGenerationModel, OpenAiTranscriptionModel,
-    OpenAiTtsModel, ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode, WritableFileSystem,
-    XlaiRuntime,
+    ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode, WritableFileSystem, XlaiRuntime,
 };
-#[cfg(target_arch = "wasm32")]
-pub use xlai_facade::{TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig};
+
+/// Starts a new [`RuntimeBuilder`].
+#[must_use]
+pub fn builder() -> RuntimeBuilder {
+    RuntimeBuilder::new()
+}
 
 mod agent_session;
 mod api;
