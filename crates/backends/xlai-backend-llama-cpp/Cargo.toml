@@ -1,0 +1,30 @@
+[package]
+name = "xlai-backend-llama-cpp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "llama.cpp-backed chat and embeddings backend for xlai (depends on unpublished `xlai-sys-llama`)."
+publish = false
+
+[features]
+default = ["openblas"]
+openblas = ["xlai-sys-llama/openblas"]
+metal = ["xlai-sys-llama/metal"]
+vulkan = ["xlai-sys-llama/vulkan"]
+
+[dependencies]
+async-stream.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+xlai-core.workspace = true
+xlai-runtime.workspace = true
+xlai-sys-llama.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

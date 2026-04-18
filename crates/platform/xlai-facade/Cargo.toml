@@ -1,0 +1,31 @@
+[package]
+name = "xlai-facade"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Internal re-exports and feature wiring for the xlai-native aggregate crate"
+publish = false
+build = "build.rs"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Native llama.cpp stack (disabled for wasm32 consumers).
+llama = ["dep:xlai-backend-llama-cpp"]
+openblas = ["llama", "xlai-backend-llama-cpp/openblas", "xlai-qts-core?/openblas"]
+metal = ["llama", "xlai-backend-llama-cpp/metal", "xlai-qts-core?/metal"]
+vulkan = ["llama", "xlai-backend-llama-cpp/vulkan", "xlai-qts-core?/vulkan"]
+qts = ["dep:xlai-qts-core"]
+
+[dependencies]
+xlai-backend-gemini.workspace = true
+xlai-backend-llama-cpp = { workspace = true, optional = true }
+xlai-backend-openai.workspace = true
+xlai-backend-transformersjs.workspace = true
+xlai-core.workspace = true
+xlai-runtime.workspace = true
+xlai-qts-core = { workspace = true, optional = true }

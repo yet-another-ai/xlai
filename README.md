@@ -30,22 +30,28 @@ xlai/
 ├── vendor/
 │   └── native/          # git submodules: llama.cpp, ggml (for xlai-sys-*)
 ├── crates/
-│   ├── xlai-backend-llama-cpp/
-│   ├── xlai-backend-openai/
-│   ├── xlai-backend-transformersjs/
-│   ├── xlai-core/
-│   ├── xlai-facade/
-│   ├── xlai-ffi/
-│   ├── xlai-local-common/
-│   ├── xlai-native/
-│   ├── xlai-qts-cli/
-│   ├── xlai-qts-core/
-│   ├── xlai-qts-manifest/
-│   ├── xlai-runtime/
-│   ├── xlai-build-native/
-│   ├── xlai-sys-ggml/
-│   ├── xlai-sys-llama/
-│   └── xlai-wasm/
+│   ├── core/
+│   │   └── xlai-core/
+│   ├── runtime/
+│   │   └── xlai-runtime/
+│   ├── backends/
+│   │   ├── xlai-backend-openai/
+│   │   ├── xlai-backend-transformersjs/
+│   │   ├── xlai-backend-gemini/
+│   │   └── xlai-backend-llama-cpp/
+│   ├── qts/
+│   │   ├── xlai-qts-core/
+│   │   ├── xlai-qts-manifest/
+│   │   └── xlai-qts-cli/
+│   ├── sys/
+│   │   ├── xlai-build-native/
+│   │   ├── xlai-sys-llama/
+│   │   └── xlai-sys-ggml/
+│   └── platform/
+│       ├── xlai-facade/
+│       ├── xlai-native/
+│       ├── xlai-wasm/
+│       └── xlai-ffi/
 ├── packages/
 │   └── xlai/
 └── .github/workflows/
@@ -55,39 +61,39 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). F
 
 ### Crates And Packages
 
-- `crates/xlai-core`
+- `crates/core/xlai-core`
   Shared domain types and traits for chat, tools, embeddings, knowledge, and vector search.
-- `crates/xlai-ffi`
+- `crates/platform/xlai-ffi`
   Native C ABI facade crate for future FFI integrations.
-- `crates/xlai-local-common`
-  Local-backend prompt prep and tool JSON envelope; depended on by llama.cpp / transformers.js backends. Still exposed as `xlai_runtime::local_common` for compatibility.
-- `crates/xlai-runtime`
-  Runtime builder, chat session API, streaming, and tool-calling orchestration.
-- `crates/xlai-facade`
-  Internal shared re-exports for native and wasm facades (OpenAI, transformers.js, optional llama + native QTS).
-- `crates/xlai-native`
-  Native Rust-facing facade crate (thin re-export of `xlai-facade`).
-- `crates/xlai-wasm`
-  Browser-facing `wasm-bindgen` facade crate for web integration. Default Cargo feature `qts` enables local QTS entrypoints (`qtsBrowserTts`, manifest validation); the in-browser engine is still a stub until GGML/ORT WASM work lands (see `docs/qts/wasm-browser-runtime.md`).
-- `crates/xlai-backend-llama-cpp`
+- `crates/runtime/xlai-runtime`
+  Runtime builder, chat session API, streaming, and tool-calling orchestration. Local-backend prompt prep (`PreparedLocalChatRequest`, tool JSON, templates) lives in **`xlai_runtime::local_common`** (used by llama.cpp and transformers.js backends).
+- `crates/platform/xlai-facade`
+  Internal native aggregate wiring and re-exports for `xlai-native` only (not used by `xlai-wasm`). Not published to crates.io.
+- `crates/platform/xlai-native`
+  Native Rust-facing entrypoint: explicit re-exports, optional `qts`, and `gemini` submodule for workspace-only Gemini types.
+- `crates/platform/xlai-wasm`
+  Browser-facing `wasm-bindgen` crate for web integration. Default Cargo feature `qts` enables local QTS entrypoints (`qtsBrowserTts`, manifest validation); the in-browser engine is still a stub until GGML/ORT WASM work lands (see `docs/qts/wasm-browser-runtime.md`).
+- `crates/backends/xlai-backend-llama-cpp`
   Native `llama.cpp` chat backend for local GGUF inference.
-- `crates/xlai-build-native`
+- `crates/sys/xlai-build-native`
   Shared `build.rs` helpers for native CMake/OpenBLAS/Vulkan and llama.cpp CMake patches (build-dependency only).
-- `crates/xlai-sys-llama`
+- `crates/sys/xlai-sys-llama`
   Vendored `llama.cpp` native stack for the local chat backend.
-- `crates/xlai-sys-ggml`
+- `crates/sys/xlai-sys-ggml`
   Vendored standalone `ggml` native stack for QTS.
 - `packages/xlai`
   Vite-based TypeScript package published as `@yai-xlai/xlai`, built on top of `xlai-wasm`, with Vitest coverage.
-- `crates/xlai-backend-openai`
+- `crates/backends/xlai-backend-openai`
   OpenAI-compatible backend implementation using `reqwest`.
-- `crates/xlai-backend-transformersjs`
+- `crates/backends/xlai-backend-transformersjs`
   Browser chat backend that delegates generation to a JavaScript adapter (WASM).
-- `crates/xlai-qts-manifest`
+- `crates/backends/xlai-backend-gemini`
+  Google Gemini HTTP backend (workspace-only; `publish = false`).
+- `crates/qts/xlai-qts-manifest`
   Serde types for browser QTS model manifests and capability JSON (no GGML/ORT); used by `xlai-wasm` (feature `qts`) and re-exported as `xlai_qts_core::browser`.
-- `crates/xlai-qts-core`
+- `crates/qts/xlai-qts-core`
   Qwen3 TTS engine; links standalone `ggml` through `xlai-sys-ggml`. Exposes native `TtsModel` (`QtsTtsModel`, WAV output; tuning via `TtsRequest` metadata `xlai.qts.*`). **`VoiceSpec::Clone`** uses the first reference sample (inline WAV only): x-vector and ICL prompts, with optional `xlai.qts.voice_clone_mode` (`xvector` \| `icl`). ICL needs `qwen3-tts-reference-codec.onnx` + preprocess JSON from `uv run export-model-artifacts` (see `docs/qts/export-and-hf-publish.md`). Pipelined vocoder chunking and overlap are documented in `docs/qts/vocoder-streaming.md`. `xlai_qts_core::browser` re-exports `xlai-qts-manifest`.
-- `crates/xlai-qts-cli`
+- `crates/qts/xlai-qts-cli`
   Binary `xlai-qts`: `synthesize`, `profile`, and interactive `tui`. Without voice-clone flags, `synthesize` uses `xlai-runtime` + `xlai-qts-core` (`QtsTtsModel`). With `--voice-clone-prompt` or `--ref-audio`, it uses the direct engine path. Run `cargo run -p xlai-qts-cli -- --help` (or `… synthesize --help`) for flags.
 
 ## Requirements

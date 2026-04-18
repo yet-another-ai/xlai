@@ -1,0 +1,26 @@
+[package]
+name = "xlai-ffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "C ABI shared library wrapping `xlai-native`."
+publish = false
+
+[features]
+default = ["openblas"]
+openblas = ["xlai-native/openblas"]
+metal = ["xlai-native/metal"]
+vulkan = ["xlai-native/vulkan"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Full native aggregate is linked today so the cdylib matches `xlai-native` deployments; the C API
+# surface is still minimal (`xlai_version` only).
+xlai-native.workspace = true
+
+[lints]
+workspace = true

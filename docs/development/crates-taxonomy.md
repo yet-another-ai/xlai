@@ -1,6 +1,17 @@
 # Workspace crate taxonomy
 
-All members live under [`crates/`](https://github.com/yetanother.ai/xlai/tree/main/crates). This doc classifies them for dependency and release decisions. Authoritative publish order for crates.io is in [Publishing](./publishing) and [`.github/workflows/publish.yml`](https://github.com/yetanother.ai/xlai/blob/main/.github/workflows/publish.yml).
+Workspace members live under [`crates/`](https://github.com/yetanother.ai/xlai/tree/main/crates) and are grouped by role:
+
+| Directory          | Crates                                                                                                |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| `crates/core/`     | `xlai-core`                                                                                           |
+| `crates/runtime/`  | `xlai-runtime`                                                                                        |
+| `crates/backends/` | `xlai-backend-openai`, `xlai-backend-transformersjs`, `xlai-backend-gemini`, `xlai-backend-llama-cpp` |
+| `crates/qts/`      | `xlai-qts-core`, `xlai-qts-manifest`, `xlai-qts-cli`                                                  |
+| `crates/sys/`      | `xlai-build-native`, `xlai-sys-llama`, `xlai-sys-ggml`                                                |
+| `crates/platform/` | `xlai-facade`, `xlai-native`, `xlai-wasm`, `xlai-ffi`                                                 |
+
+This doc classifies crates for dependency and release decisions. Authoritative publish order for crates.io is in [Publishing](./publishing) and [`.github/workflows/publish.yml`](https://github.com/yetanother.ai/xlai/blob/main/.github/workflows/publish.yml).
 
 ## Published to crates.io
 
@@ -13,21 +24,20 @@ All members live under [`crates/`](https://github.com/yetanother.ai/xlai/tree/ma
 
 ## Internal only (`publish = false`)
 
-| Crate                    | Role                                                                         |
-| ------------------------ | ---------------------------------------------------------------------------- |
-| `xlai-build-native`      | Internal build-script helpers (CMake, OpenBLAS, Vulkan, llama.cpp patches)   |
-| `xlai-sys-llama`         | Vendored `llama.cpp` build (CMake + bindgen); sources under `vendor/native/` |
-| `xlai-sys-ggml`          | Vendored standalone `ggml` build for QTS (CMake + bindgen)                   |
-| `xlai-local-common`      | Local chat prompt + tool JSON (used by llama.cpp / transformers.js backends) |
-| `xlai-backend-llama-cpp` | Native llama.cpp chat backend                                                |
-| `xlai-backend-gemini`    | Google Gemini HTTP backend                                                   |
-| `xlai-facade`            | Shared re-exports for `xlai-native` / `xlai-wasm`                            |
-| `xlai-native`            | Native app facade                                                            |
-| `xlai-wasm`              | `wasm-bindgen` + npm package base                                            |
-| `xlai-ffi`               | C ABI                                                                        |
-| `xlai-qts-manifest`      | Browser QTS manifest / capability serde                                      |
-| `xlai-qts-core`          | Native Qwen3 TTS engine + `QtsTtsModel`                                      |
-| `xlai-qts-cli`           | `xlai-qts` binary                                                            |
+| Crate                    | Role                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------ |
+| `xlai-build-native`      | Internal build-script helpers (CMake, OpenBLAS, Vulkan, llama.cpp patches)                 |
+| `xlai-sys-llama`         | Vendored `llama.cpp` build (CMake + bindgen); sources under `vendor/native/`               |
+| `xlai-sys-ggml`          | Vendored standalone `ggml` build for QTS (CMake + bindgen)                                 |
+| `xlai-backend-llama-cpp` | Native llama.cpp chat backend                                                              |
+| `xlai-backend-gemini`    | Google Gemini HTTP backend (`publish = false`; not in the crates.io publish chain)         |
+| `xlai-facade`            | Internal integration re-exports for `xlai-native` only (`xlai-wasm` does not depend on it) |
+| `xlai-native`            | Native app entrypoint                                                                      |
+| `xlai-wasm`              | `wasm-bindgen` + npm package base                                                          |
+| `xlai-ffi`               | C ABI                                                                                      |
+| `xlai-qts-manifest`      | Browser QTS manifest / capability serde                                                    |
+| `xlai-qts-core`          | Native Qwen3 TTS engine + `QtsTtsModel`                                                    |
+| `xlai-qts-cli`           | `xlai-qts` binary                                                                          |
 
 ## CI setup
 

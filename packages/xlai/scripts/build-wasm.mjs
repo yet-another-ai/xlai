@@ -12,11 +12,13 @@ await rm(outputDir, { recursive: true, force: true });
 const command = process.platform === 'win32' ? 'wasm-pack.exe' : 'wasm-pack';
 const args = [
   'build',
-  '../../crates/xlai-wasm',
+  '../../crates/platform/xlai-wasm',
   '--target',
   'web',
+  // wasm-pack resolves `--out-dir` relative to the Rust crate root (see `wasm-pack build --help`),
+  // not the shell cwd. From `crates/platform/xlai-wasm`, repo-root `packages/xlai/pkg` is three levels up.
   '--out-dir',
-  '../../packages/xlai/pkg',
+  '../../../packages/xlai/pkg',
   '--out-name',
   'xlai_wasm',
   '--',

@@ -60,7 +60,7 @@ The native runtime currently calls `qwen3-tts-vocoder.onnx` in a **stateless** w
 A **stateful** export (extra inputs/outputs for convolver or decoder cache tensors) could remove redundant re-decoding of context frames and shrink overlap further. That would require:
 
 1. A new or alternate ONNX graph from the training/export stack (`scripts/qts/export_model_artifacts.py` and upstream checkpoints).
-2. Matching changes in `crates/xlai-qts-core/src/pipeline/vocoder.rs` to bind and thread state across steps.
+2. Matching changes in `crates/qts/xlai-qts-core/src/pipeline/vocoder.rs` to bind and thread state across steps.
 3. Versioning or manifest entries so HF bundles can declare which vocoder interface they ship.
 
 Until then, tuning `xlai.qts.vocoder_chunk_size` and `QWEN3_TTS_VOCODER_OVERLAP_FRAMES` is the supported path.

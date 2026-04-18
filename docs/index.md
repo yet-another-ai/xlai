@@ -30,12 +30,13 @@ This project is in an **early stage**; the public API is still evolving. See the
 
 ## Quick links
 
-| Topic                  | Link                                      |
-| ---------------------- | ----------------------------------------- |
-| Install and build      | [Getting started](/guide/getting-started) |
-| Environment variables  | [Configuration](/guide/configuration)     |
-| Crate layout           | [Architecture](/architecture/)            |
-| Rust runtime and tools | [Rust SDK](/rust/)                        |
-| npm / WASM package     | [JavaScript](/js/)                        |
-| TTS (Qwen3)            | [QTS](/qts/)                              |
-| Releases and CI        | [Development](/development/)              |
+| Topic                  | Link                                                |
+| ---------------------- | --------------------------------------------------- |
+| Install and build      | [Getting started](/guide/getting-started)           |
+| Environment variables  | [Configuration](/guide/configuration)               |
+| Crate layout           | [Architecture](/architecture/)                      |
+| Workspace migration    | [Workspace refactor](/migration/workspace-refactor) |
+| Rust runtime and tools | [Rust SDK](/rust/)                                  |
+| npm / WASM package     | [JavaScript](/js/)                                  |
+| TTS (Qwen3)            | [QTS](/qts/)                                        |
+| Releases and CI        | [Development](/development/)                        |
