@@ -26,6 +26,9 @@ jobs:
   e2e-rust:
     name: Rust - ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+    env:
+      # Windows: huggingface_hub CLI prints Unicode (e.g. ✓); default console encoding raises charmap errors.
+      PYTHONUTF8: '1'
     defaults:
       run:
         working-directory: ${{ matrix.runner == 'windows-latest' && 'C:\\w' || '.' }}
