@@ -1,8 +1,8 @@
-# Shared steps for native Rust jobs: toolchain, sccache, rust-cache, OpenBLAS / vcpkg / shaderc.
+# Shared steps for native Rust jobs: toolchain, sccache, rust-cache, CUDA, OpenBLAS / vcpkg / shaderc.
 # Call after `actions/checkout` (with `submodules: true` when building xlai-sys-llama or xlai-sys-ggml; submodules live under `vendor/native/`).
 
 name: XLAI Rust native setup
-description: Rust toolchain, sccache, cache, and OS-specific native dependencies
+description: Rust toolchain, sccache, cache, CUDA, and OS-specific native dependencies
 
 inputs:
   rust-targets:
@@ -51,6 +51,14 @@ runs:
       with:
         path: ${{ env.VCPKG_ROOT }}
         key: vcpkg-openblas-${{ runner.os }}-${{ env.VCPKG_OPENBLAS_TRIPLET }}-v1
+
+    - name: Install CUDA toolkit
+      if: runner.os == 'Linux' || runner.os == 'Windows'
+      uses: Jimver/cuda-toolkit@v0.2
+      with:
+        cuda: '13.2.0'
+        method: network
+        log-file-suffix: ${{ format('{0}-{1}.txt', runner.os, inputs.rust-cache-shared-key) }}
 
     - name: Install Linux build dependencies
       if: runner.os == 'Linux'
