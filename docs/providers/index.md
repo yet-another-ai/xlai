@@ -4,13 +4,13 @@ XLAI focuses on a **small set of first-party backends** with a shared `xlai-core
 
 ## Chat
 
-| Backend                   | Crate                         | Notes                                                                        |
-| ------------------------- | ----------------------------- | ---------------------------------------------------------------------------- |
-| OpenAI-compatible HTTP    | `xlai-backend-openai`         | OpenAI-style HTTP backend for OpenAI and other providers with matching APIs |
+| Backend                   | Crate                         | Notes                                                                             |
+| ------------------------- | ----------------------------- | --------------------------------------------------------------------------------- |
+| OpenAI-compatible HTTP    | `xlai-backend-openai`         | OpenAI-style HTTP backend for OpenAI and other providers with matching APIs       |
 | OpenRouter Responses API  | `xlai-backend-openrouter`     | Dedicated OpenRouter backend for `/responses`; avoids assuming full OpenAI parity |
-| Google Gemini             | `xlai-backend-gemini`         | Gemini HTTP API                                                              |
-| llama.cpp (local GGUF)    | `xlai-backend-llama-cpp`      | Native inference via vendored `llama.cpp`                                    |
-| transformers.js (browser) | `xlai-backend-transformersjs` | WASM-only; delegates generation to a JS adapter                              |
+| Google Gemini             | `xlai-backend-gemini`         | Gemini HTTP API                                                                   |
+| llama.cpp (local GGUF)    | `xlai-backend-llama-cpp`      | Native inference via vendored `llama.cpp`                                         |
+| transformers.js (browser) | `xlai-backend-transformersjs` | WASM-only; delegates generation to a JS adapter                                   |
 
 ## Speech
 
