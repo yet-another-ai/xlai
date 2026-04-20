@@ -25,6 +25,7 @@ qts = ["dep:xlai-qts-core"]
 xlai-backend-gemini.workspace = true
 xlai-backend-llama-cpp = { workspace = true, optional = true }
 xlai-backend-openai.workspace = true
+xlai-backend-openrouter.workspace = true
 xlai-backend-transformersjs.workspace = true
 xlai-core.workspace = true
 xlai-runtime.workspace = true

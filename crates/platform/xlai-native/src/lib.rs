@@ -19,9 +19,10 @@ pub use xlai_facade::{
     ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality,
     ImageGenerationRequest, ImageGenerationResponse, LlamaCppChatModel, LlamaCppConfig,
     McpRegistry, MemoryFileSystem, OpenAiChatModel, OpenAiConfig, OpenAiImageGenerationModel,
-    OpenAiTranscriptionModel, OpenAiTtsModel, ReadableFileSystem, RuntimeBuilder,
-    ToolCallExecutionMode, TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
-    TtsExecutionConfig, TtsExecutionOverrides, WritableFileSystem, XlaiRuntime,
+    OpenAiTranscriptionModel, OpenAiTtsModel, OpenRouterChatModel, OpenRouterConfig,
+    ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode, TransformersJsBundle,
+    TransformersJsChatModel, TransformersJsConfig, TtsExecutionConfig, TtsExecutionOverrides,
+    WritableFileSystem, XlaiRuntime,
 };
 
 #[cfg(feature = "qts")]

@@ -4,6 +4,7 @@ members = [
     "crates/backends/xlai-backend-gemini",
     "crates/backends/xlai-backend-llama-cpp",
     "crates/backends/xlai-backend-openai",
+    "crates/backends/xlai-backend-openrouter",
     "crates/backends/xlai-backend-transformersjs",
     "crates/core/xlai-core",
     "crates/platform/xlai-ffi",
@@ -73,6 +74,7 @@ windows-sys = "0.61"
 xlai-core = { path = "crates/core/xlai-core", version = "0.1.0" }
 xlai-runtime = { path = "crates/runtime/xlai-runtime", version = "0.1.0" }
 xlai-backend-openai = { path = "crates/backends/xlai-backend-openai", version = "0.1.0" }
+xlai-backend-openrouter = { path = "crates/backends/xlai-backend-openrouter", version = "0.1.0" }
 xlai-backend-transformersjs = { path = "crates/backends/xlai-backend-transformersjs", version = "0.1.0" }
 xlai-backend-gemini = { path = "crates/backends/xlai-backend-gemini", version = "0.1.0" }
 xlai-backend-llama-cpp = { path = "crates/backends/xlai-backend-llama-cpp", version = "0.1.0" }

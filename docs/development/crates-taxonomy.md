@@ -20,6 +20,7 @@ This doc classifies crates for dependency and release decisions. Authoritative p
 | `xlai-core`                   | Domain types and provider traits            |
 | `xlai-runtime`                | `RuntimeBuilder`, `Chat`, `Agent`, sessions |
 | `xlai-backend-openai`         | OpenAI-compatible HTTP backend              |
+| `xlai-backend-openrouter`     | OpenRouter Responses API chat backend       |
 | `xlai-backend-transformersjs` | WASM transformers.js chat backend           |
 
 ## Internal only (`publish = false`)

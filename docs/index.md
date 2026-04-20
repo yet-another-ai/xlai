@@ -15,7 +15,7 @@ hero:
 
 features:
   - title: Pluggable backends
-    details: OpenAI-compatible HTTP, Google Gemini, local llama.cpp, and browser transformers.js — behind the same runtime model.
+    details: OpenAI-compatible HTTP, OpenRouter Responses, Google Gemini, local llama.cpp, and browser transformers.js — behind the same runtime model.
   - title: Sessions that fit your app
     details: Chat and agent sessions with per-session tools, streaming, and configurable tool execution.
   - title: Native and WASM

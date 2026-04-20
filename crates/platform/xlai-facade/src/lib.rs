@@ -14,6 +14,7 @@ pub use xlai_backend_openai::{
     OpenAiChatModel, OpenAiConfig, OpenAiImageGenerationModel, OpenAiTranscriptionModel,
     OpenAiTtsModel,
 };
+pub use xlai_backend_openrouter::{OpenRouterChatModel, OpenRouterConfig};
 pub use xlai_backend_transformersjs::{
     TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
 };

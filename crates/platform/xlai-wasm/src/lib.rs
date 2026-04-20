@@ -10,6 +10,7 @@ pub use xlai_backend_openai::{
     OpenAiChatModel, OpenAiConfig, OpenAiImageGenerationModel, OpenAiTranscriptionModel,
     OpenAiTtsModel,
 };
+pub use xlai_backend_openrouter::{OpenRouterChatModel, OpenRouterConfig};
 #[cfg(target_arch = "wasm32")]
 pub use xlai_backend_transformersjs::{
     TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
