@@ -66,6 +66,10 @@ export async function createXlaiTransformersJsAdapter(
   const { GuidanceParser, GuidanceLogitsProcessor, extractTokenizerData } = tlg;
   const { LogitsProcessor, StoppingCriteria, StoppingCriteriaList, Tensor } =
     tf;
+  const pipelineFactory = tf.pipeline as (
+    task: string,
+    modelId: string,
+  ) => Promise<unknown>;
 
   /** Text-generation pipeline (typed loosely — `pipeline()` overload union is huge). */
   type TextGenPipeline = {
@@ -85,7 +89,10 @@ export async function createXlaiTransformersJsAdapter(
   async function getPipeline(modelId: string): Promise<TextGenPipeline> {
     let p = pipelines.get(modelId);
     if (!p) {
-      p = (await tf.pipeline('text-generation', modelId)) as TextGenPipeline;
+      p = (await pipelineFactory(
+        'text-generation',
+        modelId,
+      )) as TextGenPipeline;
       pipelines.set(modelId, p);
     }
     return p;
@@ -96,7 +103,7 @@ export async function createXlaiTransformersJsAdapter(
   ): Promise<FeatureExtractionPipeline> {
     let p = embeddingPipelines.get(modelId);
     if (!p) {
-      p = (await tf.pipeline(
+      p = (await pipelineFactory(
         'feature-extraction',
         modelId,
       )) as FeatureExtractionPipeline;
