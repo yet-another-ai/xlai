@@ -42,7 +42,7 @@ This doc classifies crates for dependency and release decisions. Authoritative p
 
 ## CI setup
 
-Native Rust jobs share [`.github/actions/setup-xlai-rust-native`](https://github.com/yetanother.ai/xlai/blob/main/.github/actions/setup-xlai-rust-native/action.yml) (toolchain, sccache, `rust-cache`, CUDA on Linux/Windows via `Jimver/cuda-toolkit`, plus OpenBLAS / vcpkg / shaderc). Jobs that need **Vulkan** (release `build.yml`) add Linux `glslc` / `libvulkan-dev` and the Vulkan SDK step after that action.
+Native Rust jobs share [`.github/actions/setup-xlai-rust-native`](https://github.com/yetanother.ai/xlai/blob/main/.github/actions/setup-xlai-rust-native/action.yml) (toolchain, sccache, `rust-cache`, CUDA on Linux/Windows via `Jimver/cuda-toolkit`, ROCm/HIP on Linux and Windows, plus OpenBLAS / vcpkg / shaderc). Jobs that need **Vulkan** (release `build.yml`) add Linux `glslc` / `libvulkan-dev` and the Vulkan SDK step after that action.
 
 ## Adding a new workspace member
 

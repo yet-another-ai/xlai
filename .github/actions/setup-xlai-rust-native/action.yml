@@ -1,8 +1,8 @@
-# Shared steps for native Rust jobs: toolchain, sccache, rust-cache, CUDA, OpenBLAS / vcpkg / shaderc.
+# Shared steps for native Rust jobs: toolchain, sccache, rust-cache, CUDA, ROCm/HIP, OpenBLAS / vcpkg / shaderc.
 # Call after `actions/checkout` (with `submodules: true` when building xlai-sys-llama or xlai-sys-ggml; submodules live under `vendor/native/`).
 
 name: XLAI Rust native setup
-description: Rust toolchain, sccache, cache, CUDA, and OS-specific native dependencies
+description: Rust toolchain, sccache, cache, CUDA, ROCm/HIP, and OS-specific native dependencies
 
 inputs:
   rust-targets:
@@ -59,6 +59,96 @@ runs:
         cuda: '13.2.0'
         method: network
         log-file-suffix: ${{ format('{0}-{1}.txt', runner.os, inputs.rust-cache-shared-key) }}
+
+    - name: Install Linux ROCm / HIP SDK
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euxo pipefail
+
+        source /etc/os-release
+        case "${VERSION_CODENAME}" in
+          jammy|noble) ;;
+          *)
+            echo "Unsupported Ubuntu codename for ROCm apt install: ${VERSION_CODENAME}" >&2
+            exit 1
+            ;;
+        esac
+
+        ROCM_APT_VERSION=7.2.2
+        GRAPHICS_APT_VERSION=7.2.1
+
+        sudo mkdir --parents --mode=0755 /etc/apt/keyrings
+        wget https://repo.radeon.com/rocm/rocm.gpg.key -O - \
+          | gpg --dearmor \
+          | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+
+        cat <<EOF | sudo tee /etc/apt/sources.list.d/rocm.list
+        deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_APT_VERSION} ${VERSION_CODENAME} main
+        deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/graphics/${GRAPHICS_APT_VERSION}/ubuntu ${VERSION_CODENAME} main
+        EOF
+
+        cat <<EOF | sudo tee /etc/apt/preferences.d/rocm-pin-600
+        Package: *
+        Pin: release o=repo.radeon.com
+        Pin-Priority: 600
+        EOF
+
+        sudo apt-get update
+        sudo apt-get install -y rocm-hip-sdk hipblas
+
+        echo "ROCM_PATH=/opt/rocm" >> "$GITHUB_ENV"
+        echo "HIP_PATH=/opt/rocm" >> "$GITHUB_ENV"
+        echo "HIPCXX=/opt/rocm/bin/hipcc" >> "$GITHUB_ENV"
+        if [ -n "${CMAKE_PREFIX_PATH:-}" ]; then
+          echo "CMAKE_PREFIX_PATH=/opt/rocm:${CMAKE_PREFIX_PATH}" >> "$GITHUB_ENV"
+        else
+          echo "CMAKE_PREFIX_PATH=/opt/rocm" >> "$GITHUB_ENV"
+        fi
+        echo "/opt/rocm/bin" >> "$GITHUB_PATH"
+
+    - name: Install Windows HIP SDK
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $installerName = 'AMD-Software-PRO-Edition-25.Q3-WinSvr2022-For-HIP.exe'
+        $installerUrl = "https://drivers.amd.com/drivers/prographics/$installerName"
+        $installerPath = Join-Path $env:RUNNER_TEMP $installerName
+        $installLog = Join-Path $env:RUNNER_TEMP 'hip-sdk-install.log'
+
+        Write-Host "Attempting HIP SDK install from $installerUrl"
+        Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -Headers @{
+          'User-Agent' = 'Mozilla/5.0'
+          'Referer' = 'https://www.amd.com/'
+        }
+
+        $process = Start-Process -FilePath $installerPath `
+          -ArgumentList '-install', '-log', $installLog `
+          -NoNewWindow `
+          -Wait `
+          -PassThru
+
+        if ($process.ExitCode -notin 0, 3010) {
+          throw "HIP SDK installer failed with exit code $($process.ExitCode). See $installLog"
+        }
+
+        $rocmRoot = Get-ChildItem 'C:\Program Files\AMD\ROCm' -Directory `
+          | Sort-Object Name -Descending `
+          | Select-Object -First 1
+
+        if (-not $rocmRoot) {
+          throw 'HIP SDK install completed but no ROCm root was found under C:\Program Files\AMD\ROCm'
+        }
+
+        Add-Content -Path $env:GITHUB_ENV -Value "ROCM_PATH=$($rocmRoot.FullName)"
+        Add-Content -Path $env:GITHUB_ENV -Value "HIP_PATH=$($rocmRoot.FullName)"
+        Add-Content -Path $env:GITHUB_ENV -Value "HIPCXX=$($rocmRoot.FullName)\\bin\\hipcc.exe"
+        if ($env:CMAKE_PREFIX_PATH) {
+          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_PREFIX_PATH=$($rocmRoot.FullName);$env:CMAKE_PREFIX_PATH"
+        } else {
+          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_PREFIX_PATH=$($rocmRoot.FullName)"
+        }
+        Add-Content -Path $env:GITHUB_PATH -Value "$($rocmRoot.FullName)\\bin"
 
     - name: Install Linux build dependencies
       if: runner.os == 'Linux'

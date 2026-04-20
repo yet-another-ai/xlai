@@ -26,7 +26,7 @@ OpenAI smoke tests load `.env` automatically for local runs. For embeddings/tran
 
 Builds on Linux, Windows, macOS arm64, macOS x86_64 (cross-target), `wasm32-unknown-unknown`, and the `@yai-xlai/xlai` package through the pnpm workspace.
 
-Native Rust jobs share `.github/actions/setup-xlai-rust-native`, which installs the Rust toolchain, caches cargo output, provisions OpenBLAS, and now installs the CUDA toolkit on Linux/Windows via `Jimver/cuda-toolkit@v0.2`. Vulkan remains an extra workflow step because only the Vulkan lanes need `glslc` / the SDK.
+Native Rust jobs share `.github/actions/setup-xlai-rust-native`, which installs the Rust toolchain, caches cargo output, provisions OpenBLAS, installs the CUDA toolkit on Linux/Windows via `Jimver/cuda-toolkit@v0.2`, and installs ROCm/HIP for Linux (`rocm-hip-sdk` from AMD's apt repo) plus a Windows HIP SDK installer path for the Windows native jobs. Vulkan remains an extra workflow step because only the Vulkan lanes need `glslc` / the SDK.
 
 ### Test (`.github/workflows/test.yml`)
 
@@ -35,7 +35,7 @@ Native Rust jobs share `.github/actions/setup-xlai-rust-native`, which installs 
 - `cargo test --workspace`
 - `pnpm --filter @yai-xlai/xlai test`
 
-The Rust matrix reuses the same shared native setup action, so Linux/Windows unit-test lanes get the CUDA toolkit before building the default native feature set.
+The Rust matrix reuses the same shared native setup action, so Linux/Windows unit-test lanes get the CUDA toolkit before building the default native feature set, and the ROCm/HIP setup is applied there as well.
 
 ### Publish (`.github/workflows/publish.yml`)
 
