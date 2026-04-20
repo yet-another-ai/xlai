@@ -7,12 +7,14 @@ use crate::qts_browser::QtsBrowserCapabilities;
 use futures_util::StreamExt;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::wasm_bindgen;
-use xlai_backend_openai::{OpenAiConfig, OpenAiImageGenerationModel, OpenAiTtsModel};
+use xlai_backend_openai::{
+    OpenAiConfig, OpenAiEmbeddingModel, OpenAiImageGenerationModel, OpenAiTtsModel,
+};
 #[cfg(feature = "qts")]
 use xlai_core::XlaiError;
 use xlai_core::{
-    ChatContent, ImageGenerationModel, ImageGenerationRequest, TtsChunk, TtsDeliveryMode,
-    TtsExecutionConfig, TtsExecutionOverrides, TtsModel, TtsRequest,
+    ChatContent, EmbeddingModel, EmbeddingRequest, ImageGenerationModel, ImageGenerationRequest,
+    TtsChunk, TtsDeliveryMode, TtsExecutionConfig, TtsExecutionOverrides, TtsModel, TtsRequest,
 };
 
 use crate::agent_session::WasmAgentSession;
@@ -30,7 +32,8 @@ use crate::memory_fs::WasmMemoryFileSystem;
 use crate::types::WasmQtsTtsCallOptions;
 use crate::types::{
     DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL, WasmAgentRequest, WasmChatRequest,
-    WasmChatSessionOptions, WasmImageGenerationCallOptions, WasmTtsCallOptions,
+    WasmChatSessionOptions, WasmEmbeddingCallOptions, WasmImageGenerationCallOptions,
+    WasmTtsCallOptions,
 };
 use crate::wasm_helpers::js_error;
 
@@ -253,6 +256,22 @@ fn openai_tts_model(opts: &WasmTtsCallOptions) -> OpenAiTtsModel {
     OpenAiTtsModel::new(config)
 }
 
+fn openai_embedding_model(opts: &WasmEmbeddingCallOptions) -> OpenAiEmbeddingModel {
+    let mut config = OpenAiConfig::new(
+        opts.base_url
+            .clone()
+            .unwrap_or_else(|| DEFAULT_OPENAI_BASE_URL.to_owned()),
+        opts.api_key.clone(),
+        opts.model
+            .clone()
+            .unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_owned()),
+    );
+    if let Some(ref m) = opts.embedding_model {
+        config = config.with_embedding_model(m.clone());
+    }
+    OpenAiEmbeddingModel::new(config)
+}
+
 fn openai_image_generation_model(
     opts: &WasmImageGenerationCallOptions,
 ) -> OpenAiImageGenerationModel {
@@ -316,6 +335,23 @@ pub async fn tts(options: JsValue) -> Result<JsValue, JsValue> {
     let model = openai_tts_model(&opts);
     let request = tts_request_from_opts(&opts, delivery);
     let response = model.synthesize(request).await.map_err(js_error)?;
+    serde_wasm_bindgen::to_value(&response).map_err(js_error)
+}
+
+#[wasm_bindgen]
+pub async fn embed(options: JsValue) -> Result<JsValue, JsValue> {
+    let opts: WasmEmbeddingCallOptions =
+        serde_wasm_bindgen::from_value(options).map_err(js_error)?;
+    let model = openai_embedding_model(&opts);
+    let response = model
+        .embed(EmbeddingRequest {
+            model: opts.embedding_model.or(opts.model),
+            inputs: opts.inputs,
+            dimensions: opts.dimensions,
+            metadata: Default::default(),
+        })
+        .await
+        .map_err(js_error)?;
     serde_wasm_bindgen::to_value(&response).map_err(js_error)
 }
 

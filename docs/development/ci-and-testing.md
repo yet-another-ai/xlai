@@ -18,7 +18,7 @@ Real provider credentials and local model paths. Run with:
 cargo test --workspace -- --ignored --test-threads=1
 ```
 
-OpenAI smoke tests load `.env` automatically for local runs. For transcription e2e, set `OPENAI_TRANSCRIPTION_MODEL` to a transcription-capable model.
+OpenAI smoke tests load `.env` automatically for local runs. For embeddings/transcription/TTS/image e2e, set the corresponding model env vars such as `OPENAI_EMBEDDING_MODEL`, `OPENAI_TRANSCRIPTION_MODEL`, `OPENAI_TTS_MODEL`, and `OPENAI_IMAGE_MODEL`.
 
 ## GitHub Actions workflows
 
@@ -45,7 +45,12 @@ See [Publishing](./publishing) for ordering and crates that are not on crates.io
 
 Runs ignored tests with provider secrets. Use a protected environment (for example `e2e`) with maintainer approval.
 
-Expected secrets and variables include `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_TRANSCRIPTION_MODEL`, `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, and for llama.cpp smoke tests `LLAMA_CPP_MODEL` (or the default fixture path under `fixtures/llama.cpp/`).
+Expected secrets and variables include:
+
+- OpenAI-compatible: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_EMBEDDING_MODEL`, `OPENAI_IMAGE_MODEL`, `OPENAI_TRANSCRIPTION_MODEL`, `OPENAI_TTS_MODEL`
+- Gemini: `GEMINI_API_KEY`, `GEMINI_BASE_URL`, `GEMINI_MODEL`, `GEMINI_EMBEDDING_MODEL`, `GEMINI_IMAGE_MODEL`
+- OpenRouter: `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`
+- Local fixture-backed lanes: `LLAMA_CPP_MODEL` (or the default fixture path under `fixtures/llama.cpp/`)
 
 If you want OpenRouter requests to carry ranking / app-identification headers in CI, also set `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE`, and `OPENROUTER_APP_CATEGORIES` in the protected `e2e` environment.
 

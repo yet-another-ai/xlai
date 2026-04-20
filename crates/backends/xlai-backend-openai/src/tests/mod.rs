@@ -2,6 +2,7 @@
 
 mod chat_request;
 mod common;
+mod embeddings;
 mod image_generation;
 mod provider_errors;
 mod transcription;

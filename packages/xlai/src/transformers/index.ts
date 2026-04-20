@@ -10,6 +10,8 @@ export {
 export type {
   TransformersAgentSessionOptions,
   TransformersChatSessionOptions,
+  TransformersEmbedRequest,
+  TransformersEmbedResponse,
   TransformersGenerateRequest,
   TransformersGenerateResponse,
   TransformersJsAdapterOptions,

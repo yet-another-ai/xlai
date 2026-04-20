@@ -11,6 +11,7 @@ export type {
 } from './filesystem';
 export { AgentSession, agent, createAgentSession } from './agent';
 export { ChatSession, chat, createChatSession } from './chat';
+export { embed } from './embeddings';
 export { generateImage } from './image-generation';
 export { tts, ttsStream } from './tts';
 export {
@@ -37,6 +38,9 @@ export type {
   ChatSessionOptions,
   ChatUsage,
   ContentPart,
+  EmbeddingOptions,
+  EmbeddingResponse,
+  EmbeddingUsage,
   GeneratedImage,
   ImageDetail,
   ImageGenerationBackground,

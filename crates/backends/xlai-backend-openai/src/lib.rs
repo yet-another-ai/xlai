@@ -7,13 +7,15 @@ use reqwest::Client;
 use serde_json::Value;
 use xlai_core::{
     BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatModel, ChatRequest, ChatResponse,
-    ChatRetryPolicy, ErrorKind, ImageGenerationBackend, ImageGenerationModel,
-    ImageGenerationRequest, ImageGenerationResponse, MediaSource, MessageRole, StreamTextDelta,
-    TranscriptionBackend, TranscriptionModel, TranscriptionRequest, TranscriptionResponse,
-    TtsBackend, TtsChunk, TtsDeliveryMode, TtsModel, TtsRequest, TtsResponse, XlaiError,
+    ChatRetryPolicy, EmbeddingBackend, EmbeddingModel, EmbeddingRequest, EmbeddingResponse,
+    ErrorKind, ImageGenerationBackend, ImageGenerationModel, ImageGenerationRequest,
+    ImageGenerationResponse, MediaSource, MessageRole, StreamTextDelta, TranscriptionBackend,
+    TranscriptionModel, TranscriptionRequest, TranscriptionResponse, TtsBackend, TtsChunk,
+    TtsDeliveryMode, TtsModel, TtsRequest, TtsResponse, XlaiError,
 };
 
 mod chat_retry;
+mod embeddings;
 mod image_generation;
 mod provider_response;
 mod request;
@@ -28,6 +30,7 @@ mod tests;
 use chat_retry::{
     backoff_delay_ms, retry_limits_for_chat_request, should_retry_xlai_error, sleep_ms,
 };
+use embeddings::{OpenAiEmbeddingRequest, OpenAiEmbeddingResponse};
 use image_generation::{OpenAiImageGenerationRequest, OpenAiImageGenerationResponse};
 use provider_response::{require_success_response, xlai_error_from_reqwest};
 use request::OpenAiChatRequest;
@@ -45,6 +48,7 @@ pub struct OpenAiConfig {
     pub base_url: String,
     pub api_key: String,
     pub model: String,
+    pub embedding_model: Option<String>,
     pub image_model: Option<String>,
     pub transcription_model: Option<String>,
     pub tts_model: Option<String>,
@@ -61,10 +65,17 @@ impl OpenAiConfig {
             base_url: base_url.into(),
             api_key: api_key.into(),
             model: model.into(),
+            embedding_model: None,
             image_model: None,
             transcription_model: None,
             tts_model: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_embedding_model(mut self, model: impl Into<String>) -> Self {
+        self.embedding_model = Some(model.into());
+        self
     }
 
     #[must_use]
@@ -89,6 +100,10 @@ impl OpenAiConfig {
         format!("{}/responses", self.base_url.trim_end_matches('/'))
     }
 
+    fn embeddings_url(&self) -> String {
+        format!("{}/embeddings", self.base_url.trim_end_matches('/'))
+    }
+
     fn images_generations_url(&self) -> String {
         format!("{}/images/generations", self.base_url.trim_end_matches('/'))
     }
@@ -107,6 +122,12 @@ impl OpenAiConfig {
 
 #[derive(Clone, Debug)]
 pub struct OpenAiChatModel {
+    client: Client,
+    config: OpenAiConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct OpenAiEmbeddingModel {
     client: Client,
     config: OpenAiConfig,
 }
@@ -186,6 +207,16 @@ impl OpenAiTranscriptionModel {
     }
 }
 
+impl OpenAiEmbeddingModel {
+    #[must_use]
+    pub fn new(config: OpenAiConfig) -> Self {
+        Self {
+            client: Client::new(),
+            config,
+        }
+    }
+}
+
 impl OpenAiImageGenerationModel {
     #[must_use]
     pub fn new(config: OpenAiConfig) -> Self {
@@ -211,6 +242,14 @@ impl ChatBackend for OpenAiConfig {
 
     fn into_chat_model(self) -> Self::Model {
         OpenAiChatModel::new(self)
+    }
+}
+
+impl EmbeddingBackend for OpenAiConfig {
+    type Model = OpenAiEmbeddingModel;
+
+    fn into_embedding_model(self) -> Self::Model {
+        OpenAiEmbeddingModel::new(self)
     }
 }
 
@@ -412,6 +451,39 @@ impl ChatModel for OpenAiChatModel {
 
             let response = state.into_chat_response()?;
             yield ChatChunk::Finished(response);
+        })
+    }
+}
+
+impl EmbeddingModel for OpenAiEmbeddingModel {
+    fn provider_name(&self) -> &'static str {
+        "openai-compatible"
+    }
+
+    fn embed(
+        &self,
+        request: EmbeddingRequest,
+    ) -> BoxFuture<'_, Result<EmbeddingResponse, XlaiError>> {
+        Box::pin(async move {
+            let endpoint = self.config.embeddings_url();
+            let payload = OpenAiEmbeddingRequest::from_core_request(&self.config, request)?;
+
+            let response = self
+                .client
+                .post(&endpoint)
+                .bearer_auth(&self.config.api_key)
+                .json(&payload)
+                .send()
+                .await
+                .map_err(xlai_error_from_reqwest)?;
+            let response = require_success_response(response).await?;
+
+            let response: OpenAiEmbeddingResponse = response
+                .json()
+                .await
+                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+
+            response.into_core_response()
         })
     }
 }

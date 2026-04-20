@@ -7,7 +7,8 @@ use tokio::sync::mpsc;
 use tracing::{Span, info_span};
 use xlai_core::{
     BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
-    ChatResponse, ErrorKind, FinishReason, MessageRole, StructuredOutputFormat, XlaiError,
+    ChatResponse, EmbeddingBackend, EmbeddingModel, EmbeddingRequest, EmbeddingResponse, ErrorKind,
+    FinishReason, MessageRole, StructuredOutputFormat, XlaiError,
 };
 use xlai_sys_llama as sys;
 
@@ -150,6 +151,12 @@ pub struct LlamaCppChatModel {
     runtime: Arc<RuntimeState>,
 }
 
+#[derive(Clone, Debug)]
+pub struct LlamaCppEmbeddingModel {
+    config: LlamaCppConfig,
+    runtime: Arc<RuntimeState>,
+}
+
 #[derive(Debug, Default)]
 struct RuntimeState {
     loaded: OnceLock<Result<Arc<Mutex<LoadedModel>>, String>>,
@@ -249,6 +256,8 @@ impl LlamaCppChatModel {
                     .config
                     .threads
                     .unwrap_or(sys::ContextParams::default().n_threads_batch),
+                embeddings: false,
+                pooling_type: sys::PoolingType::Unspecified,
             })
             .map_err(map_provider_error)?;
 
@@ -455,11 +464,37 @@ impl LlamaCppChatModel {
     }
 }
 
+impl LlamaCppEmbeddingModel {
+    #[must_use]
+    pub fn new(config: LlamaCppConfig) -> Self {
+        Self {
+            config,
+            runtime: Arc::new(RuntimeState::default()),
+        }
+    }
+
+    fn load_model(&self) -> Result<Arc<Mutex<LoadedModel>>, XlaiError> {
+        let chat_model = LlamaCppChatModel {
+            config: self.config.clone(),
+            runtime: self.runtime.clone(),
+        };
+        chat_model.load_model()
+    }
+}
+
 impl ChatBackend for LlamaCppConfig {
     type Model = LlamaCppChatModel;
 
     fn into_chat_model(self) -> Self::Model {
         LlamaCppChatModel::new(self)
+    }
+}
+
+impl EmbeddingBackend for LlamaCppConfig {
+    type Model = LlamaCppEmbeddingModel;
+
+    fn into_embedding_model(self) -> Self::Model {
+        LlamaCppEmbeddingModel::new(self)
     }
 }
 
@@ -532,6 +567,125 @@ impl ChatModel for LlamaCppChatModel {
             })
             .await
             .map_err(map_join_error)?
+        })
+    }
+}
+
+impl EmbeddingModel for LlamaCppEmbeddingModel {
+    fn provider_name(&self) -> &'static str {
+        "llama.cpp"
+    }
+
+    fn embed(
+        &self,
+        request: EmbeddingRequest,
+    ) -> BoxFuture<'_, Result<EmbeddingResponse, XlaiError>> {
+        Box::pin(async move {
+            if request.inputs.is_empty() {
+                return Err(XlaiError::new(
+                    ErrorKind::Validation,
+                    "embedding request requires at least one input",
+                ));
+            }
+
+            if request.dimensions.is_some() {
+                return Err(XlaiError::new(
+                    ErrorKind::Unsupported,
+                    "llama.cpp embeddings do not support custom dimensions",
+                ));
+            }
+
+            let loaded = self.load_model()?;
+            let loaded = loaded.lock().map_err(|_| {
+                XlaiError::new(
+                    ErrorKind::Provider,
+                    "llama.cpp model lock was poisoned by a previous panic",
+                )
+            })?;
+
+            let embedding_size = usize::try_from(loaded.model.embedding_size()).map_err(|_| {
+                XlaiError::new(
+                    ErrorKind::Provider,
+                    "llama.cpp returned an invalid embedding size",
+                )
+            })?;
+            if embedding_size == 0 {
+                return Err(XlaiError::new(
+                    ErrorKind::Unsupported,
+                    "loaded llama.cpp model does not expose embeddings",
+                ));
+            }
+
+            let vocab = loaded.model.vocab().map_err(map_provider_error)?;
+            let mut vectors = Vec::with_capacity(request.inputs.len());
+
+            for input in request.inputs {
+                let mut tokens = vocab
+                    .tokenize(&input, true, true)
+                    .map_err(map_provider_error)?;
+                if tokens.is_empty() {
+                    return Err(XlaiError::new(
+                        ErrorKind::Validation,
+                        "llama.cpp embedding input tokenization produced no tokens",
+                    ));
+                }
+
+                let context_size = resolve_context_size(&self.config, &loaded.model);
+                if tokens.len() >= usize::try_from(context_size).unwrap_or(usize::MAX) {
+                    return Err(XlaiError::new(
+                        ErrorKind::Validation,
+                        format!(
+                            "embedding input exceeds the configured llama.cpp context ({} tokens required, {} available)",
+                            tokens.len(),
+                            context_size
+                        ),
+                    ));
+                }
+
+                let mut context = loaded
+                    .model
+                    .new_context(&sys::ContextParams {
+                        n_ctx: context_size,
+                        n_batch: tokens
+                            .len()
+                            .try_into()
+                            .unwrap_or(u32::MAX)
+                            .min(context_size),
+                        n_threads: self
+                            .config
+                            .threads
+                            .unwrap_or(sys::ContextParams::default().n_threads),
+                        n_threads_batch: self
+                            .config
+                            .threads
+                            .unwrap_or(sys::ContextParams::default().n_threads_batch),
+                        embeddings: true,
+                        pooling_type: sys::PoolingType::Unspecified,
+                    })
+                    .map_err(map_provider_error)?;
+
+                if loaded.model.has_encoder() {
+                    context.encode(&mut tokens).map_err(map_provider_error)?;
+                } else {
+                    context.decode(&mut tokens).map_err(map_provider_error)?;
+                }
+
+                let vector = match context.pooling_type() {
+                    sys::PoolingType::None | sys::PoolingType::Unspecified => context
+                        .embedding_for_output(-1, embedding_size)
+                        .map_err(map_provider_error)?,
+                    _ => context
+                        .embedding_for_sequence(0, embedding_size)
+                        .map_err(map_provider_error)?,
+                };
+                vectors.push(vector);
+            }
+
+            Ok(EmbeddingResponse {
+                vectors,
+                usage: None,
+                metadata: Default::default(),
+            })
         })
     }
 }

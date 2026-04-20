@@ -36,6 +36,16 @@ unsafe extern "C" {
 
 pub type Token = raw::llama_token;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PoolingType {
+    Unspecified,
+    None,
+    Mean,
+    Cls,
+    Last,
+    Rank,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LlamaError {
     message: String,
@@ -86,6 +96,8 @@ pub struct ContextParams {
     pub n_batch: u32,
     pub n_threads: i32,
     pub n_threads_batch: i32,
+    pub embeddings: bool,
+    pub pooling_type: PoolingType,
 }
 
 impl Default for ContextParams {
@@ -99,6 +111,8 @@ impl Default for ContextParams {
             n_batch: 512,
             n_threads: default_threads,
             n_threads_batch: default_threads,
+            embeddings: false,
+            pooling_type: PoolingType::Unspecified,
         }
     }
 }
@@ -207,6 +221,12 @@ impl Model {
     }
 
     #[must_use]
+    pub fn embedding_size(&self) -> u32 {
+        let size = unsafe { raw::llama_model_n_embd(self.inner.as_ptr()) };
+        u32::try_from(size).unwrap_or(0)
+    }
+
+    #[must_use]
     pub fn has_encoder(&self) -> bool {
         unsafe { raw::llama_model_has_encoder(self.inner.as_ptr()) }
     }
@@ -238,6 +258,8 @@ impl Model {
         raw_params.n_ubatch = params.n_batch;
         raw_params.n_threads = params.n_threads;
         raw_params.n_threads_batch = params.n_threads_batch;
+        raw_params.embeddings = params.embeddings;
+        raw_params.pooling_type = raw_pooling_type(params.pooling_type);
 
         let context = unsafe { raw::llama_init_from_model(self.inner.as_ptr(), raw_params) };
         let inner = NonNull::new(context)
@@ -415,6 +437,43 @@ impl Context {
             return Err(LlamaError::new("llama.cpp returned a null sampled token"));
         }
         Ok(token)
+    }
+
+    #[must_use]
+    pub fn pooling_type(&self) -> PoolingType {
+        match unsafe { raw::llama_pooling_type(self.inner.as_ptr()) } {
+            raw::llama_pooling_type_LLAMA_POOLING_TYPE_NONE => PoolingType::None,
+            raw::llama_pooling_type_LLAMA_POOLING_TYPE_MEAN => PoolingType::Mean,
+            raw::llama_pooling_type_LLAMA_POOLING_TYPE_CLS => PoolingType::Cls,
+            raw::llama_pooling_type_LLAMA_POOLING_TYPE_LAST => PoolingType::Last,
+            raw::llama_pooling_type_LLAMA_POOLING_TYPE_RANK => PoolingType::Rank,
+            _ => PoolingType::Unspecified,
+        }
+    }
+
+    pub fn embedding_for_output(
+        &mut self,
+        index: i32,
+        embedding_size: usize,
+    ) -> Result<Vec<f32>, LlamaError> {
+        let pointer = unsafe { raw::llama_get_embeddings_ith(self.inner.as_ptr(), index) };
+        let pointer = NonNull::new(pointer)
+            .ok_or_else(|| LlamaError::new("llama.cpp did not return an output embedding"))?;
+        let slice = unsafe { std::slice::from_raw_parts(pointer.as_ptr(), embedding_size) };
+        Ok(slice.to_vec())
+    }
+
+    pub fn embedding_for_sequence(
+        &mut self,
+        seq_id: i32,
+        embedding_size: usize,
+    ) -> Result<Vec<f32>, LlamaError> {
+        let pointer = unsafe { raw::llama_get_embeddings_seq(self.inner.as_ptr(), seq_id) };
+        let pointer = NonNull::new(pointer).ok_or_else(|| {
+            LlamaError::new("llama.cpp did not return a pooled sequence embedding")
+        })?;
+        let slice = unsafe { std::slice::from_raw_parts(pointer.as_ptr(), embedding_size) };
+        Ok(slice.to_vec())
     }
 }
 
@@ -750,6 +809,17 @@ fn ensure_backend_initialized() {
         llama_log_bridge::install();
         unsafe { raw::llama_backend_init() };
     });
+}
+
+const fn raw_pooling_type(pooling_type: PoolingType) -> raw::llama_pooling_type {
+    match pooling_type {
+        PoolingType::Unspecified => raw::llama_pooling_type_LLAMA_POOLING_TYPE_UNSPECIFIED,
+        PoolingType::None => raw::llama_pooling_type_LLAMA_POOLING_TYPE_NONE,
+        PoolingType::Mean => raw::llama_pooling_type_LLAMA_POOLING_TYPE_MEAN,
+        PoolingType::Cls => raw::llama_pooling_type_LLAMA_POOLING_TYPE_CLS,
+        PoolingType::Last => raw::llama_pooling_type_LLAMA_POOLING_TYPE_LAST,
+        PoolingType::Rank => raw::llama_pooling_type_LLAMA_POOLING_TYPE_RANK,
+    }
 }
 
 fn llguidance_error_message() -> Option<String> {

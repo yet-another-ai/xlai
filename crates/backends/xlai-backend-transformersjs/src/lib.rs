@@ -5,12 +5,16 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 use xlai_core::ErrorKind;
-use xlai_core::{BoxFuture, ChatBackend, ChatModel, ChatRequest, ChatResponse, XlaiError};
+use xlai_core::{
+    BoxFuture, ChatBackend, ChatModel, ChatRequest, ChatResponse, EmbeddingBackend, EmbeddingModel,
+    EmbeddingRequest, EmbeddingResponse, XlaiError,
+};
 
 /// Configuration for the transformers.js-backed chat model (HF model id and defaults).
 #[derive(Clone, Debug)]
 pub struct TransformersJsConfig {
     pub model_id: String,
+    pub embedding_model_id: Option<String>,
     pub temperature: f32,
     pub max_output_tokens: u32,
 }
@@ -20,9 +24,16 @@ impl TransformersJsConfig {
     pub fn new(model_id: impl Into<String>) -> Self {
         Self {
             model_id: model_id.into(),
+            embedding_model_id: None,
             temperature: 0.8,
             max_output_tokens: 256,
         }
+    }
+
+    #[must_use]
+    pub fn with_embedding_model_id(mut self, model_id: impl Into<String>) -> Self {
+        self.embedding_model_id = Some(model_id.into());
+        self
     }
 
     #[must_use]
@@ -49,8 +60,9 @@ mod wasm {
     use wasm_bindgen::JsCast;
     use wasm_bindgen_futures::JsFuture;
     use xlai_core::{
-        BoxFuture, ChatContent, ChatMessage, ChatModel, ChatRequest, ChatResponse, ErrorKind,
-        FinishReason, MessageRole, StructuredOutputFormat, TokenUsage, XlaiError,
+        BoxFuture, ChatContent, ChatMessage, ChatModel, ChatRequest, ChatResponse, EmbeddingModel,
+        EmbeddingRequest, EmbeddingResponse, ErrorKind, FinishReason, MessageRole,
+        StructuredOutputFormat, TokenUsage, XlaiError,
     };
     use xlai_runtime::local_common::{
         LocalChatPrepareOptions, PreparedLocalChatRequest, ToolResponse, parse_tool_response,
@@ -140,6 +152,19 @@ mod wasm {
         usage: Option<JsUsageFields>,
     }
 
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct JsEmbedRequest {
+        inputs: Vec<String>,
+        model: String,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct JsEmbedResponse {
+        vectors: Vec<Vec<f32>>,
+    }
+
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct JsUsageFields {
@@ -198,6 +223,36 @@ mod wasm {
 
         serde_wasm_bindgen::from_value(result)
             .map_err(|e| js_provider_error(format!("invalid generate response: {e}")))
+    }
+
+    async fn call_adapter_embed(
+        adapter: &wasm_bindgen::JsValue,
+        body: JsEmbedRequest,
+    ) -> Result<JsEmbedResponse, XlaiError> {
+        ensure_adapter(adapter)?;
+        let embed = Reflect::get(adapter, &wasm_bindgen::JsValue::from_str("embed"))
+            .map_err(|_| js_provider_error("failed to read adapter.embed"))?;
+        if embed.is_undefined() || embed.is_null() {
+            return Err(js_provider_error(
+                "transformers.js adapter must expose embed(request) -> Promise",
+            ));
+        }
+        let embed: Function = embed
+            .dyn_into()
+            .map_err(|_| js_provider_error("adapter.embed must be a function"))?;
+
+        let arg = serde_wasm_bindgen::to_value(&body)
+            .map_err(|e| js_provider_error(format!("failed to serialize embed request: {e}")))?;
+        let promise_val = embed
+            .call1(adapter, &arg)
+            .map_err(|e| js_provider_error(format!("adapter.embed call failed: {e:?}")))?;
+        let promise = Promise::resolve(&promise_val);
+        let result = JsFuture::from(promise)
+            .await
+            .map_err(|e| js_provider_error(format!("adapter.embed promise failed: {e:?}")))?;
+
+        serde_wasm_bindgen::from_value(result)
+            .map_err(|e| js_provider_error(format!("invalid embed response: {e}")))
     }
 
     fn usage_from_js(u: Option<JsUsageFields>) -> Option<TokenUsage> {
@@ -353,10 +408,88 @@ mod wasm {
             })
         }
     }
+
+    pub(super) struct EmbeddingModelImpl {
+        config: TransformersJsConfig,
+        adapter: wasm_bindgen::JsValue,
+    }
+
+    impl EmbeddingModelImpl {
+        pub(super) fn new(config: TransformersJsConfig, adapter: wasm_bindgen::JsValue) -> Self {
+            Self { config, adapter }
+        }
+    }
+
+    impl fmt::Debug for EmbeddingModelImpl {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_struct("TransformersJsEmbeddingModel")
+                .field("config", &self.config)
+                .finish_non_exhaustive()
+        }
+    }
+
+    impl Clone for EmbeddingModelImpl {
+        fn clone(&self) -> Self {
+            Self {
+                config: self.config.clone(),
+                adapter: self.adapter.clone(),
+            }
+        }
+    }
+
+    impl EmbeddingModel for EmbeddingModelImpl {
+        fn provider_name(&self) -> &'static str {
+            "transformers.js"
+        }
+
+        fn embed(
+            &self,
+            request: EmbeddingRequest,
+        ) -> BoxFuture<'_, Result<EmbeddingResponse, XlaiError>> {
+            let config = self.config.clone();
+            let adapter = self.adapter.clone();
+            Box::pin(async move {
+                if request.inputs.is_empty() {
+                    return Err(XlaiError::new(
+                        ErrorKind::Validation,
+                        "embedding request requires at least one input",
+                    ));
+                }
+                if request.dimensions.is_some() {
+                    return Err(XlaiError::new(
+                        ErrorKind::Unsupported,
+                        "transformers.js embeddings do not support custom dimensions",
+                    ));
+                }
+
+                let model = request
+                    .model
+                    .or(config.embedding_model_id.clone())
+                    .unwrap_or(config.model_id.clone());
+                let response = call_adapter_embed(
+                    &adapter,
+                    JsEmbedRequest {
+                        inputs: request.inputs,
+                        model,
+                    },
+                )
+                .await?;
+
+                Ok(EmbeddingResponse {
+                    vectors: response.vectors,
+                    usage: None,
+                    metadata: Default::default(),
+                })
+            })
+        }
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
-use wasm::{Bundle as WasmBundle, ChatModelImpl as WasmChatModelImpl};
+use wasm::{
+    Bundle as WasmBundle, ChatModelImpl as WasmChatModelImpl,
+    EmbeddingModelImpl as WasmEmbeddingModelImpl,
+};
 
 /// Bundle of config plus a JavaScript adapter (wasm only). The adapter must expose
 /// `async generate(request)` returning `{ text, finishReason?, usage? }` (camelCase).
@@ -407,11 +540,26 @@ pub struct TransformersJsChatModel {
 }
 
 #[cfg(target_arch = "wasm32")]
+pub struct TransformersJsEmbeddingModel {
+    inner: WasmEmbeddingModelImpl,
+}
+
+#[cfg(target_arch = "wasm32")]
 impl TransformersJsChatModel {
     #[must_use]
     pub fn new(config: TransformersJsConfig, adapter: wasm_bindgen::JsValue) -> Self {
         Self {
             inner: WasmChatModelImpl::new(config, adapter),
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl TransformersJsEmbeddingModel {
+    #[must_use]
+    pub fn new(config: TransformersJsConfig, adapter: wasm_bindgen::JsValue) -> Self {
+        Self {
+            inner: WasmEmbeddingModelImpl::new(config, adapter),
         }
     }
 }
@@ -433,12 +581,39 @@ impl Clone for TransformersJsChatModel {
 }
 
 #[cfg(target_arch = "wasm32")]
+impl std::fmt::Debug for TransformersJsEmbeddingModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Clone for TransformersJsEmbeddingModel {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
 impl ChatBackend for TransformersJsBundle {
     type Model = TransformersJsChatModel;
 
     fn into_chat_model(self) -> Self::Model {
         TransformersJsChatModel {
             inner: self.inner.into_model(),
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl EmbeddingBackend for TransformersJsBundle {
+    type Model = TransformersJsEmbeddingModel;
+
+    fn into_embedding_model(self) -> Self::Model {
+        TransformersJsEmbeddingModel {
+            inner: WasmEmbeddingModelImpl::new(self.inner.config().clone(), self.inner.adapter()),
         }
     }
 }
@@ -451,6 +626,20 @@ impl ChatModel for TransformersJsChatModel {
 
     fn generate(&self, request: ChatRequest) -> BoxFuture<'_, Result<ChatResponse, XlaiError>> {
         self.inner.generate(request)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl EmbeddingModel for TransformersJsEmbeddingModel {
+    fn provider_name(&self) -> &'static str {
+        self.inner.provider_name()
+    }
+
+    fn embed(
+        &self,
+        request: EmbeddingRequest,
+    ) -> BoxFuture<'_, Result<EmbeddingResponse, XlaiError>> {
+        self.inner.embed(request)
     }
 }
 
@@ -476,7 +665,21 @@ pub struct TransformersJsChatModel {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Debug)]
+pub struct TransformersJsEmbeddingModel {
+    _config: TransformersJsConfig,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl TransformersJsChatModel {
+    #[must_use]
+    pub fn new(config: TransformersJsConfig) -> Self {
+        Self { _config: config }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl TransformersJsEmbeddingModel {
     #[must_use]
     pub fn new(config: TransformersJsConfig) -> Self {
         Self { _config: config }
@@ -493,12 +696,40 @@ impl ChatBackend for TransformersJsBundle {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+impl EmbeddingBackend for TransformersJsBundle {
+    type Model = TransformersJsEmbeddingModel;
+
+    fn into_embedding_model(self) -> Self::Model {
+        TransformersJsEmbeddingModel::new(self.config)
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl ChatModel for TransformersJsChatModel {
     fn provider_name(&self) -> &'static str {
         "transformers.js"
     }
 
     fn generate(&self, _request: ChatRequest) -> BoxFuture<'_, Result<ChatResponse, XlaiError>> {
+        Box::pin(async move {
+            Err(XlaiError::new(
+                ErrorKind::Unsupported,
+                "xlai-backend-transformersjs only runs in wasm32 builds; use wasm-pack for the browser",
+            ))
+        })
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl EmbeddingModel for TransformersJsEmbeddingModel {
+    fn provider_name(&self) -> &'static str {
+        "transformers.js"
+    }
+
+    fn embed(
+        &self,
+        _request: EmbeddingRequest,
+    ) -> BoxFuture<'_, Result<EmbeddingResponse, XlaiError>> {
         Box::pin(async move {
             Err(XlaiError::new(
                 ErrorKind::Unsupported,

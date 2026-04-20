@@ -12,11 +12,11 @@ use async_stream::try_stream;
 use futures_util::StreamExt;
 use xlai_core::{
     BoxStream, ChatChunk, ChatExecutionOverrides, ChatModel, ChatRequest, ChatResponse,
-    EmbeddingModel, EmbeddingRequest, EmbeddingResponse, ErrorKind, ImageGenerationModel,
-    KnowledgeHit, KnowledgeQuery, KnowledgeStore, RuntimeCapability, Skill, SkillId, SkillStore,
-    ToolCall, ToolExecutor, ToolResult, TranscriptionModel, TtsExecutionConfig,
-    TtsExecutionOverrides, TtsModel, TtsRequest, VectorSearchHit, VectorSearchQuery, VectorStore,
-    XlaiError,
+    EmbeddingBackend, EmbeddingModel, EmbeddingRequest, EmbeddingResponse, ErrorKind,
+    ImageGenerationModel, KnowledgeHit, KnowledgeQuery, KnowledgeStore, RuntimeCapability, Skill,
+    SkillId, SkillStore, ToolCall, ToolExecutor, ToolResult, TranscriptionModel,
+    TtsExecutionConfig, TtsExecutionOverrides, TtsModel, TtsRequest, VectorSearchHit,
+    VectorSearchQuery, VectorStore, XlaiError,
 };
 
 pub use agent::{Agent, McpRegistry};
@@ -83,6 +83,14 @@ impl RuntimeBuilder {
         self.embedding_model = Some(embedding_model);
         self.capabilities.push(RuntimeCapability::Embeddings);
         self
+    }
+
+    #[must_use]
+    pub fn with_embedding_backend<B>(self, backend: B) -> Self
+    where
+        B: EmbeddingBackend,
+    {
+        self.with_embedding_model(Arc::new(backend.into_embedding_model()))
     }
 
     #[must_use]

@@ -12,6 +12,15 @@ XLAI focuses on a **small set of first-party backends** with a shared `xlai-core
 | llama.cpp (local GGUF)    | `xlai-backend-llama-cpp`      | Native inference via vendored `llama.cpp`                                         |
 | transformers.js (browser) | `xlai-backend-transformersjs` | WASM-only; delegates generation to a JS adapter                                   |
 
+## Embeddings
+
+| Backend                   | Crate                         | Notes                                                                                          |
+| ------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------- |
+| OpenAI-compatible HTTP    | `xlai-backend-openai`         | Uses `/v1/embeddings`; supports `dimensions` when the upstream provider/model supports it      |
+| Google Gemini             | `xlai-backend-gemini`         | Uses Gemini embeddings endpoints; supports output dimensionality                               |
+| llama.cpp (local GGUF)    | `xlai-backend-llama-cpp`      | Local embeddings from embedding-capable GGUF models; custom `dimensions` are not supported     |
+| transformers.js (browser) | `xlai-backend-transformersjs` | Uses feature extraction with pooled, normalized vectors; custom `dimensions` are not supported |
+
 ## Speech
 
 | Capability                      | Status                                                                      |
@@ -20,6 +29,8 @@ XLAI focuses on a **small set of first-party backends** with a shared `xlai-core
 | OpenAI-compatible TTS           | Supported via `xlai-backend-openai`                                         |
 | OpenRouter speech / media APIs  | Not yet exposed through a dedicated backend                                 |
 | Local Qwen3 TTS (QTS)           | Native engine in `xlai-qts-core`; browser path is staged — see [QTS](/qts/) |
+
+OpenRouter remains chat-only in XLAI today. The dedicated `xlai-backend-openrouter` backend targets `/responses` and does not expose a first-class embeddings surface.
 
 ## llama.cpp acceleration matrix
 

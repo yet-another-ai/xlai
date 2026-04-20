@@ -255,6 +255,21 @@ pub(crate) struct WasmImageGenerationCallOptions {
     pub(crate) count: Option<u32>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WasmEmbeddingCallOptions {
+    pub(crate) inputs: Vec<String>,
+    pub(crate) api_key: String,
+    #[serde(default)]
+    pub(crate) base_url: Option<String>,
+    #[serde(default)]
+    pub(crate) model: Option<String>,
+    #[serde(default)]
+    pub(crate) embedding_model: Option<String>,
+    #[serde(default)]
+    pub(crate) dimensions: Option<u32>,
+}
+
 /// Local QTS TTS call options (no OpenAI `apiKey`; see `docs/qts/wasm-browser-runtime.md`).
 #[cfg(feature = "qts")]
 #[derive(Deserialize)]
