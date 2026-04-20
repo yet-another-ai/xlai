@@ -110,9 +110,15 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_EMBEDDING_MODEL: ${{ vars.OPENAI_EMBEDDING_MODEL }}
           OPENAI_IMAGE_MODEL: ${{ vars.OPENAI_IMAGE_MODEL }}
           OPENAI_TRANSCRIPTION_MODEL: ${{ vars.OPENAI_TRANSCRIPTION_MODEL }}
           OPENAI_TTS_MODEL: ${{ vars.OPENAI_TTS_MODEL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_BASE_URL: ${{ vars.GEMINI_BASE_URL }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GEMINI_EMBEDDING_MODEL: ${{ vars.GEMINI_EMBEDDING_MODEL }}
+          GEMINI_IMAGE_MODEL: ${{ vars.GEMINI_IMAGE_MODEL }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_BASE_URL: ${{ vars.OPENROUTER_BASE_URL }}
           OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
@@ -171,8 +177,14 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_EMBEDDING_MODEL: ${{ vars.OPENAI_EMBEDDING_MODEL }}
           OPENAI_TRANSCRIPTION_MODEL: ${{ vars.OPENAI_TRANSCRIPTION_MODEL }}
           OPENAI_TTS_MODEL: ${{ vars.OPENAI_TTS_MODEL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_BASE_URL: ${{ vars.GEMINI_BASE_URL }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GEMINI_EMBEDDING_MODEL: ${{ vars.GEMINI_EMBEDDING_MODEL }}
+          GEMINI_IMAGE_MODEL: ${{ vars.GEMINI_IMAGE_MODEL }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_BASE_URL: ${{ vars.OPENROUTER_BASE_URL }}
           OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
