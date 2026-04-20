@@ -211,29 +211,35 @@ where
         if value.is_empty() {
             continue;
         }
-        let root = PathBuf::from(value);
-        let resolved_root = if name == &"HIPCXX" {
+        let initial = PathBuf::from(value);
+        let initial = if name == &"HIPCXX" {
             // HIPCXX usually points at `<rocm>/llvm/bin/clang`; walk up to the rocm install root.
-            root.parent()
+            initial
+                .parent()
                 .and_then(|p| p.parent())
                 .and_then(|p| p.parent())
                 .map(PathBuf::from)
-                .unwrap_or(root)
+                .unwrap_or(initial)
         } else {
-            root
+            initial
         };
-        if !resolved_root.is_dir() {
-            continue;
+        // Try the env value first, then walk up a few parents in case the user pointed at a
+        // subdir like `<root>/runtime/cmake` (typical for `OpenVINO_DIR`) or `<root>/lib/cmake`.
+        let mut candidate = Some(initial.clone());
+        for _ in 0..4 {
+            let Some(current) = candidate else { break };
+            if current.is_dir() {
+                let dirs = lib_dirs(&current);
+                if !dirs.is_empty() {
+                    return Some(SdkLayout {
+                        root: current,
+                        source: (*name).to_string(),
+                        lib_dirs: dirs,
+                    });
+                }
+            }
+            candidate = current.parent().map(PathBuf::from);
         }
-        let dirs = lib_dirs(&resolved_root);
-        if dirs.is_empty() {
-            continue;
-        }
-        return Some(SdkLayout {
-            root: resolved_root,
-            source: (*name).to_string(),
-            lib_dirs: dirs,
-        });
     }
     None
 }
@@ -247,6 +253,7 @@ fn cuda_lib_dirs(root: &Path, target: &str) -> Vec<PathBuf> {
         push_existing(&mut dirs, root.join("lib64"));
         push_existing(&mut dirs, root.join("lib"));
         push_existing(&mut dirs, root.join("targets/x86_64-linux/lib"));
+        push_existing(&mut dirs, root.join("targets/x86_64-linux/lib/stubs"));
         push_existing(&mut dirs, root.join("lib/stubs"));
         push_existing(&mut dirs, root.join("lib64/stubs"));
     }
@@ -364,7 +371,11 @@ fn default_rocm_roots(target: &str) -> Vec<(&'static str, PathBuf)> {
 }
 
 fn cuda_runtime_libs(_target: &str) -> &'static [&'static str] {
-    &["cudart", "cublas", "cublasLt"]
+    // `cuda` is the NVIDIA driver library (libcuda.so / cuda.lib). ggml-cuda's VMM pool uses
+    // the driver API (cuMemCreate / cuMemMap / ...), not just the runtime API in `cudart`.
+    // The driver lib ships at runtime with the NVIDIA driver; the CUDA toolkit provides a
+    // build-time stub under `lib64/stubs/` (Linux) or alongside `lib/x64/cuda.lib` (Windows).
+    &["cudart", "cublas", "cublasLt", "cuda"]
 }
 
 fn openvino_runtime_libs(_target: &str) -> &'static [&'static str] {

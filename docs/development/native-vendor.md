@@ -55,10 +55,14 @@ The shared helpers honor these environment variables (set them when the SDK live
 | Backend  | Variables                                                                  |
 | -------- | -------------------------------------------------------------------------- |
 | CUDA     | `CUDA_PATH`, `CUDA_HOME`, `CUDA_TOOLKIT_ROOT_DIR`                          |
-| OpenVINO | `OpenVINO_DIR`, `OPENVINO_ROOT`, `INTEL_OPENVINO_DIR`                      |
+| OpenVINO | `OpenVINO_DIR`, `OPENVINO_ROOT`, `INTEL_OPENVINO_DIR`, `OPENVINO_HOME`     |
 | ROCm/HIP | `ROCM_PATH`, `HIP_PATH`, `HIPCXX` (must be Clang, not the `hipcc` wrapper) |
 
+For the OpenVINO variables, the helpers tolerate values that point at a sub-directory such as `<install>/runtime/cmake` (the CMake convention for `OpenVINO_DIR`) by walking up parent directories until a `runtime/lib/...` layout is found. Setting any one of `INTEL_OPENVINO_DIR`, `OPENVINO_ROOT`, `OPENVINO_HOME` to the install root, or `OpenVINO_DIR` to the cmake config directory, is sufficient.
+
 CMake's `CMAKE_PREFIX_PATH` is also forwarded to the upstream build, so adding the SDK roots there continues to work.
+
+CI installs OpenVINO automatically on Linux and Windows from `storage.openvinotoolkit.org` (pinned release; see [`.github/actions/setup-xlai-rust-native/action.yml`](https://github.com/yetanother.ai/xlai/blob/main/.github/actions/setup-xlai-rust-native/action.yml) for the current version), so external SDK linking is exercised on every native build lane.
 
 ## Dual native stacks
 

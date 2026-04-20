@@ -158,6 +158,116 @@ runs:
         }
         Add-Content -Path $env:GITHUB_PATH -Value "$($rocmRoot.FullName)\bin"
 
+    - name: Install Linux OpenVINO runtime
+      if: runner.os == 'Linux'
+      shell: bash
+      # Pin to OpenVINO 2026.1.0 archive distribution. Refresh the version + build hash from
+      # https://github.com/openvinotoolkit/openvino/releases when bumping. Archive layout
+      # follows storage.openvinotoolkit.org/repositories/openvino/packages/<release>/linux/.
+      run: |
+        set -euxo pipefail
+
+        source /etc/os-release
+        case "${VERSION_CODENAME}" in
+          jammy) variant=ubuntu22 ;;
+          noble) variant=ubuntu24 ;;
+          *)
+            echo "Unsupported Ubuntu codename for OpenVINO archive: ${VERSION_CODENAME}" >&2
+            exit 1
+            ;;
+        esac
+
+        OPENVINO_RELEASE=2026.1
+        OPENVINO_VERSION=2026.1.0
+        OPENVINO_BUILD=2026.1.0.21367.63e31528c62
+        archive="openvino_toolkit_${variant}_${OPENVINO_BUILD}_x86_64.tgz"
+        url="https://storage.openvinotoolkit.org/repositories/openvino/packages/${OPENVINO_RELEASE}/linux/${archive}"
+
+        download_dir="${RUNNER_TEMP}/openvino"
+        mkdir -p "$download_dir"
+        curl -fL "$url" --output "${download_dir}/openvino.tgz"
+
+        sudo mkdir -p /opt/intel
+        sudo tar -xf "${download_dir}/openvino.tgz" -C /opt/intel
+        sudo mv "/opt/intel/openvino_toolkit_${variant}_${OPENVINO_BUILD}_x86_64" \
+          "/opt/intel/openvino_${OPENVINO_VERSION}"
+        sudo ln -sfn "openvino_${OPENVINO_VERSION}" /opt/intel/openvino_2026
+
+        sudo -E /opt/intel/openvino_2026/install_dependencies/install_openvino_dependencies.sh -y
+
+        echo "INTEL_OPENVINO_DIR=/opt/intel/openvino_2026" >> "$GITHUB_ENV"
+        echo "OpenVINO_DIR=/opt/intel/openvino_2026/runtime/cmake" >> "$GITHUB_ENV"
+        if [ -n "${CMAKE_PREFIX_PATH:-}" ]; then
+          echo "CMAKE_PREFIX_PATH=/opt/intel/openvino_2026/runtime/cmake:${CMAKE_PREFIX_PATH}" >> "$GITHUB_ENV"
+        else
+          echo "CMAKE_PREFIX_PATH=/opt/intel/openvino_2026/runtime/cmake" >> "$GITHUB_ENV"
+        fi
+        if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+          echo "LD_LIBRARY_PATH=/opt/intel/openvino_2026/runtime/lib/intel64:${LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+        else
+          echo "LD_LIBRARY_PATH=/opt/intel/openvino_2026/runtime/lib/intel64" >> "$GITHUB_ENV"
+        fi
+
+    - name: Install Windows OpenVINO runtime
+      if: runner.os == 'Windows'
+      shell: pwsh
+      # Pin to OpenVINO 2026.1.0 archive distribution. Refresh the version + build hash from
+      # https://github.com/openvinotoolkit/openvino/releases when bumping. Archive layout
+      # follows storage.openvinotoolkit.org/repositories/openvino/packages/<release>/windows/.
+      run: |
+        $openvinoRelease = '2026.1'
+        $openvinoVersion = '2026.1.0'
+        $openvinoBuild = '2026.1.0.21367.63e31528c62'
+        $archiveName = "openvino_toolkit_windows_${openvinoBuild}_x86_64.zip"
+        $archiveUrl = "https://storage.openvinotoolkit.org/repositories/openvino/packages/${openvinoRelease}/windows/${archiveName}"
+        $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
+        $extractRoot = Join-Path $env:RUNNER_TEMP 'openvino-extract'
+        $intelRoot = 'C:\Program Files (x86)\Intel'
+        $installRoot = Join-Path $intelRoot "openvino_${openvinoVersion}"
+        $linkRoot = Join-Path $intelRoot 'openvino_2026'
+
+        Write-Host "Downloading OpenVINO from $archiveUrl"
+        Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
+
+        if (Test-Path $extractRoot) { Remove-Item -Recurse -Force $extractRoot }
+        New-Item -ItemType Directory -Path $extractRoot | Out-Null
+        Expand-Archive -Path $archivePath -DestinationPath $extractRoot -Force
+
+        $extractedDir = Get-ChildItem -Path $extractRoot -Directory | Select-Object -First 1
+        if (-not $extractedDir) {
+          throw "OpenVINO archive did not contain a top-level directory under $extractRoot"
+        }
+
+        if (-not (Test-Path $intelRoot)) {
+          New-Item -ItemType Directory -Path $intelRoot | Out-Null
+        }
+        if (Test-Path $installRoot) {
+          Remove-Item -Recurse -Force $installRoot
+        }
+        Move-Item -Path $extractedDir.FullName -Destination $installRoot
+
+        if (Test-Path $linkRoot) {
+          Remove-Item -Recurse -Force $linkRoot
+        }
+        # Use a junction so we don't need Developer Mode / SeCreateSymbolicLink privileges.
+        New-Item -ItemType Junction -Path $linkRoot -Target $installRoot | Out-Null
+
+        $cmakeDir = Join-Path $linkRoot 'runtime\cmake'
+        $libDir = Join-Path $linkRoot 'runtime\bin\intel64\Release'
+        $tbbBinDir = Join-Path $linkRoot 'runtime\3rdparty\tbb\bin'
+
+        Add-Content -Path $env:GITHUB_ENV -Value "INTEL_OPENVINO_DIR=$linkRoot"
+        Add-Content -Path $env:GITHUB_ENV -Value "OpenVINO_DIR=$cmakeDir"
+        if ($env:CMAKE_PREFIX_PATH) {
+          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_PREFIX_PATH=$cmakeDir;$env:CMAKE_PREFIX_PATH"
+        } else {
+          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_PREFIX_PATH=$cmakeDir"
+        }
+        Add-Content -Path $env:GITHUB_PATH -Value $libDir
+        if (Test-Path $tbbBinDir) {
+          Add-Content -Path $env:GITHUB_PATH -Value $tbbBinDir
+        }
+
     - name: Install Linux build dependencies
       if: runner.os == 'Linux'
       shell: bash
