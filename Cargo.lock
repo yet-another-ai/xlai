@@ -5377,6 +5377,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "xlai-backend-openrouter"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "base64",
+ "futures-util",
+ "gloo-timers",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "wiremock",
+ "xlai-core",
+]
+
+[[package]]
 name = "xlai-backend-transformersjs"
 version = "0.1.0"
 dependencies = [
@@ -5419,6 +5435,7 @@ dependencies = [
  "xlai-backend-gemini",
  "xlai-backend-llama-cpp",
  "xlai-backend-openai",
+ "xlai-backend-openrouter",
  "xlai-backend-transformersjs",
  "xlai-core",
  "xlai-qts-core",
@@ -5543,6 +5560,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "xlai-backend-openai",
+ "xlai-backend-openrouter",
  "xlai-backend-transformersjs",
  "xlai-core",
  "xlai-qts-manifest",

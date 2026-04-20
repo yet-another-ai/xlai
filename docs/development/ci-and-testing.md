@@ -45,7 +45,9 @@ See [Publishing](./publishing) for ordering and crates that are not on crates.io
 
 Runs ignored tests with provider secrets. Use a protected environment (for example `e2e`) with maintainer approval.
 
-Expected secrets and variables include `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_TRANSCRIPTION_MODEL`, and for llama.cpp smoke tests `LLAMA_CPP_MODEL` (or the default fixture path under `fixtures/llama.cpp/`).
+Expected secrets and variables include `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_TRANSCRIPTION_MODEL`, `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, and for llama.cpp smoke tests `LLAMA_CPP_MODEL` (or the default fixture path under `fixtures/llama.cpp/`).
+
+If you want OpenRouter requests to carry ranking / app-identification headers in CI, also set `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE`, and `OPENROUTER_APP_CATEGORIES` in the protected `e2e` environment.
 
 QTS integration tests expect `XLAI_QTS_MODEL_DIR` with a full model bundle; CI may skip them until a fixture download step exists.
 

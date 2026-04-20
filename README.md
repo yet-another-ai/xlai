@@ -489,11 +489,11 @@ Planned or expected next areas include:
 
 ### Chat API
 
-- [x] OpenAI-compatible Backends
+- [x] OpenAI Backends
   - [x] [AIHubMix](https://aihubmix.com/?aff=OOiX)
-  - [x] [OpenRouter](https://openrouter.ai/)
   - [x] [OpenAI](https://platform.openai.com/docs/guides/gpt/chat-completions-api)
   - [x] [Azure OpenAI API](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference)
+- [x] OpenRouter Backend
 - [x] llama.cpp Backends
   - [x] CPU
   - [x] OpenBLAS

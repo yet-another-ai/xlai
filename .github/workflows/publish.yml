@@ -21,6 +21,7 @@ env:
     xlai-core
     xlai-runtime
     xlai-backend-openai
+    xlai-backend-openrouter
     xlai-backend-transformersjs
 
 jobs:

@@ -2,14 +2,14 @@
 
 Workspace members live under [`crates/`](https://github.com/yetanother.ai/xlai/tree/main/crates) and are grouped by role:
 
-| Directory          | Crates                                                                                                |
-| ------------------ | ----------------------------------------------------------------------------------------------------- |
-| `crates/core/`     | `xlai-core`                                                                                           |
-| `crates/runtime/`  | `xlai-runtime`                                                                                        |
-| `crates/backends/` | `xlai-backend-openai`, `xlai-backend-transformersjs`, `xlai-backend-gemini`, `xlai-backend-llama-cpp` |
-| `crates/qts/`      | `xlai-qts-core`, `xlai-qts-manifest`, `xlai-qts-cli`                                                  |
-| `crates/sys/`      | `xlai-build-native`, `xlai-sys-llama`, `xlai-sys-ggml`                                                |
-| `crates/platform/` | `xlai-facade`, `xlai-native`, `xlai-wasm`, `xlai-ffi`                                                 |
+| Directory          | Crates                                                                                                                           |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `crates/core/`     | `xlai-core`                                                                                                                      |
+| `crates/runtime/`  | `xlai-runtime`                                                                                                                   |
+| `crates/backends/` | `xlai-backend-openai`, `xlai-backend-openrouter`, `xlai-backend-transformersjs`, `xlai-backend-gemini`, `xlai-backend-llama-cpp` |
+| `crates/qts/`      | `xlai-qts-core`, `xlai-qts-manifest`, `xlai-qts-cli`                                                                             |
+| `crates/sys/`      | `xlai-build-native`, `xlai-sys-llama`, `xlai-sys-ggml`                                                                           |
+| `crates/platform/` | `xlai-facade`, `xlai-native`, `xlai-wasm`, `xlai-ffi`                                                                            |
 
 This doc classifies crates for dependency and release decisions. Authoritative publish order for crates.io is in [Publishing](./publishing) and [`.github/workflows/publish.yml`](https://github.com/yetanother.ai/xlai/blob/main/.github/workflows/publish.yml).
 
@@ -20,6 +20,7 @@ This doc classifies crates for dependency and release decisions. Authoritative p
 | `xlai-core`                   | Domain types and provider traits            |
 | `xlai-runtime`                | `RuntimeBuilder`, `Chat`, `Agent`, sessions |
 | `xlai-backend-openai`         | OpenAI-compatible HTTP backend              |
+| `xlai-backend-openrouter`     | OpenRouter Responses API chat backend       |
 | `xlai-backend-transformersjs` | WASM transformers.js chat backend           |
 
 ## Internal only (`publish = false`)
