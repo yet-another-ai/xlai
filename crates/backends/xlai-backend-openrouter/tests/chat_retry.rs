@@ -1,5 +1,7 @@
 //! Integration tests for responses API retries against a mock HTTP server.
 
+#![allow(clippy::expect_used, clippy::panic)]
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
