@@ -77,7 +77,8 @@ const ROCM_ENV_VARS: &[&str] = &["ROCM_PATH", "HIP_PATH", "ROCM_HOME", "HIPCXX"]
 ///
 /// Search order:
 ///
-/// 1. The first non-empty value among [`CUDA_ENV_VARS`].
+/// 1. The first non-empty value among `CUDA_PATH`, `CUDA_HOME`, `CUDA_TOOLKIT_ROOT_DIR`,
+///    `CUDAToolkit_ROOT`.
 /// 2. Standard OS install paths (`/usr/local/cuda*` on Linux, `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v*` on Windows).
 #[must_use]
 pub fn detect_cuda_sdk(target: &str) -> Option<SdkLayout> {

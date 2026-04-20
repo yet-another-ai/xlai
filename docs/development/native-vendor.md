@@ -52,10 +52,10 @@ Behavior is platform-dependent:
 
 The shared helpers honor these environment variables (set them when the SDK lives in a non-default location):
 
-| Backend  | Variables                                              |
-| -------- | ------------------------------------------------------ |
-| CUDA     | `CUDA_PATH`, `CUDA_HOME`, `CUDA_TOOLKIT_ROOT_DIR`      |
-| OpenVINO | `OpenVINO_DIR`, `OPENVINO_ROOT`, `INTEL_OPENVINO_DIR`  |
+| Backend  | Variables                                                                  |
+| -------- | -------------------------------------------------------------------------- |
+| CUDA     | `CUDA_PATH`, `CUDA_HOME`, `CUDA_TOOLKIT_ROOT_DIR`                          |
+| OpenVINO | `OpenVINO_DIR`, `OPENVINO_ROOT`, `INTEL_OPENVINO_DIR`                      |
 | ROCm/HIP | `ROCM_PATH`, `HIP_PATH`, `HIPCXX` (must be Clang, not the `hipcc` wrapper) |
 
 CMake's `CMAKE_PREFIX_PATH` is also forwarded to the upstream build, so adding the SDK roots there continues to work.

@@ -110,18 +110,17 @@ runs:
     - name: Install Windows HIP SDK
       if: runner.os == 'Windows'
       shell: pwsh
-      # Check https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html for the latest installer name
+      # Check https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html for the latest installer
+      # name. We use the same `download.amd.com/developer/eula/rocm-hub/...` URL pattern that
+      # ggml-org/llama.cpp's CI uses (see their `.github/actions/windows-setup-rocm/action.yml`).
       run: |
-        $installerName = 'AMD-Software-PRO-Edition-25.Q3-WinSvr2022-For-HIP.exe'
-        $installerUrl = "https://drivers.amd.com/drivers/prographics/$installerName"
+        $installerName = 'AMD-Software-PRO-Edition-26.Q1-Win11-For-HIP.exe'
+        $installerUrl = "https://download.amd.com/developer/eula/rocm-hub/$installerName"
         $installerPath = Join-Path $env:RUNNER_TEMP $installerName
         $installLog = Join-Path $env:RUNNER_TEMP 'hip-sdk-install.log'
 
         Write-Host "Attempting HIP SDK install from $installerUrl"
-        Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -Headers @{
-          'User-Agent' = 'Mozilla/5.0'
-          'Referer' = 'https://www.amd.com/'
-        }
+        Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
 
         $process = Start-Process -FilePath $installerPath `
           -ArgumentList '-install', '-log', $installLog `
