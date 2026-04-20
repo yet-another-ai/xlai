@@ -13,7 +13,8 @@ Publish **in this order** (the workflow does the same):
 1. `xlai-core`
 2. `xlai-runtime`
 3. `xlai-backend-openai`
-4. `xlai-backend-transformersjs`
+4. `xlai-backend-openrouter`
+5. `xlai-backend-transformersjs`
 
 ### npm
 
