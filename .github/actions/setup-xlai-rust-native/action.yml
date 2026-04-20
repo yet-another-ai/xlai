@@ -99,7 +99,7 @@ runs:
 
         echo "ROCM_PATH=/opt/rocm" >> "$GITHUB_ENV"
         echo "HIP_PATH=/opt/rocm" >> "$GITHUB_ENV"
-        echo "HIPCXX=/opt/rocm/bin/hipcc" >> "$GITHUB_ENV"
+        echo "HIPCXX=/opt/rocm/llvm/bin/clang" >> "$GITHUB_ENV"
         if [ -n "${CMAKE_PREFIX_PATH:-}" ]; then
           echo "CMAKE_PREFIX_PATH=/opt/rocm:${CMAKE_PREFIX_PATH}" >> "$GITHUB_ENV"
         else
@@ -110,6 +110,7 @@ runs:
     - name: Install Windows HIP SDK
       if: runner.os == 'Windows'
       shell: pwsh
+      # Check https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html for the latest installer name
       run: |
         $installerName = 'AMD-Software-PRO-Edition-25.Q3-WinSvr2022-For-HIP.exe'
         $installerUrl = "https://drivers.amd.com/drivers/prographics/$installerName"
@@ -140,9 +141,17 @@ runs:
           throw 'HIP SDK install completed but no ROCm root was found under C:\Program Files\AMD\ROCm'
         }
 
+        $hipClang = Join-Path $rocmRoot.FullName 'lib\llvm\bin\clang++.exe'
+        if (-not (Test-Path $hipClang)) {
+          $hipClang = Join-Path $rocmRoot.FullName 'bin\clang++.exe'
+        }
+        if (-not (Test-Path $hipClang)) {
+          throw "HIP SDK install completed but no ROCm Clang executable was found under $($rocmRoot.FullName)"
+        }
+
         Add-Content -Path $env:GITHUB_ENV -Value "ROCM_PATH=$($rocmRoot.FullName)"
         Add-Content -Path $env:GITHUB_ENV -Value "HIP_PATH=$($rocmRoot.FullName)"
-        Add-Content -Path $env:GITHUB_ENV -Value "HIPCXX=$($rocmRoot.FullName)\\bin\\hipcc.exe"
+        Add-Content -Path $env:GITHUB_ENV -Value "HIPCXX=$hipClang"
         if ($env:CMAKE_PREFIX_PATH) {
           Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_PREFIX_PATH=$($rocmRoot.FullName);$env:CMAKE_PREFIX_PATH"
         } else {
