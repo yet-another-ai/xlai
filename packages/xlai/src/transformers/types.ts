@@ -38,6 +38,15 @@ export type TransformersGenerateResponse = {
   };
 };
 
+export type TransformersEmbedRequest = {
+  inputs: string[];
+  model: string;
+};
+
+export type TransformersEmbedResponse = {
+  vectors: number[][];
+};
+
 export type TransformersChatFunction = (
   options: TransformersGenerateRequest,
 ) => Promise<TransformersGenerateResponse>;

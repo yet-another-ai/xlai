@@ -14,15 +14,17 @@ pub use xlai_facade::core;
 
 pub use xlai_facade::{
     Agent, CancellationSignal, Chat, ChatExecutionConfig, ChatExecutionEvent, ChatExecutionHandle,
-    ChatExecutionOverrides, DirectoryFileSystem, ExecutionLatencyMode, FileSystem, FsEntry,
-    FsEntryKind, FsPath, GeminiChatModel, GeminiConfig, GeminiImageGenerationModel, GeneratedImage,
-    ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality,
-    ImageGenerationRequest, ImageGenerationResponse, LlamaCppChatModel, LlamaCppConfig,
-    McpRegistry, MemoryFileSystem, OpenAiChatModel, OpenAiConfig, OpenAiImageGenerationModel,
-    OpenAiTranscriptionModel, OpenAiTtsModel, OpenRouterChatModel, OpenRouterConfig,
-    ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode, TransformersJsBundle,
-    TransformersJsChatModel, TransformersJsConfig, TtsExecutionConfig, TtsExecutionOverrides,
-    WritableFileSystem, XlaiRuntime,
+    ChatExecutionOverrides, DirectoryFileSystem, EmbeddingRequest, EmbeddingResponse,
+    ExecutionLatencyMode, FileSystem, FsEntry, FsEntryKind, FsPath, GeminiChatModel, GeminiConfig,
+    GeminiEmbeddingModel, GeminiImageGenerationModel, GeneratedImage, ImageGenerationBackground,
+    ImageGenerationOutputFormat, ImageGenerationQuality, ImageGenerationRequest,
+    ImageGenerationResponse, LlamaCppChatModel, LlamaCppConfig, LlamaCppEmbeddingModel,
+    McpRegistry, MemoryFileSystem, OpenAiChatModel, OpenAiConfig, OpenAiEmbeddingModel,
+    OpenAiImageGenerationModel, OpenAiTranscriptionModel, OpenAiTtsModel, OpenRouterChatModel,
+    OpenRouterConfig, ReadableFileSystem, RuntimeBuilder, ToolCallExecutionMode,
+    TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
+    TransformersJsEmbeddingModel, TtsExecutionConfig, TtsExecutionOverrides, WritableFileSystem,
+    XlaiRuntime,
 };
 
 #[cfg(feature = "qts")]

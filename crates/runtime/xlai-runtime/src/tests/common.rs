@@ -4,11 +4,11 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use futures_util::{StreamExt, stream};
 use xlai_core::{
     BoxFuture, BoxStream, ChatChunk, ChatContent, ChatMessage, ChatModel, ChatRequest,
-    ChatResponse, FsPath, GeneratedImage, ImageGenerationModel, ImageGenerationRequest,
-    ImageGenerationResponse, MediaSource, MessageRole, Metadata, Skill, SkillLoadPolicy,
-    SkillResource, SkillStore, ToolCallExecutionMode, ToolDefinition, ToolSchema,
-    TranscriptionModel, TranscriptionRequest, TranscriptionResponse, TtsModel, TtsRequest,
-    TtsResponse, XlaiError,
+    ChatResponse, EmbeddingModel, EmbeddingRequest, EmbeddingResponse, FsPath, GeneratedImage,
+    ImageGenerationModel, ImageGenerationRequest, ImageGenerationResponse, MediaSource,
+    MessageRole, Metadata, Skill, SkillLoadPolicy, SkillResource, SkillStore,
+    ToolCallExecutionMode, ToolDefinition, ToolSchema, TranscriptionModel, TranscriptionRequest,
+    TranscriptionResponse, TtsModel, TtsRequest, TtsResponse, XlaiError,
 };
 
 use crate::{Agent, ChatExecutionEvent, MarkdownSkillStore, MemoryFileSystem};
@@ -373,6 +373,41 @@ impl ImageGenerationModel for RecordingImageGenerationModel {
                     xlai_core::ErrorKind::Provider,
                     "missing image generation response",
                 )
+            })
+        })
+    }
+}
+
+pub(super) struct RecordingEmbeddingModel {
+    requests: Arc<Mutex<Vec<EmbeddingRequest>>>,
+    responses: Mutex<VecDeque<EmbeddingResponse>>,
+}
+
+impl RecordingEmbeddingModel {
+    pub(super) fn new(
+        requests: Arc<Mutex<Vec<EmbeddingRequest>>>,
+        responses: Vec<EmbeddingResponse>,
+    ) -> Self {
+        Self {
+            requests,
+            responses: Mutex::new(VecDeque::from(responses)),
+        }
+    }
+}
+
+impl EmbeddingModel for RecordingEmbeddingModel {
+    fn provider_name(&self) -> &'static str {
+        "recording-embedding-test"
+    }
+
+    fn embed(
+        &self,
+        request: EmbeddingRequest,
+    ) -> BoxFuture<'_, Result<EmbeddingResponse, XlaiError>> {
+        Box::pin(async move {
+            lock_unpoisoned(&self.requests).push(request);
+            lock_unpoisoned(&self.responses).pop_front().ok_or_else(|| {
+                XlaiError::new(xlai_core::ErrorKind::Provider, "missing embedding response")
             })
         })
     }

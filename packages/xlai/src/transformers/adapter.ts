@@ -1,5 +1,7 @@
 import type { Grammar, TransformersTokenizer } from 'transformers-llguidance';
 import type {
+  TransformersEmbedRequest,
+  TransformersEmbedResponse,
   TransformersGenerateRequest,
   TransformersGenerateResponse,
   TransformersJsAdapterOptions,
@@ -9,6 +11,9 @@ export type XlaiTransformersJsAdapter = {
   generate: (
     request: TransformersGenerateRequest,
   ) => Promise<TransformersGenerateResponse>;
+  embed: (
+    request: TransformersEmbedRequest,
+  ) => Promise<TransformersEmbedResponse>;
 };
 
 /**
@@ -67,14 +72,35 @@ export async function createXlaiTransformersJsAdapter(
     tokenizer: { encode: (text: string, options?: unknown) => unknown };
     (prompt: string, options?: Record<string, unknown>): Promise<unknown>;
   };
+  type FeatureExtractionPipeline = (
+    input: string | string[],
+    options?: Record<string, unknown>,
+  ) => Promise<{
+    tolist: () => number[] | number[][] | number[][][];
+  }>;
 
   const pipelines = new Map<string, TextGenPipeline>();
+  const embeddingPipelines = new Map<string, FeatureExtractionPipeline>();
 
   async function getPipeline(modelId: string): Promise<TextGenPipeline> {
     let p = pipelines.get(modelId);
     if (!p) {
       p = (await tf.pipeline('text-generation', modelId)) as TextGenPipeline;
       pipelines.set(modelId, p);
+    }
+    return p;
+  }
+
+  async function getEmbeddingPipeline(
+    modelId: string,
+  ): Promise<FeatureExtractionPipeline> {
+    let p = embeddingPipelines.get(modelId);
+    if (!p) {
+      p = (await tf.pipeline(
+        'feature-extraction',
+        modelId,
+      )) as FeatureExtractionPipeline;
+      embeddingPipelines.set(modelId, p);
     }
     return p;
   }
@@ -184,6 +210,20 @@ export async function createXlaiTransformersJsAdapter(
         text: continuation.replace(/^\s+/, ''),
         finishReason,
       };
+    },
+    async embed(
+      request: TransformersEmbedRequest,
+    ): Promise<TransformersEmbedResponse> {
+      const pipeline = await getEmbeddingPipeline(request.model);
+      const raw = await pipeline(request.inputs, {
+        pooling: 'mean',
+        normalize: true,
+      });
+      const list = raw.tolist();
+      const vectors = Array.isArray(list[0])
+        ? (list as number[][])
+        : [list as number[]];
+      return { vectors };
     },
   };
 }

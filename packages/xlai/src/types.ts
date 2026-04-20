@@ -100,6 +100,27 @@ export interface ChatResponse {
   metadata?: Record<string, unknown>;
 }
 
+export interface EmbeddingUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
+export interface EmbeddingResponse {
+  vectors: number[][];
+  usage?: EmbeddingUsage;
+  metadata?: Record<string, unknown>;
+}
+
+export interface EmbeddingOptions {
+  inputs: string[];
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  embeddingModel?: string;
+  dimensions?: number;
+}
+
 /** Matches Rust `ChatMessage` JSON (snake_case fields from serde). */
 export type ChatMessageRole = 'system' | 'user' | 'assistant' | 'tool';
 

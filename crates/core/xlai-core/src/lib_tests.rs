@@ -2,11 +2,12 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 
 use crate::{
-    ChatContent, ChatMessage, ChatRequest, ChatRetryPolicy, ContentPart, ErrorKind, GeneratedImage,
-    ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality,
-    ImageGenerationRequest, ImageGenerationResponse, MediaSource, MessageRole, ReasoningEffort,
-    StructuredOutput, StructuredOutputFormat, ToolCall, ToolCallExecutionMode, ToolDefinition,
-    ToolParameter, ToolParameterType, ToolSchema, TtsChunk, TtsResponse, XlaiError,
+    ChatContent, ChatMessage, ChatRequest, ChatRetryPolicy, ContentPart, EmbeddingRequest,
+    ErrorKind, GeneratedImage, ImageGenerationBackground, ImageGenerationOutputFormat,
+    ImageGenerationQuality, ImageGenerationRequest, ImageGenerationResponse, MediaSource,
+    MessageRole, ReasoningEffort, StructuredOutput, StructuredOutputFormat, ToolCall,
+    ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolSchema, TtsChunk,
+    TtsResponse, XlaiError,
 };
 
 #[test]
@@ -212,6 +213,57 @@ fn image_generation_response_round_trips_inline_images() {
         return;
     };
     assert_eq!(back, response);
+}
+
+#[test]
+fn embedding_request_round_trips_json_with_dimensions() {
+    let request = EmbeddingRequest {
+        model: Some("text-embedding-3-small".to_owned()),
+        inputs: vec!["hello".to_owned(), "world".to_owned()],
+        dimensions: Some(768),
+        metadata: Default::default(),
+    };
+
+    let serialized = serde_json::to_value(&request);
+    assert!(serialized.is_ok(), "serialize");
+    let Ok(v) = serialized else {
+        return;
+    };
+    assert_eq!(v["dimensions"], json!(768));
+
+    let deserialized: Result<EmbeddingRequest, _> = serde_json::from_value(v);
+    assert!(deserialized.is_ok(), "deserialize");
+    let Ok(back) = deserialized else {
+        return;
+    };
+    assert_eq!(back, request);
+}
+
+#[test]
+fn embedding_request_round_trips_json_without_dimensions() {
+    let request = EmbeddingRequest {
+        model: None,
+        inputs: vec!["hello".to_owned()],
+        dimensions: None,
+        metadata: Default::default(),
+    };
+
+    let serialized = serde_json::to_value(&request);
+    assert!(serialized.is_ok(), "serialize");
+    let Ok(v) = serialized else {
+        return;
+    };
+    assert!(
+        v.get("dimensions").is_none(),
+        "dimensions should be omitted when absent"
+    );
+
+    let deserialized: Result<EmbeddingRequest, _> = serde_json::from_value(v);
+    assert!(deserialized.is_ok(), "deserialize");
+    let Ok(back) = deserialized else {
+        return;
+    };
+    assert_eq!(back, request);
 }
 
 #[test]

@@ -9,18 +9,21 @@
 
 pub use xlai_core as core;
 
-pub use xlai_backend_gemini::{GeminiChatModel, GeminiConfig, GeminiImageGenerationModel};
+pub use xlai_backend_gemini::{
+    GeminiChatModel, GeminiConfig, GeminiEmbeddingModel, GeminiImageGenerationModel,
+};
 pub use xlai_backend_openai::{
-    OpenAiChatModel, OpenAiConfig, OpenAiImageGenerationModel, OpenAiTranscriptionModel,
-    OpenAiTtsModel,
+    OpenAiChatModel, OpenAiConfig, OpenAiEmbeddingModel, OpenAiImageGenerationModel,
+    OpenAiTranscriptionModel, OpenAiTtsModel,
 };
 pub use xlai_backend_openrouter::{OpenRouterChatModel, OpenRouterConfig};
 pub use xlai_backend_transformersjs::{
     TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
+    TransformersJsEmbeddingModel,
 };
 
 #[cfg(feature = "llama")]
-pub use xlai_backend_llama_cpp::{LlamaCppChatModel, LlamaCppConfig};
+pub use xlai_backend_llama_cpp::{LlamaCppChatModel, LlamaCppConfig, LlamaCppEmbeddingModel};
 
 #[cfg(feature = "qts")]
 pub use xlai_qts_core::{QtsTtsConfig, QtsTtsModel};
@@ -34,8 +37,8 @@ pub use xlai_runtime::{
 };
 
 pub use xlai_core::{
-    CancellationSignal, ChatExecutionConfig, ChatExecutionOverrides, ExecutionLatencyMode,
-    TtsExecutionConfig, TtsExecutionOverrides,
+    CancellationSignal, ChatExecutionConfig, ChatExecutionOverrides, EmbeddingRequest,
+    EmbeddingResponse, ExecutionLatencyMode, TtsExecutionConfig, TtsExecutionOverrides,
 };
 
 #[cfg(not(target_arch = "wasm32"))]

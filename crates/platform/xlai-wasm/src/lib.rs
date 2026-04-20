@@ -7,14 +7,16 @@
 pub use xlai_core as core;
 
 pub use xlai_backend_openai::{
-    OpenAiChatModel, OpenAiConfig, OpenAiImageGenerationModel, OpenAiTranscriptionModel,
-    OpenAiTtsModel,
+    OpenAiChatModel, OpenAiConfig, OpenAiEmbeddingModel, OpenAiImageGenerationModel,
+    OpenAiTranscriptionModel, OpenAiTtsModel,
 };
 pub use xlai_backend_openrouter::{OpenRouterChatModel, OpenRouterConfig};
 #[cfg(target_arch = "wasm32")]
 pub use xlai_backend_transformersjs::{
     TransformersJsBundle, TransformersJsChatModel, TransformersJsConfig,
+    TransformersJsEmbeddingModel,
 };
+pub use xlai_core::{EmbeddingRequest, EmbeddingResponse};
 pub use xlai_runtime::{
     Agent, Chat, ChatExecutionEvent, DirectoryFileSystem, FileSystem, FsEntry, FsEntryKind, FsPath,
     GeneratedImage, ImageGenerationBackground, ImageGenerationOutputFormat, ImageGenerationQuality,
@@ -48,7 +50,7 @@ mod js_file_system;
 pub use agent_session::WasmAgentSession;
 pub use api::{
     agent, chat, create_agent_session, create_agent_session_with_memory_file_system,
-    create_chat_session, create_chat_session_with_memory_file_system, generate_image,
+    create_chat_session, create_chat_session_with_memory_file_system, embed, generate_image,
     package_version, tts, tts_stream,
 };
 #[cfg(target_arch = "wasm32")]

@@ -2,11 +2,13 @@ use async_stream::try_stream;
 use futures_util::stream::StreamExt;
 use reqwest::Client;
 use xlai_core::{
-    BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatModel, ChatRequest, ChatResponse, ErrorKind,
+    BoxFuture, BoxStream, ChatBackend, ChatChunk, ChatModel, ChatRequest, ChatResponse,
+    EmbeddingBackend, EmbeddingModel, EmbeddingRequest, EmbeddingResponse, ErrorKind,
     ImageGenerationBackend, ImageGenerationModel, ImageGenerationRequest, ImageGenerationResponse,
     XlaiError,
 };
 
+mod embeddings;
 mod image_generation;
 mod request;
 mod response;
@@ -15,6 +17,10 @@ mod stream;
 #[cfg(test)]
 mod tests;
 
+use embeddings::{
+    GeminiBatchEmbeddingRequest, GeminiBatchEmbeddingResponse, GeminiEmbeddingRequestPayload,
+    GeminiEmbeddingResponse,
+};
 use image_generation::{GeminiImageGenerationRequest, GeminiImageGenerationResponse};
 use request::GeminiChatRequest;
 use response::GeminiChatResponse;
@@ -25,6 +31,7 @@ pub struct GeminiConfig {
     pub base_url: String,
     pub api_key: String,
     pub model: String,
+    pub embedding_model: Option<String>,
     pub image_model: Option<String>,
 }
 
@@ -39,8 +46,15 @@ impl GeminiConfig {
             base_url: base_url.into(),
             api_key: api_key.into(),
             model: model.into(),
+            embedding_model: None,
             image_model: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_embedding_model(mut self, model: impl Into<String>) -> Self {
+        self.embedding_model = Some(model.into());
+        self
     }
 
     #[must_use]
@@ -54,6 +68,22 @@ impl GeminiConfig {
             "{}/models/{}:generateContent",
             self.base_url.trim_end_matches('/'),
             self.model
+        )
+    }
+
+    fn embed_content_url(&self, model: &str) -> String {
+        format!(
+            "{}/models/{}:embedContent",
+            self.base_url.trim_end_matches('/'),
+            model
+        )
+    }
+
+    fn batch_embed_contents_url(&self, model: &str) -> String {
+        format!(
+            "{}/models/{}:batchEmbedContents",
+            self.base_url.trim_end_matches('/'),
+            model
         )
     }
 
@@ -80,7 +110,23 @@ pub struct GeminiChatModel {
     config: GeminiConfig,
 }
 
+#[derive(Clone, Debug)]
+pub struct GeminiEmbeddingModel {
+    client: Client,
+    config: GeminiConfig,
+}
+
 impl GeminiChatModel {
+    #[must_use]
+    pub fn new(config: GeminiConfig) -> Self {
+        Self {
+            client: Client::new(),
+            config,
+        }
+    }
+}
+
+impl GeminiEmbeddingModel {
     #[must_use]
     pub fn new(config: GeminiConfig) -> Self {
         Self {
@@ -114,11 +160,104 @@ impl ChatBackend for GeminiConfig {
     }
 }
 
+impl EmbeddingBackend for GeminiConfig {
+    type Model = GeminiEmbeddingModel;
+
+    fn into_embedding_model(self) -> Self::Model {
+        GeminiEmbeddingModel::new(self)
+    }
+}
+
 impl ImageGenerationBackend for GeminiConfig {
     type Model = GeminiImageGenerationModel;
 
     fn into_image_generation_model(self) -> Self::Model {
         GeminiImageGenerationModel::new(self)
+    }
+}
+
+impl EmbeddingModel for GeminiEmbeddingModel {
+    fn provider_name(&self) -> &'static str {
+        "gemini"
+    }
+
+    fn embed(
+        &self,
+        request: EmbeddingRequest,
+    ) -> BoxFuture<'_, Result<EmbeddingResponse, XlaiError>> {
+        Box::pin(async move {
+            if request.inputs.is_empty() {
+                return Err(XlaiError::new(
+                    ErrorKind::Validation,
+                    "embedding request requires at least one input",
+                ));
+            }
+
+            let model_name = request
+                .model
+                .clone()
+                .or_else(|| self.config.embedding_model.clone())
+                .unwrap_or_else(|| self.config.model.clone());
+
+            if request.inputs.len() == 1 {
+                let endpoint = self.config.embed_content_url(&model_name);
+                let payload = GeminiEmbeddingRequestPayload::from_core_request(
+                    model_name,
+                    request.inputs.into_iter().next().unwrap_or_default(),
+                    request.dimensions,
+                );
+                let response = self
+                    .client
+                    .post(&endpoint)
+                    .header("x-goog-api-key", &self.config.api_key)
+                    .json(&payload)
+                    .send()
+                    .await
+                    .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+                let status = response.status();
+                if !status.is_success() {
+                    let text = response.text().await.unwrap_or_default();
+                    return Err(XlaiError::new(
+                        ErrorKind::Provider,
+                        format!("Gemini API error ({}): {}", status, text),
+                    ));
+                }
+                let response: GeminiEmbeddingResponse = response
+                    .json()
+                    .await
+                    .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+                return response.into_core_response();
+            }
+
+            let endpoint = self.config.batch_embed_contents_url(&model_name);
+            let payload = GeminiBatchEmbeddingRequest::from_core_request(
+                model_name,
+                request.inputs,
+                request.dimensions,
+            );
+            let response = self
+                .client
+                .post(&endpoint)
+                .header("x-goog-api-key", &self.config.api_key)
+                .json(&payload)
+                .send()
+                .await
+                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+            let status = response.status();
+            if !status.is_success() {
+                let text = response.text().await.unwrap_or_default();
+                return Err(XlaiError::new(
+                    ErrorKind::Provider,
+                    format!("Gemini API error ({}): {}", status, text),
+                ));
+            }
+            let response: GeminiBatchEmbeddingResponse = response
+                .json()
+                .await
+                .map_err(|error| XlaiError::new(ErrorKind::Provider, error.to_string()))?;
+
+            response.into_core_response()
+        })
     }
 }
 

@@ -15,13 +15,13 @@ This doc classifies crates for dependency and release decisions. Authoritative p
 
 ## Published to crates.io
 
-| Crate                         | Role                                        |
-| ----------------------------- | ------------------------------------------- |
-| `xlai-core`                   | Domain types and provider traits            |
-| `xlai-runtime`                | `RuntimeBuilder`, `Chat`, `Agent`, sessions |
-| `xlai-backend-openai`         | OpenAI-compatible HTTP backend              |
-| `xlai-backend-openrouter`     | OpenRouter Responses API chat backend       |
-| `xlai-backend-transformersjs` | WASM transformers.js chat backend           |
+| Crate                         | Role                                           |
+| ----------------------------- | ---------------------------------------------- |
+| `xlai-core`                   | Domain types and provider traits               |
+| `xlai-runtime`                | `RuntimeBuilder`, `Chat`, `Agent`, sessions    |
+| `xlai-backend-openai`         | OpenAI-compatible HTTP backend                 |
+| `xlai-backend-openrouter`     | OpenRouter Responses API chat backend          |
+| `xlai-backend-transformersjs` | WASM transformers.js chat + embeddings backend |
 
 ## Internal only (`publish = false`)
 
@@ -30,7 +30,7 @@ This doc classifies crates for dependency and release decisions. Authoritative p
 | `xlai-build-native`      | Internal build-script helpers (CMake, OpenBLAS, Vulkan, llama.cpp patches)                 |
 | `xlai-sys-llama`         | Vendored `llama.cpp` build (CMake + bindgen); sources under `vendor/native/`               |
 | `xlai-sys-ggml`          | Vendored standalone `ggml` build for QTS (CMake + bindgen)                                 |
-| `xlai-backend-llama-cpp` | Native llama.cpp chat backend                                                              |
+| `xlai-backend-llama-cpp` | Native llama.cpp chat + embeddings backend                                                 |
 | `xlai-backend-gemini`    | Google Gemini HTTP backend (`publish = false`; not in the crates.io publish chain)         |
 | `xlai-facade`            | Internal integration re-exports for `xlai-native` only (`xlai-wasm` does not depend on it) |
 | `xlai-native`            | Native app entrypoint                                                                      |
