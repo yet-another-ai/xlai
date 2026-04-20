@@ -7,12 +7,23 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 
 use xlai_build_native::{
-    apply_cmake_env_overrides, emit_llama_vulkan_sdk_paths, emit_openblas_search_paths,
-    emit_search_path_variants, feature_enabled, native_vendor_llama_cpp,
-    prepare_patched_llama_source, workspace_root_from_sys_crate_manifest,
+    apply_cmake_env_overrides, detect_cuda_sdk, detect_openvino_sdk, detect_rocm_sdk,
+    emit_cuda_link, emit_llama_vulkan_sdk_paths, emit_openblas_search_paths, emit_openvino_link,
+    emit_rocm_link, emit_search_path_variants, feature_enabled, native_vendor_llama_cpp,
+    prepare_patched_llama_source, rerun_cuda_env, rerun_openvino_env, rerun_rocm_env,
+    workspace_root_from_sys_crate_manifest,
 };
 
 type BuildResult<T> = Result<T, Box<dyn Error>>;
+
+const CRATE_LABEL: &str = "xlai-sys-llama";
+
+/// Linking model for the vendored llama.cpp / GGML core in this crate.
+///
+/// `xlai-sys-llama` builds the vendored `llama.cpp` and bundled `ggml` statically (`BUILD_SHARED_LIBS=OFF`,
+/// `GGML_STATIC=ON`, `GGML_BACKEND_DL=OFF`). External accelerator SDK runtime libraries are still
+/// linked dynamically; see [`docs/development/native-vendor.md`](../../../../docs/development/native-vendor.md).
+const STATIC_CORE: bool = true;
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
@@ -31,36 +42,91 @@ struct BackendFeatureSet {
 }
 
 impl BackendFeatureSet {
-    fn from_cargo_features(target_os: &str) -> BuildResult<Self> {
+    /// Decide which backends to actually request from CMake, downgrading any backend whose
+    /// preconditions fail with a `cargo:warning`. Gating is driven by:
+    ///
+    /// 1. **Target OS / platform support** (`metal` is Apple-only; `cuda` / `hip` / `openvino`
+    ///    are not built on macOS).
+    /// 2. **Upstream backend constraints** (`ggml-hip` cannot be embedded in a static-core build).
+    /// 3. **External SDK presence** for CUDA / OpenVINO / ROCm via [`detect_cuda_sdk`] etc.
+    fn from_cargo_features(target: &str, target_os: &str) -> BuildResult<Self> {
+        let on_apple = target_os == "macos" || target_os == "ios";
+
+        let requested_metal = feature_enabled("metal");
         let requested_cuda = feature_enabled("cuda");
         let requested_hip = feature_enabled("hip");
         let requested_openvino = feature_enabled("openvino");
-        let feature_set = Self {
-            openblas: feature_enabled("openblas"),
-            metal: feature_enabled("metal"),
-            vulkan: feature_enabled("vulkan"),
-            cuda: requested_cuda && target_os != "macos",
-            hip: requested_hip && target_os != "macos",
-            openvino: requested_openvino && target_os != "macos",
-        };
 
-        if feature_set.metal && target_os != "macos" {
+        if requested_metal && !on_apple {
             return Err(std::io::Error::other(
                 "the `metal` Cargo feature is only supported on macOS targets",
             )
             .into());
         }
-        if requested_cuda && target_os == "macos" {
-            println!("cargo:warning=xlai-sys-llama: `cuda` feature ignored on macOS targets");
+        if requested_cuda && on_apple {
+            println!("cargo:warning={CRATE_LABEL}: `cuda` feature ignored on macOS targets");
         }
-        if requested_hip && target_os == "macos" {
-            println!("cargo:warning=xlai-sys-llama: `hip` feature ignored on macOS targets");
+        if requested_hip && on_apple {
+            println!("cargo:warning={CRATE_LABEL}: `hip` feature ignored on macOS targets");
         }
-        if requested_openvino && target_os == "macos" {
-            println!("cargo:warning=xlai-sys-llama: `openvino` feature ignored on macOS targets");
+        if requested_openvino && on_apple {
+            println!("cargo:warning={CRATE_LABEL}: `openvino` feature ignored on macOS targets");
         }
 
-        Ok(feature_set)
+        let cuda = requested_cuda
+            && !on_apple
+            && match detect_cuda_sdk(target) {
+                Some(_) => true,
+                None => {
+                    println!(
+                        "cargo:warning={CRATE_LABEL}: `cuda` feature requested but no CUDA toolkit was found via CUDA_PATH / CUDA_HOME / standard install paths; backend will be skipped"
+                    );
+                    false
+                }
+            };
+
+        let openvino = requested_openvino
+            && !on_apple
+            && match detect_openvino_sdk(target) {
+                Some(_) => true,
+                None => {
+                    println!(
+                        "cargo:warning={CRATE_LABEL}: `openvino` feature requested but no OpenVINO runtime was found via OpenVINO_DIR / OPENVINO_ROOT / standard install paths; backend will be skipped"
+                    );
+                    false
+                }
+            };
+
+        let hip = if requested_hip && !on_apple {
+            let sdk_present = detect_rocm_sdk(target).is_some();
+            if STATIC_CORE {
+                let detail = if sdk_present {
+                    "(ROCm SDK was detected, but upstream ggml does not support HIP/ROCm with static linking)"
+                } else {
+                    "(no ROCm SDK detected and upstream ggml does not support HIP/ROCm with static linking)"
+                };
+                println!("cargo:warning={CRATE_LABEL}: `hip` feature ignored {detail}");
+                false
+            } else if !sdk_present {
+                println!(
+                    "cargo:warning={CRATE_LABEL}: `hip` feature requested but no ROCm SDK was found via ROCM_PATH / HIP_PATH / standard install paths; backend will be skipped"
+                );
+                false
+            } else {
+                true
+            }
+        } else {
+            false
+        };
+
+        Ok(Self {
+            openblas: feature_enabled("openblas"),
+            metal: requested_metal && on_apple,
+            vulkan: feature_enabled("vulkan"),
+            cuda,
+            hip,
+            openvino,
+        })
     }
 
     fn enabled_backend_names(self) -> impl Iterator<Item = &'static str> {
@@ -109,9 +175,10 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
     let vendor_dir = source_dir.join("vendor");
     let ggml_include_dir = source_dir.join("ggml/include");
     let wrapper_cpp = manifest_dir.join("src/wrapper.cpp");
+    let target = env::var("TARGET").unwrap_or_default();
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
-    let feature_set = BackendFeatureSet::from_cargo_features(&target_os)?;
+    let feature_set = BackendFeatureSet::from_cargo_features(&target, &target_os)?;
     let enable_accelerate = target_os == "macos";
     let enable_openblas = feature_set.openblas && matches!(target_os.as_str(), "linux" | "windows");
 
@@ -126,6 +193,9 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
     println!("cargo:rerun-if-env-changed=VULKAN_SDK");
     println!("cargo:rerun-if-env-changed=VCPKG_INSTALLATION_ROOT");
     println!("cargo:rerun-if-env-changed=VCPKG_TARGET_TRIPLET");
+    rerun_cuda_env();
+    rerun_openvino_env();
+    rerun_rocm_env();
 
     let mut config = cmake::Config::new(&source_dir);
     config
@@ -199,80 +269,15 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
     emit_llama_vulkan_sdk_paths(feature_set.vulkan, &target_os);
     emit_search_path_variants(&dst.join("build/bin"));
 
-    let mut libraries = vec![
-        "common",
-        "cpp-httplib",
-        "llguidance",
-        "llama",
-        "ggml",
-        "ggml-base",
-        "ggml-cpu",
-    ];
-    if feature_set.metal {
-        libraries.push("ggml-metal");
-    }
-    if enable_openblas {
-        libraries.push("ggml-blas");
-    }
-    if feature_set.vulkan {
-        libraries.push("ggml-vulkan");
-    }
-    if feature_set.cuda {
-        libraries.push("ggml-cuda");
-    }
-    if feature_set.hip {
-        libraries.push("ggml-hip");
-    }
-    if feature_set.openvino {
-        libraries.push("ggml-openvino");
-    }
-    for library in libraries {
-        println!("cargo:rustc-link-lib=static={library}");
-    }
-
-    match target_os.as_str() {
-        "macos" | "ios" => {
-            println!("cargo:rustc-link-lib=c++");
-            if enable_accelerate {
-                println!("cargo:rustc-link-lib=framework=Accelerate");
-            }
-            if feature_set.metal {
-                println!("cargo:rustc-link-lib=framework=Foundation");
-                println!("cargo:rustc-link-lib=framework=Metal");
-                println!("cargo:rustc-link-lib=framework=MetalKit");
-            }
-            if feature_set.vulkan {
-                println!("cargo:rustc-link-lib=vulkan");
-            }
-        }
-        "linux" | "android" => {
-            println!("cargo:rustc-link-lib=stdc++");
-            println!("cargo:rustc-link-lib=dl");
-            println!("cargo:rustc-link-lib=m");
-            println!("cargo:rustc-link-lib=pthread");
-            if enable_openblas {
-                println!("cargo:rustc-link-lib=openblas");
-            }
-            if feature_set.vulkan {
-                println!("cargo:rustc-link-lib=vulkan");
-            }
-        }
-        "windows" => {
-            if enable_openblas {
-                emit_openblas_search_paths();
-                println!("cargo:rustc-link-lib=openblas");
-            }
-            if feature_set.vulkan {
-                let library_name = if target_env == "msvc" {
-                    "vulkan-1"
-                } else {
-                    "vulkan"
-                };
-                println!("cargo:rustc-link-lib={library_name}");
-            }
-        }
-        _ => {}
-    }
+    emit_vendored_static_libs(feature_set, enable_openblas);
+    emit_external_sdk_links(&target, feature_set);
+    emit_system_links(
+        feature_set,
+        &target_os,
+        &target_env,
+        enable_accelerate,
+        enable_openblas,
+    );
 
     Ok(())
 }
@@ -373,4 +378,111 @@ fn generate_llama_bindings(include_dir: &Path, ggml_include_dir: &Path) -> Build
     })?;
 
     Ok(())
+}
+
+/// Emit `cargo:rustc-link-lib=static=...` directives for the vendored static-core libraries
+/// produced by the cmake build above.
+fn emit_vendored_static_libs(feature_set: BackendFeatureSet, enable_openblas: bool) {
+    let mut libraries = vec![
+        "common",
+        "cpp-httplib",
+        "llguidance",
+        "llama",
+        "ggml",
+        "ggml-base",
+        "ggml-cpu",
+    ];
+    if feature_set.metal {
+        libraries.push("ggml-metal");
+    }
+    if enable_openblas {
+        libraries.push("ggml-blas");
+    }
+    if feature_set.vulkan {
+        libraries.push("ggml-vulkan");
+    }
+    if feature_set.cuda {
+        libraries.push("ggml-cuda");
+    }
+    if feature_set.hip {
+        libraries.push("ggml-hip");
+    }
+    if feature_set.openvino {
+        libraries.push("ggml-openvino");
+    }
+    for library in libraries {
+        println!("cargo:rustc-link-lib=static={library}");
+    }
+}
+
+/// Emit search paths and dynamic link directives for the **external** accelerator SDK runtime
+/// libraries that the vendored static cores depend on at link time.
+fn emit_external_sdk_links(target: &str, feature_set: BackendFeatureSet) {
+    if feature_set.cuda && !emit_cuda_link(target) {
+        println!(
+            "cargo:warning={CRATE_LABEL}: enabled CUDA backend but could not locate CUDA runtime libraries at link time; expect linker errors"
+        );
+    }
+    if feature_set.openvino && !emit_openvino_link(target) {
+        println!(
+            "cargo:warning={CRATE_LABEL}: enabled OpenVINO backend but could not locate OpenVINO runtime libraries at link time; expect linker errors"
+        );
+    }
+    if feature_set.hip && !emit_rocm_link(target) {
+        println!(
+            "cargo:warning={CRATE_LABEL}: enabled HIP backend but could not locate ROCm runtime libraries at link time; expect linker errors"
+        );
+    }
+}
+
+fn emit_system_links(
+    feature_set: BackendFeatureSet,
+    target_os: &str,
+    target_env: &str,
+    enable_accelerate: bool,
+    enable_openblas: bool,
+) {
+    match target_os {
+        "macos" | "ios" => {
+            println!("cargo:rustc-link-lib=c++");
+            if enable_accelerate {
+                println!("cargo:rustc-link-lib=framework=Accelerate");
+            }
+            if feature_set.metal {
+                println!("cargo:rustc-link-lib=framework=Foundation");
+                println!("cargo:rustc-link-lib=framework=Metal");
+                println!("cargo:rustc-link-lib=framework=MetalKit");
+            }
+            if feature_set.vulkan {
+                println!("cargo:rustc-link-lib=vulkan");
+            }
+        }
+        "linux" | "android" => {
+            println!("cargo:rustc-link-lib=stdc++");
+            println!("cargo:rustc-link-lib=dl");
+            println!("cargo:rustc-link-lib=m");
+            println!("cargo:rustc-link-lib=pthread");
+            if enable_openblas {
+                println!("cargo:rustc-link-lib=openblas");
+            }
+            if feature_set.vulkan {
+                println!("cargo:rustc-link-lib=vulkan");
+            }
+        }
+        "windows" => {
+            if enable_openblas {
+                emit_openblas_search_paths();
+                println!("cargo:rustc-link-lib=openblas");
+            }
+            if feature_set.vulkan {
+                let library_name = if target_env == "msvc" {
+                    "vulkan-1"
+                } else {
+                    "vulkan"
+                };
+                println!("cargo:rustc-link-lib={library_name}");
+            }
+        }
+        _ => {}
+    }
 }

@@ -27,4 +27,4 @@ Concrete examples (OpenAI, llama.cpp, streaming agents) are in the repository [R
 
 ## Optional: QTS in native builds
 
-`xlai-native` defaults the local `llama.cpp` stack to `openblas`, `cuda`, `hip`, and `openvino`. Enable the **`qts`** feature when you need `QtsTtsModel`; QTS follows the same default accelerator set, while unsupported Apple-only combinations are skipped with warnings at build time.
+`xlai-native` defaults the local `llama.cpp` stack to request `openblas`, `cuda`, `hip`, and `openvino`. Enable the **`qts`** feature when you need `QtsTtsModel`; QTS follows the same requested accelerator set. The vendored `ggml` / `llama.cpp` core is statically linked, while the accelerator SDK runtimes (CUDA / OpenVINO / ROCm) are linked as external system libraries — the build scripts auto-discover them via standard env vars (`CUDA_PATH`, `OpenVINO_DIR`, `ROCM_PATH`). Backends are downgraded with a `cargo:warning` when their preconditions fail (Apple target, missing SDK, or — for `hip` — the upstream constraint that `GGML_HIP` cannot be embedded in a static-core build). See [Native vendor layout](../development/native-vendor) for the full contract.

@@ -39,7 +39,7 @@ cargo build --workspace
 cargo test --workspace
 ```
 
-Native builds now default to `openblas`, `cuda`, `hip`, and `openvino` for the local `llama.cpp` / QTS stacks. On unsupported Apple targets those accelerator flags are skipped with build warnings; on supported Linux/Windows hosts, install the corresponding SDK/toolchain before building.
+Native builds default to requesting `openblas`, `cuda`, `hip`, and `openvino` for the local `llama.cpp` / QTS stacks. The vendored `ggml` / `llama.cpp` core is built **statically**, while accelerator SDK runtimes (CUDA, OpenVINO, ROCm/HIP) are linked as **external system libraries**. The build scripts auto-discover them through `CUDA_PATH`, `OpenVINO_DIR`, `ROCM_PATH`, and standard install paths; when an SDK is missing the corresponding backend is downgraded with a `cargo:warning` instead of failing the build. `hip` is also currently downgraded on every static-core build because upstream `ggml` does not allow `GGML_HIP=ON` together with static linking. See [`docs/development/native-vendor.md`](docs/development/native-vendor.md) for the full linking contract.
 
 JavaScript workspace:
 
@@ -72,7 +72,7 @@ See [`docs/guide/configuration.md`](docs/guide/configuration.md) for the full li
   - [x] Metal
   - [x] Vulkan
   - [x] CUDA
-  - [x] HIP
+  - [ ] HIP
   - [x] OpenVINO
 
 ### ASR API
@@ -90,7 +90,7 @@ See [`docs/guide/configuration.md`](docs/guide/configuration.md) for the full li
     - [x] Metal
     - [x] Vulkan
     - [x] CUDA
-    - [x] HIP
+    - [ ] HIP
     - [x] OpenVINO
   - Vocoder (ORT default EPs)
 

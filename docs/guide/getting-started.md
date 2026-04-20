@@ -16,7 +16,7 @@ cd xlai
 cargo build --workspace
 ```
 
-Native crates that wrap `llama.cpp` / QTS now default to `openblas`, `cuda`, `hip`, and `openvino`. On unsupported Apple targets those accelerator flags are ignored with warnings; on supported Linux/Windows hosts you should have the relevant CUDA, ROCm/HIP, and OpenVINO toolchains installed before building.
+Native crates that wrap `llama.cpp` / QTS default to requesting `openblas`, `cuda`, `hip`, and `openvino`. The vendored `ggml` / `llama.cpp` core is built and linked **statically**, while accelerator SDK runtimes (CUDA, OpenVINO, ROCm/HIP) are treated as **external system libraries**. The build scripts auto-discover them via `CUDA_PATH` / `OpenVINO_DIR` / `ROCM_PATH` (and standard install paths). When an SDK is missing, the corresponding backend is downgraded with a `cargo:warning` instead of failing the build. `hip` is also currently downgraded on every static-core build because upstream `ggml` does not support `GGML_HIP=ON` together with static linking. See [Native vendor layout](../development/native-vendor) for the full linking contract.
 
 ## Tests
 
