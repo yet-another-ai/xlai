@@ -54,7 +54,7 @@ runs:
 
     - name: Install CUDA toolkit
       if: runner.os == 'Linux' || runner.os == 'Windows'
-      uses: Jimver/cuda-toolkit@v0.2
+      uses: Jimver/cuda-toolkit@v0.2.57
       with:
         cuda: '13.2.0'
         method: network
