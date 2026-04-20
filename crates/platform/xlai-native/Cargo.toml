@@ -10,10 +10,13 @@ publish = false
 build = "build.rs"
 
 [features]
-default = ["openblas"]
+default = ["openblas", "cuda", "hip", "openvino"]
 openblas = ["xlai-facade/openblas"]
 metal = ["xlai-facade/metal"]
 vulkan = ["xlai-facade/vulkan"]
+cuda = ["xlai-facade/cuda"]
+hip = ["xlai-facade/hip"]
+openvino = ["xlai-facade/openvino"]
 # Optional: avoid linking QTS (standalone GGML) unless you need native TTS in the aggregate crate.
 qts = ["xlai-facade/qts"]
 

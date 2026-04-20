@@ -14,7 +14,7 @@ name = "xlai-qts"
 path = "src/main.rs"
 
 [features]
-default = ["openblas"]
+default = ["openblas", "cuda", "hip", "openvino"]
 openblas = ["xlai-qts-core/openblas"]
 metal = ["xlai-qts-core/metal"]
 vulkan = ["xlai-qts-core/vulkan"]
@@ -31,6 +31,7 @@ onednn = ["xlai-qts-core/onednn"]
 openvino = ["xlai-qts-core/openvino"]
 qnn = ["xlai-qts-core/qnn"]
 rknpu = ["xlai-qts-core/rknpu"]
+hip = ["xlai-qts-core/hip"]
 rocm = ["xlai-qts-core/rocm"]
 tensorrt = ["xlai-qts-core/tensorrt"]
 tvm = ["xlai-qts-core/tvm"]

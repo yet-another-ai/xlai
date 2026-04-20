@@ -34,4 +34,4 @@ OpenRouter remains chat-only in XLAI today. The dedicated `xlai-backend-openrout
 
 ## llama.cpp acceleration matrix
 
-The README tracks CPU/GPU EP support (Metal, Vulkan, CUDA roadmap, etc.). See [Support of LLM API providers](https://github.com/yetanother.ai/xlai/blob/main/README.md#support-of-llm-api-providers) on GitHub for the live checklist.
+The README tracks the live native accelerator matrix for `llama.cpp` and QTS. Today the workspace defaults the local native stacks to `openblas`, `cuda`, `hip`, and `openvino`, while Vulkan and Metal remain opt-in. See [Support of LLM API providers](https://github.com/yetanother.ai/xlai/blob/main/README.md#support-of-llm-api-providers) on GitHub for the checklist.

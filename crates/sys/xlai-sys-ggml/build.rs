@@ -22,6 +22,9 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
     let target = env::var("TARGET").expect("TARGET");
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let openblas_fe = feature_enabled("openblas");
+    let enable_cuda = feature_enabled("cuda") && !target.contains("apple");
+    let enable_hip = feature_enabled("hip") && !target.contains("apple");
+    let enable_openvino = feature_enabled("openvino") && !target.contains("apple");
     let enable_linux_windows_blas =
         openblas_fe && matches!(target_os.as_str(), "linux" | "windows");
     let link_ggml_blas = openblas_fe && (enable_linux_windows_blas || target.contains("apple"));
@@ -111,15 +114,15 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
 
     apply_cmake_env_overrides(&mut cfg, enable_linux_windows_blas);
 
-    map_feature_cmake(&mut cfg, "cuda", "GGML_CUDA");
+    cfg.define("GGML_CUDA", if enable_cuda { "ON" } else { "OFF" });
     map_feature_cmake(&mut cfg, "vulkan", "GGML_VULKAN");
-    map_feature_cmake(&mut cfg, "hip", "GGML_HIP");
+    cfg.define("GGML_HIP", if enable_hip { "ON" } else { "OFF" });
     map_feature_cmake(&mut cfg, "musa", "GGML_MUSA");
     map_feature_cmake(&mut cfg, "opencl", "GGML_OPENCL");
     map_feature_cmake(&mut cfg, "rpc", "GGML_RPC");
     map_feature_cmake(&mut cfg, "sycl", "GGML_SYCL");
     map_feature_cmake(&mut cfg, "webgpu", "GGML_WEBGPU");
-    map_feature_cmake(&mut cfg, "openvino", "GGML_OPENVINO");
+    cfg.define("GGML_OPENVINO", if enable_openvino { "ON" } else { "OFF" });
     map_feature_cmake(&mut cfg, "hexagon", "GGML_HEXAGON");
     map_feature_cmake(&mut cfg, "cann", "GGML_CANN");
     map_feature_cmake(&mut cfg, "zendnn", "GGML_ZENDNN");
@@ -139,14 +142,14 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
     if feature_enabled("metal") && target.contains("apple") {
         println!("cargo:rustc-link-lib=static=ggml-metal");
     }
-    if feature_enabled("cuda") {
+    if enable_cuda {
         println!("cargo:rustc-link-lib=static=ggml-cuda");
     }
     if feature_enabled("vulkan") {
         println!("cargo:rustc-link-lib=static=ggml-vulkan");
         emit_vulkan_loader_links(&target);
     }
-    if feature_enabled("hip") {
+    if enable_hip {
         println!("cargo:rustc-link-lib=static=ggml-hip");
     }
     if feature_enabled("musa") {
@@ -167,7 +170,7 @@ fn build_qts_standalone_ggml(manifest_dir: &Path, out_dir: &Path) {
     if feature_enabled("webgpu") {
         println!("cargo:rustc-link-lib=static=ggml-webgpu");
     }
-    if feature_enabled("openvino") {
+    if enable_openvino {
         println!("cargo:rustc-link-lib=static=ggml-openvino");
     }
     if feature_enabled("hexagon") {

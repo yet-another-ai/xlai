@@ -9,10 +9,13 @@ description = "C ABI shared library wrapping `xlai-native`."
 publish = false
 
 [features]
-default = ["openblas"]
+default = ["openblas", "cuda", "hip", "openvino"]
 openblas = ["xlai-native/openblas"]
 metal = ["xlai-native/metal"]
 vulkan = ["xlai-native/vulkan"]
+cuda = ["xlai-native/cuda"]
+hip = ["xlai-native/hip"]
+openvino = ["xlai-native/openvino"]
 
 [lib]
 crate-type = ["cdylib"]

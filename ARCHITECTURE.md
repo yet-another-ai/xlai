@@ -21,8 +21,8 @@ Workspace crates are grouped under `crates/core/`, `crates/runtime/`, `crates/ba
 | `xlai-sys-llama` | Vendored `llama.cpp` build (CMake + bindgen) for the llama backend. Sources: `vendor/native/llama.cpp`. |
 | `xlai-sys-ggml` | Vendored standalone `ggml` build (CMake + bindgen) for QTS. Sources: `vendor/native/ggml`. |
 | `xlai-qts-cli` | `synthesize` / `profile` / `tui` binary (`xlai-qts`) for local TTS workflows. |
-| `xlai-facade` | Internal (not on crates.io): native-only integration layer used by **`xlai-native`** (re-exports, optional `llama` / `qts`, Gemini + OpenAI + transformers.js for the aggregate). **`xlai-wasm` does not depend on it**; WASM re-exports come from `xlai-core`, `xlai-runtime`, and backends directly. |
-| `xlai-native` | Native Rust entrypoint: **explicit** public re-exports (plus `gemini` submodule for workspace-only Gemini types). Uses `xlai-facade` for feature wiring. Enable optional `qts` for `QtsTtsModel` (avoids linking QTS/ggml unless needed). |
+| `xlai-facade` | Internal (not on crates.io): native-only integration layer used by **`xlai-native`** (re-exports, default local `llama.cpp` wiring plus optional `qts`, Gemini + OpenAI + transformers.js for the aggregate). **`xlai-wasm` does not depend on it**; WASM re-exports come from `xlai-core`, `xlai-runtime`, and backends directly. |
+| `xlai-native` | Native Rust entrypoint: **explicit** public re-exports (plus `gemini` submodule for workspace-only Gemini types). Uses `xlai-facade` for feature wiring. Local `llama.cpp` is included by default; enable optional `qts` for `QtsTtsModel` (avoids linking QTS/ggml unless needed). |
 | `xlai-wasm` | `wasm-bindgen` entry points and JS-facing session factories. Public Rust types are re-exported from `xlai-core` / `xlai-runtime` / OpenAI + (on wasm32) transformers.js — no `xlai-facade` dependency. Default feature `qts` enables local QTS WASM surface (stub `TtsModel`, shared browser manifest types, `qtsBrowserTts*`; see `docs/qts/wasm-browser-runtime.md`). |
 | `xlai-ffi` | C ABI facade for future native interop. |
 

@@ -25,14 +25,23 @@ struct BackendFeatureSet {
     openblas: bool,
     metal: bool,
     vulkan: bool,
+    cuda: bool,
+    hip: bool,
+    openvino: bool,
 }
 
 impl BackendFeatureSet {
     fn from_cargo_features(target_os: &str) -> BuildResult<Self> {
+        let requested_cuda = feature_enabled("cuda");
+        let requested_hip = feature_enabled("hip");
+        let requested_openvino = feature_enabled("openvino");
         let feature_set = Self {
             openblas: feature_enabled("openblas"),
             metal: feature_enabled("metal"),
             vulkan: feature_enabled("vulkan"),
+            cuda: requested_cuda && target_os != "macos",
+            hip: requested_hip && target_os != "macos",
+            openvino: requested_openvino && target_os != "macos",
         };
 
         if feature_set.metal && target_os != "macos" {
@@ -40,6 +49,15 @@ impl BackendFeatureSet {
                 "the `metal` Cargo feature is only supported on macOS targets",
             )
             .into());
+        }
+        if requested_cuda && target_os == "macos" {
+            println!("cargo:warning=xlai-sys-llama: `cuda` feature ignored on macOS targets");
+        }
+        if requested_hip && target_os == "macos" {
+            println!("cargo:warning=xlai-sys-llama: `hip` feature ignored on macOS targets");
+        }
+        if requested_openvino && target_os == "macos" {
+            println!("cargo:warning=xlai-sys-llama: `openvino` feature ignored on macOS targets");
         }
 
         Ok(feature_set)
@@ -50,6 +68,9 @@ impl BackendFeatureSet {
             self.openblas.then_some("openblas"),
             self.metal.then_some("metal"),
             self.vulkan.then_some("vulkan"),
+            self.cuda.then_some("cuda"),
+            self.hip.then_some("hip"),
+            self.openvino.then_some("openvino"),
         ]
         .into_iter()
         .flatten()
@@ -134,11 +155,14 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
         .define("GGML_METAL", if feature_set.metal { "ON" } else { "OFF" })
         .define("GGML_RPC", "OFF")
         .define("GGML_VULKAN", if feature_set.vulkan { "ON" } else { "OFF" })
-        .define("GGML_CUDA", "OFF")
-        .define("GGML_HIP", "OFF")
+        .define("GGML_CUDA", if feature_set.cuda { "ON" } else { "OFF" })
+        .define("GGML_HIP", if feature_set.hip { "ON" } else { "OFF" })
         .define("GGML_SYCL", "OFF")
         .define("GGML_OPENCL", "OFF")
-        .define("GGML_OPENVINO", "OFF")
+        .define(
+            "GGML_OPENVINO",
+            if feature_set.openvino { "ON" } else { "OFF" },
+        )
         .define("GGML_ZDNN", "OFF")
         .define("GGML_VIRTGPU", "OFF")
         .define("GGML_WEBGPU", "OFF");
@@ -192,6 +216,15 @@ fn build_llama_cpp_stack(manifest_dir: &Path) -> BuildResult<()> {
     }
     if feature_set.vulkan {
         libraries.push("ggml-vulkan");
+    }
+    if feature_set.cuda {
+        libraries.push("ggml-cuda");
+    }
+    if feature_set.hip {
+        libraries.push("ggml-hip");
+    }
+    if feature_set.openvino {
+        libraries.push("ggml-openvino");
     }
     for library in libraries {
         println!("cargo:rustc-link-lib=static={library}");
@@ -275,6 +308,15 @@ fn emit_llama_search_paths(dst: &Path, feature_set: BackendFeatureSet, enable_op
     }
     if feature_set.vulkan {
         emit_search_path_variants(&ggml_src_dir.join("ggml-vulkan"));
+    }
+    if feature_set.cuda {
+        emit_search_path_variants(&ggml_src_dir.join("ggml-cuda"));
+    }
+    if feature_set.hip {
+        emit_search_path_variants(&ggml_src_dir.join("ggml-hip"));
+    }
+    if feature_set.openvino {
+        emit_search_path_variants(&ggml_src_dir.join("ggml-openvino"));
     }
 }
 

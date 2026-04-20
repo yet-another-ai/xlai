@@ -16,6 +16,8 @@ cd xlai
 cargo build --workspace
 ```
 
+Native crates that wrap `llama.cpp` / QTS now default to `openblas`, `cuda`, `hip`, and `openvino`. On unsupported Apple targets those accelerator flags are ignored with warnings; on supported Linux/Windows hosts you should have the relevant CUDA, ROCm/HIP, and OpenVINO toolchains installed before building.
+
 ## Tests
 
 ```bash

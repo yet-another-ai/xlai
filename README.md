@@ -8,18 +8,18 @@
 
 The full documentation lives in the VitePress site under [`docs/`](docs/):
 
-| Topic                  | Link                                                        |
-| ---------------------- | ----------------------------------------------------------- |
-| Introduction           | [`docs/guide/index.md`](docs/guide/index.md)                |
-| Install and build      | [`docs/guide/getting-started.md`](docs/guide/getting-started.md) |
-| Environment variables  | [`docs/guide/configuration.md`](docs/guide/configuration.md) |
-| Architecture & crates  | [`docs/architecture/index.md`](docs/architecture/index.md)  |
-| Crate taxonomy         | [`docs/development/crates-taxonomy.md`](docs/development/crates-taxonomy.md) |
-| Rust SDK               | [`docs/rust/index.md`](docs/rust/index.md)                  |
-| JavaScript / WASM      | [`docs/js/index.md`](docs/js/index.md)                      |
-| Provider support       | [`docs/providers/index.md`](docs/providers/index.md)        |
-| QTS (Qwen3 TTS)        | [`docs/qts/index.md`](docs/qts/index.md)                    |
-| CI, testing, releases  | [`docs/development/index.md`](docs/development/index.md)    |
+| Topic                 | Link                                                                         |
+| --------------------- | ---------------------------------------------------------------------------- |
+| Introduction          | [`docs/guide/index.md`](docs/guide/index.md)                                 |
+| Install and build     | [`docs/guide/getting-started.md`](docs/guide/getting-started.md)             |
+| Environment variables | [`docs/guide/configuration.md`](docs/guide/configuration.md)                 |
+| Architecture & crates | [`docs/architecture/index.md`](docs/architecture/index.md)                   |
+| Crate taxonomy        | [`docs/development/crates-taxonomy.md`](docs/development/crates-taxonomy.md) |
+| Rust SDK              | [`docs/rust/index.md`](docs/rust/index.md)                                   |
+| JavaScript / WASM     | [`docs/js/index.md`](docs/js/index.md)                                       |
+| Provider support      | [`docs/providers/index.md`](docs/providers/index.md)                         |
+| QTS (Qwen3 TTS)       | [`docs/qts/index.md`](docs/qts/index.md)                                     |
+| CI, testing, releases | [`docs/development/index.md`](docs/development/index.md)                     |
 
 Preview the site locally:
 
@@ -38,6 +38,8 @@ cd xlai
 cargo build --workspace
 cargo test --workspace
 ```
+
+Native builds now default to `openblas`, `cuda`, `hip`, and `openvino` for the local `llama.cpp` / QTS stacks. On unsupported Apple targets those accelerator flags are skipped with build warnings; on supported Linux/Windows hosts, install the corresponding SDK/toolchain before building.
 
 JavaScript workspace:
 
@@ -69,9 +71,9 @@ See [`docs/guide/configuration.md`](docs/guide/configuration.md) for the full li
   - [x] Accelerate.framework
   - [x] Metal
   - [x] Vulkan
-  - [ ] CUDA
-  - [ ] HIP
-  - [ ] OpenVINO
+  - [x] CUDA
+  - [x] HIP
+  - [x] OpenVINO
 
 ### ASR API
 
@@ -87,9 +89,9 @@ See [`docs/guide/configuration.md`](docs/guide/configuration.md) for the full li
     - [x] Accelerate.framework
     - [x] Metal
     - [x] Vulkan
-    - [ ] CUDA
-    - [ ] HIP
-    - [ ] OpenVINO
+    - [x] CUDA
+    - [x] HIP
+    - [x] OpenVINO
   - Vocoder (ORT default EPs)
 
 ## License

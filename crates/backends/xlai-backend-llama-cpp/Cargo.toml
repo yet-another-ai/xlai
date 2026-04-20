@@ -9,10 +9,13 @@ description = "llama.cpp-backed chat and embeddings backend for xlai (depends on
 publish = false
 
 [features]
-default = ["openblas"]
+default = ["openblas", "cuda", "hip", "openvino"]
 openblas = ["xlai-sys-llama/openblas"]
 metal = ["xlai-sys-llama/metal"]
 vulkan = ["xlai-sys-llama/vulkan"]
+cuda = ["xlai-sys-llama/cuda"]
+hip = ["xlai-sys-llama/hip"]
+openvino = ["xlai-sys-llama/openvino"]
 
 [dependencies]
 async-stream.workspace = true
