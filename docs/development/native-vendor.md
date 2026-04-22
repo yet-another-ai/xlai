@@ -64,6 +64,8 @@ CMake's `CMAKE_PREFIX_PATH` is also forwarded to the upstream build, so adding t
 
 CI installs OpenVINO automatically on Linux and Windows from `storage.openvinotoolkit.org` (pinned release; see [`.github/actions/setup-xlai-rust-native/action.yml`](https://github.com/yetanother.ai/xlai/blob/main/.github/actions/setup-xlai-rust-native/action.yml) for the current version), so external SDK linking is exercised on every native build lane.
 
+> **Windows + OpenVINO + OpenCL headers.** The OpenVINO Windows archive does not bundle OpenCL headers, but `<openvino/openvino.hpp>` transitively pulls in `intel_gpu/ocl/ocl_wrapper.hpp`, which requires `CL/cl2.hpp`. On Linux this is satisfied by the system OpenCL package installed by `install_openvino_dependencies.sh`. The CI setup action drops the official Khronos `OpenCL-Headers` and `OpenCL-CLHPP` releases into `<openvino>/runtime/include/CL/` so the existing OpenVINO include path resolves them. Local Windows builds need the same headers reachable via either `INCLUDE`, `CMAKE_INCLUDE_PATH`, or alongside the OpenVINO runtime headers (e.g. via `vcpkg install opencl:x64-windows-static-md` plus a manual copy into `<openvino>/runtime/include/CL/`).
+
 ## Dual native stacks
 
 Enabling both local chat (`xlai-sys-llama`, which bundles `ggml` with `llama.cpp`) and native QTS (`xlai-sys-ggml`) links **two** native `ggml` implementations into one binary. Build scripts emit a `cargo:warning` when `xlai-facade` has `llama` + `qts`, or when `xlai-native` enables `qts`. Prefer separate processes or a single stack if you hit duplicate symbols or linker issues.

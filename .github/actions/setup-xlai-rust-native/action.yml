@@ -255,6 +255,51 @@ runs:
         $cmakeDir = Join-Path $linkRoot 'runtime\cmake'
         $libDir = Join-Path $linkRoot 'runtime\bin\intel64\Release'
         $tbbBinDir = Join-Path $linkRoot 'runtime\3rdparty\tbb\bin'
+        $runtimeIncludeDir = Join-Path $linkRoot 'runtime\include'
+
+        # The OpenVINO Windows archive does not bundle OpenCL headers, but
+        # `<openvino/openvino.hpp>` transitively includes
+        # `intel_gpu/ocl/ocl_wrapper.hpp`, which requires `CL/cl2.hpp`,
+        # `CL/cl.h`, etc. On Linux the equivalent headers come from the
+        # `ocl-icd-opencl-dev` (or similar) package installed by
+        # `install_openvino_dependencies.sh`. Pull the official Khronos
+        # OpenCL-Headers + OpenCL-CLHPP releases and drop the `CL/` tree
+        # into OpenVINO's `runtime/include/` so the existing
+        # `-I<openvino>/runtime/include` flag finds them transparently.
+        $openclHeadersUrl = 'https://github.com/KhronosGroup/OpenCL-Headers/archive/refs/tags/v2025.07.22.zip'
+        $openclClhppUrl = 'https://github.com/KhronosGroup/OpenCL-CLHPP/archive/refs/tags/v2025.07.22.zip'
+        $openclWorkDir = Join-Path $env:RUNNER_TEMP 'opencl-headers'
+        if (Test-Path $openclWorkDir) { Remove-Item -Recurse -Force $openclWorkDir }
+        New-Item -ItemType Directory -Path $openclWorkDir | Out-Null
+
+        $openclHeadersZip = Join-Path $openclWorkDir 'opencl-headers.zip'
+        Write-Host "Downloading OpenCL C headers from $openclHeadersUrl"
+        Invoke-WebRequest -Uri $openclHeadersUrl -OutFile $openclHeadersZip
+        Expand-Archive -Path $openclHeadersZip -DestinationPath $openclWorkDir -Force
+        $openclHeadersDir = Get-ChildItem -Path $openclWorkDir -Directory `
+          | Where-Object { $_.Name -like 'OpenCL-Headers*' } `
+          | Select-Object -First 1
+        if (-not $openclHeadersDir) { throw 'OpenCL-Headers archive layout unexpected' }
+
+        $openclClhppZip = Join-Path $openclWorkDir 'opencl-clhpp.zip'
+        Write-Host "Downloading OpenCL C++ headers from $openclClhppUrl"
+        Invoke-WebRequest -Uri $openclClhppUrl -OutFile $openclClhppZip
+        Expand-Archive -Path $openclClhppZip -DestinationPath $openclWorkDir -Force
+        $openclClhppDir = Get-ChildItem -Path $openclWorkDir -Directory `
+          | Where-Object { $_.Name -like 'OpenCL-CLHPP*' } `
+          | Select-Object -First 1
+        if (-not $openclClhppDir) { throw 'OpenCL-CLHPP archive layout unexpected' }
+
+        $openvinoClDir = Join-Path $runtimeIncludeDir 'CL'
+        if (-not (Test-Path $openvinoClDir)) {
+          New-Item -ItemType Directory -Path $openvinoClDir | Out-Null
+        }
+        Copy-Item -Force -Recurse `
+          -Path (Join-Path $openclHeadersDir.FullName 'CL\*') `
+          -Destination $openvinoClDir
+        Copy-Item -Force -Recurse `
+          -Path (Join-Path $openclClhppDir.FullName 'include\CL\*') `
+          -Destination $openvinoClDir
 
         Add-Content -Path $env:GITHUB_ENV -Value "INTEL_OPENVINO_DIR=$linkRoot"
         Add-Content -Path $env:GITHUB_ENV -Value "OpenVINO_DIR=$cmakeDir"
