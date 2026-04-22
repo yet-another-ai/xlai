@@ -63,7 +63,15 @@ pub fn validate_ggml_features(target: &str, crate_label: &str) {
         );
     }
     if feature_enabled("cuda") && target.contains("apple") {
-        panic!("{crate_label}: `cuda` feature is not supported on Apple targets");
+        println!("cargo:warning={crate_label}: `cuda` feature ignored on Apple target ({target})");
+    }
+    if feature_enabled("hip") && target.contains("apple") {
+        println!("cargo:warning={crate_label}: `hip` feature ignored on Apple target ({target})");
+    }
+    if feature_enabled("openvino") && target.contains("apple") {
+        println!(
+            "cargo:warning={crate_label}: `openvino` feature ignored on Apple target ({target})"
+        );
     }
 }
 

@@ -21,6 +21,9 @@ default = []
 openblas = []
 metal = []
 vulkan = []
+cuda = []
+hip = []
+openvino = []
 
 [build-dependencies]
 bindgen.workspace = true

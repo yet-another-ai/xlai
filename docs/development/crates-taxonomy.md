@@ -42,7 +42,7 @@ This doc classifies crates for dependency and release decisions. Authoritative p
 
 ## CI setup
 
-Native Rust jobs share [`.github/actions/setup-xlai-rust-native`](https://github.com/yetanother.ai/xlai/blob/main/.github/actions/setup-xlai-rust-native/action.yml) (toolchain, sccache, `rust-cache`, OpenBLAS / vcpkg / shaderc). Jobs that need **Vulkan** (release `build.yml`) add Linux `glslc` / `libvulkan-dev` and the Vulkan SDK step after that action.
+Native Rust jobs share [`.github/actions/setup-xlai-rust-native`](https://github.com/yetanother.ai/xlai/blob/main/.github/actions/setup-xlai-rust-native/action.yml) (toolchain, sccache, `rust-cache`, CUDA on Linux/Windows via `Jimver/cuda-toolkit`, ROCm/HIP tooling on Linux and Windows, the OpenVINO runtime archive on Linux and Windows, plus OpenBLAS / vcpkg / shaderc). The action also prints the resolved accelerator SDK environment so CI logs reflect the static-core plus external-SDK linking contract. Jobs that need **Vulkan** (release `build.yml`) add Linux `glslc` / `libvulkan-dev` and the Vulkan SDK step after that action. `hip` remains downgraded with a warning on the static-core sys-crate path because upstream `ggml` does not support `GGML_HIP=ON` with `BUILD_SHARED_LIBS=OFF` / `GGML_STATIC=ON`.
 
 ## Adding a new workspace member
 

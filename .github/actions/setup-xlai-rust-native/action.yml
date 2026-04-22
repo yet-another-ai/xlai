@@ -1,8 +1,8 @@
-# Shared steps for native Rust jobs: toolchain, sccache, rust-cache, OpenBLAS / vcpkg / shaderc.
+# Shared steps for native Rust jobs: toolchain, sccache, rust-cache, CUDA, ROCm/HIP, OpenBLAS / vcpkg / shaderc.
 # Call after `actions/checkout` (with `submodules: true` when building xlai-sys-llama or xlai-sys-ggml; submodules live under `vendor/native/`).
 
 name: XLAI Rust native setup
-description: Rust toolchain, sccache, cache, and OS-specific native dependencies
+description: Rust toolchain, sccache, cache, CUDA, ROCm/HIP, and OS-specific native dependencies
 
 inputs:
   rust-targets:
@@ -52,12 +52,285 @@ runs:
         path: ${{ env.VCPKG_ROOT }}
         key: vcpkg-openblas-${{ runner.os }}-${{ env.VCPKG_OPENBLAS_TRIPLET }}-v1
 
-    - name: Install Linux build dependencies
+    - name: Install CUDA toolkit
+      if: runner.os == 'Linux' || runner.os == 'Windows'
+      uses: Jimver/cuda-toolkit@v0.2.35
+      with:
+        cuda: '13.2.0'
+        method: network
+        log-file-suffix: ${{ format('{0}-{1}.txt', runner.os, inputs.rust-cache-shared-key) }}
+
+    - name: Install Linux ROCm / HIP SDK
       if: runner.os == 'Linux'
       shell: bash
       run: |
+        set -euxo pipefail
+
+        source /etc/os-release
+        case "${VERSION_CODENAME}" in
+          jammy|noble) ;;
+          *)
+            echo "Unsupported Ubuntu codename for ROCm apt install: ${VERSION_CODENAME}" >&2
+            exit 1
+            ;;
+        esac
+
+        ROCM_APT_VERSION=7.2.2
+        GRAPHICS_APT_VERSION=7.2.1
+
+        sudo mkdir --parents --mode=0755 /etc/apt/keyrings
+        wget https://repo.radeon.com/rocm/rocm.gpg.key -O - \
+          | gpg --dearmor \
+          | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+
+        cat <<EOF | sudo tee /etc/apt/sources.list.d/rocm.list
+        deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_APT_VERSION} ${VERSION_CODENAME} main
+        deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/graphics/${GRAPHICS_APT_VERSION}/ubuntu ${VERSION_CODENAME} main
+        EOF
+
+        cat <<EOF | sudo tee /etc/apt/preferences.d/rocm-pin-600
+        Package: *
+        Pin: release o=repo.radeon.com
+        Pin-Priority: 600
+        EOF
+
         sudo apt-get update
-        sudo apt-get install -y libopenblas-dev libasound2-dev
+        sudo apt-get install -y rocm-hip-sdk hipblas
+
+        echo "ROCM_PATH=/opt/rocm" >> "$GITHUB_ENV"
+        echo "HIP_PATH=/opt/rocm" >> "$GITHUB_ENV"
+        echo "HIPCXX=/opt/rocm/llvm/bin/clang" >> "$GITHUB_ENV"
+        if [ -n "${CMAKE_PREFIX_PATH:-}" ]; then
+          echo "CMAKE_PREFIX_PATH=/opt/rocm:${CMAKE_PREFIX_PATH}" >> "$GITHUB_ENV"
+        else
+          echo "CMAKE_PREFIX_PATH=/opt/rocm" >> "$GITHUB_ENV"
+        fi
+        echo "/opt/rocm/bin" >> "$GITHUB_PATH"
+
+    - name: Install Windows HIP SDK
+      if: runner.os == 'Windows'
+      shell: pwsh
+      # Check https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html for the latest installer
+      # name. We use the same `download.amd.com/developer/eula/rocm-hub/...` URL pattern that
+      # ggml-org/llama.cpp's CI uses (see their `.github/actions/windows-setup-rocm/action.yml`).
+      run: |
+        $installerName = 'AMD-Software-PRO-Edition-26.Q1-Win11-For-HIP.exe'
+        $installerUrl = "https://download.amd.com/developer/eula/rocm-hub/$installerName"
+        $installerPath = Join-Path $env:RUNNER_TEMP $installerName
+        $installLog = Join-Path $env:RUNNER_TEMP 'hip-sdk-install.log'
+
+        Write-Host "Attempting HIP SDK install from $installerUrl"
+        Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+
+        $process = Start-Process -FilePath $installerPath `
+          -ArgumentList '-install', '-log', $installLog `
+          -NoNewWindow `
+          -Wait `
+          -PassThru
+
+        if ($process.ExitCode -notin 0, 3010) {
+          throw "HIP SDK installer failed with exit code $($process.ExitCode). See $installLog"
+        }
+
+        $rocmRoot = Get-ChildItem 'C:\Program Files\AMD\ROCm' -Directory `
+          | Sort-Object Name -Descending `
+          | Select-Object -First 1
+
+        if (-not $rocmRoot) {
+          throw 'HIP SDK install completed but no ROCm root was found under C:\Program Files\AMD\ROCm'
+        }
+
+        $hipClang = Join-Path $rocmRoot.FullName 'lib\llvm\bin\clang++.exe'
+        if (-not (Test-Path $hipClang)) {
+          $hipClang = Join-Path $rocmRoot.FullName 'bin\clang++.exe'
+        }
+        if (-not (Test-Path $hipClang)) {
+          throw "HIP SDK install completed but no ROCm Clang executable was found under $($rocmRoot.FullName)"
+        }
+
+        Add-Content -Path $env:GITHUB_ENV -Value "ROCM_PATH=$($rocmRoot.FullName)"
+        Add-Content -Path $env:GITHUB_ENV -Value "HIP_PATH=$($rocmRoot.FullName)"
+        Add-Content -Path $env:GITHUB_ENV -Value "HIPCXX=$hipClang"
+        if ($env:CMAKE_PREFIX_PATH) {
+          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_PREFIX_PATH=$($rocmRoot.FullName);$env:CMAKE_PREFIX_PATH"
+        } else {
+          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_PREFIX_PATH=$($rocmRoot.FullName)"
+        }
+        Add-Content -Path $env:GITHUB_PATH -Value "$($rocmRoot.FullName)\bin"
+
+    - name: Install Linux OpenVINO runtime
+      if: runner.os == 'Linux'
+      shell: bash
+      # Pin to OpenVINO 2026.1.0 archive distribution. Refresh the version + build hash from
+      # https://github.com/openvinotoolkit/openvino/releases when bumping. Archive layout
+      # follows storage.openvinotoolkit.org/repositories/openvino/packages/<release>/linux/.
+      run: |
+        set -euxo pipefail
+
+        source /etc/os-release
+        case "${VERSION_CODENAME}" in
+          jammy) variant=ubuntu22 ;;
+          noble) variant=ubuntu24 ;;
+          *)
+            echo "Unsupported Ubuntu codename for OpenVINO archive: ${VERSION_CODENAME}" >&2
+            exit 1
+            ;;
+        esac
+
+        OPENVINO_RELEASE=2026.1
+        OPENVINO_VERSION=2026.1.0
+        OPENVINO_BUILD=2026.1.0.21367.63e31528c62
+        archive="openvino_toolkit_${variant}_${OPENVINO_BUILD}_x86_64.tgz"
+        url="https://storage.openvinotoolkit.org/repositories/openvino/packages/${OPENVINO_RELEASE}/linux/${archive}"
+
+        download_dir="${RUNNER_TEMP}/openvino"
+        mkdir -p "$download_dir"
+        curl -fL "$url" --output "${download_dir}/openvino.tgz"
+
+        sudo mkdir -p /opt/intel
+        sudo tar -xf "${download_dir}/openvino.tgz" -C /opt/intel
+        sudo mv "/opt/intel/openvino_toolkit_${variant}_${OPENVINO_BUILD}_x86_64" \
+          "/opt/intel/openvino_${OPENVINO_VERSION}"
+        sudo ln -sfn "openvino_${OPENVINO_VERSION}" /opt/intel/openvino_2026
+
+        sudo -E /opt/intel/openvino_2026/install_dependencies/install_openvino_dependencies.sh -y
+
+        echo "INTEL_OPENVINO_DIR=/opt/intel/openvino_2026" >> "$GITHUB_ENV"
+        echo "OpenVINO_DIR=/opt/intel/openvino_2026/runtime/cmake" >> "$GITHUB_ENV"
+        if [ -n "${CMAKE_PREFIX_PATH:-}" ]; then
+          echo "CMAKE_PREFIX_PATH=/opt/intel/openvino_2026/runtime/cmake:${CMAKE_PREFIX_PATH}" >> "$GITHUB_ENV"
+        else
+          echo "CMAKE_PREFIX_PATH=/opt/intel/openvino_2026/runtime/cmake" >> "$GITHUB_ENV"
+        fi
+        if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+          echo "LD_LIBRARY_PATH=/opt/intel/openvino_2026/runtime/lib/intel64:${LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+        else
+          echo "LD_LIBRARY_PATH=/opt/intel/openvino_2026/runtime/lib/intel64" >> "$GITHUB_ENV"
+        fi
+
+    - name: Install Windows OpenVINO runtime
+      if: runner.os == 'Windows'
+      shell: pwsh
+      # Pin to OpenVINO 2026.1.0 archive distribution. Refresh the version + build hash from
+      # https://github.com/openvinotoolkit/openvino/releases when bumping. Archive layout
+      # follows storage.openvinotoolkit.org/repositories/openvino/packages/<release>/windows/.
+      run: |
+        $openvinoRelease = '2026.1'
+        $openvinoVersion = '2026.1.0'
+        $openvinoBuild = '2026.1.0.21367.63e31528c62'
+        $archiveName = "openvino_toolkit_windows_${openvinoBuild}_x86_64.zip"
+        $archiveUrl = "https://storage.openvinotoolkit.org/repositories/openvino/packages/${openvinoRelease}/windows/${archiveName}"
+        $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
+        $extractRoot = Join-Path $env:RUNNER_TEMP 'openvino-extract'
+        $intelRoot = 'C:\Program Files (x86)\Intel'
+        $installRoot = Join-Path $intelRoot "openvino_${openvinoVersion}"
+        $linkRoot = Join-Path $intelRoot 'openvino_2026'
+
+        Write-Host "Downloading OpenVINO from $archiveUrl"
+        Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
+
+        if (Test-Path $extractRoot) { Remove-Item -Recurse -Force $extractRoot }
+        New-Item -ItemType Directory -Path $extractRoot | Out-Null
+        Expand-Archive -Path $archivePath -DestinationPath $extractRoot -Force
+
+        $extractedDir = Get-ChildItem -Path $extractRoot -Directory | Select-Object -First 1
+        if (-not $extractedDir) {
+          throw "OpenVINO archive did not contain a top-level directory under $extractRoot"
+        }
+
+        if (-not (Test-Path $intelRoot)) {
+          New-Item -ItemType Directory -Path $intelRoot | Out-Null
+        }
+        if (Test-Path $installRoot) {
+          Remove-Item -Recurse -Force $installRoot
+        }
+        Move-Item -Path $extractedDir.FullName -Destination $installRoot
+
+        if (Test-Path $linkRoot) {
+          Remove-Item -Recurse -Force $linkRoot
+        }
+        # Use a junction so we don't need Developer Mode / SeCreateSymbolicLink privileges.
+        New-Item -ItemType Junction -Path $linkRoot -Target $installRoot | Out-Null
+
+        $cmakeDir = Join-Path $linkRoot 'runtime\cmake'
+        $libDir = Join-Path $linkRoot 'runtime\bin\intel64\Release'
+        $tbbBinDir = Join-Path $linkRoot 'runtime\3rdparty\tbb\bin'
+        $runtimeIncludeDir = Join-Path $linkRoot 'runtime\include'
+
+        # The OpenVINO Windows archive does not bundle OpenCL headers, but
+        # `<openvino/openvino.hpp>` transitively includes
+        # `intel_gpu/ocl/ocl_wrapper.hpp`, which requires `CL/cl2.hpp`,
+        # `CL/cl.h`, etc. On Linux the equivalent headers come from the
+        # `ocl-icd-opencl-dev` (or similar) package installed by
+        # `install_openvino_dependencies.sh`. Pull the official Khronos
+        # OpenCL-Headers + OpenCL-CLHPP releases and drop the `CL/` tree
+        # into OpenVINO's `runtime/include/` so the existing
+        # `-I<openvino>/runtime/include` flag finds them transparently.
+        $openclHeadersUrl = 'https://github.com/KhronosGroup/OpenCL-Headers/archive/refs/tags/v2025.07.22.zip'
+        $openclClhppUrl = 'https://github.com/KhronosGroup/OpenCL-CLHPP/archive/refs/tags/v2025.07.22.zip'
+        $openclWorkDir = Join-Path $env:RUNNER_TEMP 'opencl-headers'
+        if (Test-Path $openclWorkDir) { Remove-Item -Recurse -Force $openclWorkDir }
+        New-Item -ItemType Directory -Path $openclWorkDir | Out-Null
+
+        $openclHeadersZip = Join-Path $openclWorkDir 'opencl-headers.zip'
+        Write-Host "Downloading OpenCL C headers from $openclHeadersUrl"
+        Invoke-WebRequest -Uri $openclHeadersUrl -OutFile $openclHeadersZip
+        Expand-Archive -Path $openclHeadersZip -DestinationPath $openclWorkDir -Force
+        $openclHeadersDir = Get-ChildItem -Path $openclWorkDir -Directory `
+          | Where-Object { $_.Name -like 'OpenCL-Headers*' } `
+          | Select-Object -First 1
+        if (-not $openclHeadersDir) { throw 'OpenCL-Headers archive layout unexpected' }
+
+        $openclClhppZip = Join-Path $openclWorkDir 'opencl-clhpp.zip'
+        Write-Host "Downloading OpenCL C++ headers from $openclClhppUrl"
+        Invoke-WebRequest -Uri $openclClhppUrl -OutFile $openclClhppZip
+        Expand-Archive -Path $openclClhppZip -DestinationPath $openclWorkDir -Force
+        $openclClhppDir = Get-ChildItem -Path $openclWorkDir -Directory `
+          | Where-Object { $_.Name -like 'OpenCL-CLHPP*' } `
+          | Select-Object -First 1
+        if (-not $openclClhppDir) { throw 'OpenCL-CLHPP archive layout unexpected' }
+
+        $openvinoClDir = Join-Path $runtimeIncludeDir 'CL'
+        if (-not (Test-Path $openvinoClDir)) {
+          New-Item -ItemType Directory -Path $openvinoClDir | Out-Null
+        }
+        Copy-Item -Force -Recurse `
+          -Path (Join-Path $openclHeadersDir.FullName 'CL\*') `
+          -Destination $openvinoClDir
+        Copy-Item -Force -Recurse `
+          -Path (Join-Path $openclClhppDir.FullName 'include\CL\*') `
+          -Destination $openvinoClDir
+
+        Add-Content -Path $env:GITHUB_ENV -Value "INTEL_OPENVINO_DIR=$linkRoot"
+        Add-Content -Path $env:GITHUB_ENV -Value "OpenVINO_DIR=$cmakeDir"
+        if ($env:CMAKE_PREFIX_PATH) {
+          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_PREFIX_PATH=$cmakeDir;$env:CMAKE_PREFIX_PATH"
+        } else {
+          Add-Content -Path $env:GITHUB_ENV -Value "CMAKE_PREFIX_PATH=$cmakeDir"
+        }
+        Add-Content -Path $env:GITHUB_PATH -Value $libDir
+        if (Test-Path $tbbBinDir) {
+          Add-Content -Path $env:GITHUB_PATH -Value $tbbBinDir
+        }
+
+    - name: Install Linux build dependencies
+      if: runner.os == 'Linux'
+      shell: bash
+      # `ocl-icd-opencl-dev` (+ `opencl-headers`) is required so that ggml-openvino's
+      # `find_package(OpenCL)` resolves on Linux. The OpenVINO archive's
+      # `install_openvino_dependencies.sh` only installs runtime libs, not the dev
+      # package that exposes `OpenCL_LIBRARY` / `OpenCL_INCLUDE_DIR` to CMake.
+      # `opencl-clhpp-headers` provides the C++ wrappers (`CL/cl2.hpp`,
+      # `CL/opencl.hpp`) used transitively by `<openvino/openvino.hpp>` via
+      # `intel_gpu/ocl/ocl_wrapper.hpp`.
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libopenblas-dev \
+          libasound2-dev \
+          ocl-icd-opencl-dev \
+          opencl-headers \
+          opencl-clhpp-headers
 
     - name: Install Windows OpenBLAS (vcpkg)
       if: runner.os == 'Windows'
@@ -83,3 +356,24 @@ runs:
       if: runner.os == 'macOS'
       shell: bash
       run: brew install shaderc
+
+    - name: Report accelerator SDK discovery (Linux/Windows)
+      if: runner.os == 'Linux' || runner.os == 'Windows'
+      shell: bash
+      # Surface the SDK roots that `xlai-build-native` accelerator helpers will discover, so CI logs
+      # show exactly which CUDA / OpenVINO / ROCm install will be linked against. This validates
+      # the static-core plus external-SDK linking contract documented in
+      # docs/development/native-vendor.md.
+      run: |
+        set -u
+        echo "== xlai accelerator SDK discovery =="
+        echo "CUDA_PATH=${CUDA_PATH:-<unset>}"
+        echo "CUDA_HOME=${CUDA_HOME:-<unset>}"
+        echo "CUDA_TOOLKIT_ROOT_DIR=${CUDA_TOOLKIT_ROOT_DIR:-<unset>}"
+        echo "OpenVINO_DIR=${OpenVINO_DIR:-<unset>}"
+        echo "OPENVINO_ROOT=${OPENVINO_ROOT:-<unset>}"
+        echo "INTEL_OPENVINO_DIR=${INTEL_OPENVINO_DIR:-<unset>}"
+        echo "ROCM_PATH=${ROCM_PATH:-<unset>}"
+        echo "HIP_PATH=${HIP_PATH:-<unset>}"
+        echo "HIPCXX=${HIPCXX:-<unset>}"
+        echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH:-<unset>}"

@@ -4,11 +4,11 @@ Application code typically depends on **`xlai-native`** (or **`xlai-wasm`** in t
 
 ## Platform entrypoints
 
-| Crate         | Use when                                                                                      |
-| ------------- | --------------------------------------------------------------------------------------------- |
-| `xlai-native` | Native binaries and servers on macOS, Linux, or Windows. Optional `llama` and `qts` features. |
-| `xlai-wasm`   | `wasm32-unknown-unknown` builds and JavaScript interop.                                       |
-| `xlai-ffi`    | C ABI / shared library embedding (wraps `xlai-native`).                                       |
+| Crate         | Use when                                                                                                              |
+| ------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `xlai-native` | Native binaries and servers on macOS, Linux, or Windows. Includes local `llama.cpp` by default; `qts` stays optional. |
+| `xlai-wasm`   | `wasm32-unknown-unknown` builds and JavaScript interop.                                                               |
+| `xlai-ffi`    | C ABI / shared library embedding (wraps `xlai-native`).                                                               |
 
 Domain types and traits live in **`xlai-core`** (semver-stable on crates.io). Session APIs live in **`xlai-runtime`** and are re-exported through **`xlai-native`** / **`xlai-wasm`**. The **`xlai-facade`** crate is an internal workspace helper (not on crates.io) used **only by `xlai-native`** for native aggregate wiring; **`xlai-wasm` does not depend on it**.
 
@@ -27,4 +27,4 @@ Concrete examples (OpenAI, llama.cpp, streaming agents) are in the repository [R
 
 ## Optional: QTS in native builds
 
-Enable the **`qts`** feature on `xlai-native` when you need `QtsTtsModel` without taking the dependency in every build.
+`xlai-native` defaults the local `llama.cpp` stack to request `openblas`, `cuda`, `hip`, and `openvino`. Enable the **`qts`** feature when you need `QtsTtsModel`; QTS follows the same requested accelerator set. The vendored `ggml` / `llama.cpp` core is statically linked, while the accelerator SDK runtimes (CUDA / OpenVINO / ROCm) are linked as external system libraries — the build scripts auto-discover them via standard env vars (`CUDA_PATH`, `OpenVINO_DIR`, `ROCM_PATH`). Backends are downgraded with a `cargo:warning` when their preconditions fail (Apple target, missing SDK, or — for `hip` — the upstream constraint that `GGML_HIP` cannot be embedded in a static-core build). See [Native vendor layout](../development/native-vendor) for the full contract.

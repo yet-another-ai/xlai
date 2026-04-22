@@ -6,6 +6,7 @@
 #![allow(clippy::panic)]
 #![allow(clippy::unwrap_used)]
 
+mod accelerator;
 mod cmake_env;
 mod features;
 mod ggml_build;
@@ -13,6 +14,11 @@ mod link_search;
 mod llama_patch;
 mod paths;
 
+pub use accelerator::{
+    SdkLayout, detect_cuda_sdk, detect_openvino_sdk, detect_rocm_sdk, emit_cuda_link,
+    emit_openvino_link, emit_rocm_link, emit_sdk_bin_search, rerun_cuda_env, rerun_openvino_env,
+    rerun_rocm_env,
+};
 pub use cmake_env::{
     apply_cmake_env_overrides, emit_openblas_search_paths, find_openblas_include_dir,
     resolve_openblas_include_dir,

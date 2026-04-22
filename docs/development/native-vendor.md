@@ -16,6 +16,59 @@ git submodule update --init --recursive vendor/native/llama.cpp vendor/native/gg
 - **`GGML_SRC`**: absolute path to a `ggml` checkout for `xlai-sys-ggml` (defaults to `vendor/native/ggml`).
 - **`LLAMA_CPP_SRC`**: absolute path to a `llama.cpp` checkout for `xlai-sys-llama` (defaults to `vendor/native/llama.cpp`).
 
+## Native sys-crate linking contract
+
+The two sys crates that wrap upstream native sources (`xlai-sys-ggml` and `xlai-sys-llama`) follow a **mixed static-core plus external-SDK** linking model:
+
+- **Vendored core (always static)**: `ggml`, `ggml-base`, `ggml-cpu`, the `llama.cpp` core (`llama`, `common`, `cpp-httplib`, `llguidance`), and any backend that upstream `ggml` / `llama.cpp` can produce as a static archive in this configuration (for example `ggml-blas`, `ggml-metal`, `ggml-vulkan`, `ggml-cuda`, `ggml-openvino`).
+- **External accelerator SDKs (system / dynamic)**: the runtime libraries that ship with vendor-provided SDKs are treated as **external prerequisites**. The sys crate emits `cargo:rustc-link-search=native=...` / `cargo:rustc-link-lib=...` directives for them but does **not** vendor or statically embed them. This applies to:
+  - **CUDA**: `cudart`, `cublas`, `cublasLt` from `CUDA_PATH` / `CUDA_HOME` / standard install layouts.
+  - **OpenVINO**: `openvino`, `openvino_c` from `OpenVINO_DIR` / `OPENVINO_ROOT` / standard install layouts.
+  - **ROCm / HIP**: `amdhip64`, `hipblas`, `rocblas` from `ROCM_PATH` / `HIP_PATH`. HIP additionally requires building `ggml-hip` against shared SDK libraries because upstream `ggml` rejects fully static HIP/ROCm builds.
+- **Always-system libraries**: platform loaders such as the Vulkan loader (`vulkan` / `vulkan-1`), OpenBLAS, system C++ runtime, OpenMP, and OS frameworks (`Accelerate`, `Metal`, `MetalKit`, `Foundation`) remain external.
+
+Per-backend gating is now driven by three signals rather than a single static-build switch:
+
+1. **Target OS / platform support** (for example `metal` only on Apple, `cuda` not on Apple).
+2. **Upstream backend constraints** (for example HIP cannot be statically embedded in `ggml`, so the helper builds it against the external ROCm SDK instead of trying to statically link it).
+3. **External SDK presence** discovered via shared helpers in `xlai-build-native` (CUDA / OpenVINO / ROCm). When the SDK is missing on a non-Apple target, the build emits a `cargo:warning` and downgrades the backend instead of forcing an unbuildable CMake configuration.
+
+## Default accelerator set
+
+The native `llama.cpp` / QTS crates default to requesting:
+
+- `openblas`
+- `cuda`
+- `hip`
+- `openvino`
+
+Behavior is platform-dependent:
+
+- On unsupported Apple targets, `cuda`, `hip`, and `openvino` are skipped with build warnings so default local builds still work.
+- On supported Linux / Windows targets, the corresponding SDKs must be reachable through the helpers above. When an SDK is not detected the backend is downgraded with a warning rather than failing the build.
+- Vulkan and Metal remain opt-in feature flags.
+
+### Environment variables for accelerator discovery
+
+The shared helpers honor these environment variables (set them when the SDK lives in a non-default location):
+
+| Backend  | Variables                                                                  |
+| -------- | -------------------------------------------------------------------------- |
+| CUDA     | `CUDA_PATH`, `CUDA_HOME`, `CUDA_TOOLKIT_ROOT_DIR`                          |
+| OpenVINO | `OpenVINO_DIR`, `OPENVINO_ROOT`, `INTEL_OPENVINO_DIR`, `OPENVINO_HOME`     |
+| ROCm/HIP | `ROCM_PATH`, `HIP_PATH`, `HIPCXX` (must be Clang, not the `hipcc` wrapper) |
+
+For the OpenVINO variables, the helpers tolerate values that point at a sub-directory such as `<install>/runtime/cmake` (the CMake convention for `OpenVINO_DIR`) by walking up parent directories until a `runtime/lib/...` layout is found. Setting any one of `INTEL_OPENVINO_DIR`, `OPENVINO_ROOT`, `OPENVINO_HOME` to the install root, or `OpenVINO_DIR` to the cmake config directory, is sufficient.
+
+CMake's `CMAKE_PREFIX_PATH` is also forwarded to the upstream build, so adding the SDK roots there continues to work.
+
+CI installs OpenVINO automatically on Linux and Windows from `storage.openvinotoolkit.org` (pinned release; see [`.github/actions/setup-xlai-rust-native/action.yml`](https://github.com/yetanother.ai/xlai/blob/main/.github/actions/setup-xlai-rust-native/action.yml) for the current version), so external SDK linking is exercised on every native build lane.
+
+> **OpenVINO + OpenCL headers.** The `ggml-openvino` backend calls `find_package(OpenCL)` and `<openvino/openvino.hpp>` transitively pulls in `intel_gpu/ocl/ocl_wrapper.hpp`, which requires `CL/cl2.hpp`. The OpenVINO archives themselves do not ship OpenCL headers / loader, so the build environment must provide both:
+>
+> - **Linux**: install `ocl-icd-opencl-dev opencl-headers opencl-clhpp-headers` via apt (or the equivalent for your distro). `install_openvino_dependencies.sh` does not cover the dev / C++ wrapper packages.
+> - **Windows**: `find_package(OpenCL)` typically resolves via the bundled CUDA toolkit (`OpenCL.lib` + `CL/cl.h`), but the C++ wrappers are missing. The CI setup action drops the official Khronos `OpenCL-Headers` and `OpenCL-CLHPP` releases into `<openvino>/runtime/include/CL/` so the existing `-I<openvino>/runtime/include` flag resolves them transparently. Local Windows builds need the same headers reachable on the include search path (e.g. via `vcpkg install opencl-clhpp:x64-windows-static-md` plus a manual copy into `<openvino>/runtime/include/CL/`).
+
 ## Dual native stacks
 
 Enabling both local chat (`xlai-sys-llama`, which bundles `ggml` with `llama.cpp`) and native QTS (`xlai-sys-ggml`) links **two** native `ggml` implementations into one binary. Build scripts emit a `cargo:warning` when `xlai-facade` has `llama` + `qts`, or when `xlai-native` enables `qts`. Prefer separate processes or a single stack if you hit duplicate symbols or linker issues.
