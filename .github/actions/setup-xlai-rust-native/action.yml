@@ -316,9 +316,21 @@ runs:
     - name: Install Linux build dependencies
       if: runner.os == 'Linux'
       shell: bash
+      # `ocl-icd-opencl-dev` (+ `opencl-headers`) is required so that ggml-openvino's
+      # `find_package(OpenCL)` resolves on Linux. The OpenVINO archive's
+      # `install_openvino_dependencies.sh` only installs runtime libs, not the dev
+      # package that exposes `OpenCL_LIBRARY` / `OpenCL_INCLUDE_DIR` to CMake.
+      # `opencl-clhpp-headers` provides the C++ wrappers (`CL/cl2.hpp`,
+      # `CL/opencl.hpp`) used transitively by `<openvino/openvino.hpp>` via
+      # `intel_gpu/ocl/ocl_wrapper.hpp`.
       run: |
         sudo apt-get update
-        sudo apt-get install -y libopenblas-dev libasound2-dev
+        sudo apt-get install -y \
+          libopenblas-dev \
+          libasound2-dev \
+          ocl-icd-opencl-dev \
+          opencl-headers \
+          opencl-clhpp-headers
 
     - name: Install Windows OpenBLAS (vcpkg)
       if: runner.os == 'Windows'

@@ -64,7 +64,10 @@ CMake's `CMAKE_PREFIX_PATH` is also forwarded to the upstream build, so adding t
 
 CI installs OpenVINO automatically on Linux and Windows from `storage.openvinotoolkit.org` (pinned release; see [`.github/actions/setup-xlai-rust-native/action.yml`](https://github.com/yetanother.ai/xlai/blob/main/.github/actions/setup-xlai-rust-native/action.yml) for the current version), so external SDK linking is exercised on every native build lane.
 
-> **Windows + OpenVINO + OpenCL headers.** The OpenVINO Windows archive does not bundle OpenCL headers, but `<openvino/openvino.hpp>` transitively pulls in `intel_gpu/ocl/ocl_wrapper.hpp`, which requires `CL/cl2.hpp`. On Linux this is satisfied by the system OpenCL package installed by `install_openvino_dependencies.sh`. The CI setup action drops the official Khronos `OpenCL-Headers` and `OpenCL-CLHPP` releases into `<openvino>/runtime/include/CL/` so the existing OpenVINO include path resolves them. Local Windows builds need the same headers reachable via either `INCLUDE`, `CMAKE_INCLUDE_PATH`, or alongside the OpenVINO runtime headers (e.g. via `vcpkg install opencl:x64-windows-static-md` plus a manual copy into `<openvino>/runtime/include/CL/`).
+> **OpenVINO + OpenCL headers.** The `ggml-openvino` backend calls `find_package(OpenCL)` and `<openvino/openvino.hpp>` transitively pulls in `intel_gpu/ocl/ocl_wrapper.hpp`, which requires `CL/cl2.hpp`. The OpenVINO archives themselves do not ship OpenCL headers / loader, so the build environment must provide both:
+>
+> - **Linux**: install `ocl-icd-opencl-dev opencl-headers opencl-clhpp-headers` via apt (or the equivalent for your distro). `install_openvino_dependencies.sh` does not cover the dev / C++ wrapper packages.
+> - **Windows**: `find_package(OpenCL)` typically resolves via the bundled CUDA toolkit (`OpenCL.lib` + `CL/cl.h`), but the C++ wrappers are missing. The CI setup action drops the official Khronos `OpenCL-Headers` and `OpenCL-CLHPP` releases into `<openvino>/runtime/include/CL/` so the existing `-I<openvino>/runtime/include` flag resolves them transparently. Local Windows builds need the same headers reachable on the include search path (e.g. via `vcpkg install opencl-clhpp:x64-windows-static-md` plus a manual copy into `<openvino>/runtime/include/CL/`).
 
 ## Dual native stacks
 
