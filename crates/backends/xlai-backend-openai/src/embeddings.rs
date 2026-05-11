@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use xlai_core::{EmbeddingRequest, EmbeddingResponse, ErrorKind, TokenUsage, XlaiError};
+use xlai_core::{
+    EmbeddingRequest, EmbeddingResponse, ErrorKind, TokenUsage, TokenUsageSource, XlaiError,
+};
 
 use crate::OpenAiConfig;
 
@@ -88,6 +90,7 @@ impl From<OpenAiEmbeddingUsage> for TokenUsage {
             input_tokens: value.prompt_tokens,
             output_tokens: 0,
             total_tokens: value.total_tokens,
+            source: Some(TokenUsageSource::ProviderReported),
         }
     }
 }

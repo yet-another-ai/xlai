@@ -98,8 +98,10 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). F
 
 ## Requirements
 
-- Rust stable
-- minimum supported Rust version: `1.94`
+- [mise](https://mise.jdx.dev/) for the pinned Node.js and Rust toolchains
+- `pnpm`
+- `wasm-pack` for the browser package
+- minimum supported Rust version: `1.95`
 
 The workspace uses:
 
@@ -111,6 +113,7 @@ The workspace uses:
 ### Build
 
 ```bash
+mise install
 cargo build --workspace
 ```
 
@@ -123,7 +126,6 @@ cargo test --workspace
 ### Check `wasm32`
 
 ```bash
-rustup target add wasm32-unknown-unknown
 cargo check -p xlai-wasm --target wasm32-unknown-unknown --features qts
 ```
 
@@ -364,6 +366,12 @@ On **`Agent`**, **`with_context_compressor`** (Rust) registers an **async** clos
 The hook is **not** used for unary `prompt` / `execute`.
 
 **JavaScript (`@yai-xlai/xlai`):** on **`AgentSession`**, call **`registerContextCompressor(async (messages, estimatedInputTokens) => messages)`** before **`streamPrompt`** / **`streamPromptWithContent`**. The callback receives the same semantics as Rust (message array in Rust JSON shape, `estimatedInputTokens` as `number | null`). WASM exports **`registerContextCompressor`**, **`streamPrompt`**, and **`streamPromptWithContent`** on **`AgentSession`**.
+
+### Token usage
+
+Chat and embedding responses may include `usage` with `input_tokens`, `output_tokens`, `total_tokens`, and an optional `source`. `source: "provider_reported"` means the hosted provider returned the count and should be treated as authoritative for billing reconciliation. `source: "tokenizer_exact"` means a local backend counted with the active model tokenizer. `source: "estimated"` is reserved for heuristic counts and should not be treated as billing-grade.
+
+The agent context-compressor callback still receives a pre-call `estimatedInputTokens` value based on serialized request size. That value is useful for context management, but it is not provider-tokenizer-accurate and is intentionally separate from final response `usage`.
 
 ## Streaming
 

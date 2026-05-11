@@ -25,15 +25,17 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install Rust toolchain
-      if: inputs.rust-targets == ''
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Install Rust toolchain (extra targets)
-      if: inputs.rust-targets != ''
-      uses: dtolnay/rust-toolchain@stable
+    - name: Setup mise tools
+      uses: jdx/mise-action@v3
       with:
-        targets: ${{ inputs.rust-targets }}
+        cache: true
+
+    - name: Install extra Rust targets
+      if: inputs.rust-targets != ''
+      shell: bash
+      run: rustup target add ${RUST_TARGETS//,/ }
+      env:
+        RUST_TARGETS: ${{ inputs.rust-targets }}
 
     - name: Run sccache
       uses: mozilla-actions/sccache-action@v0.0.9

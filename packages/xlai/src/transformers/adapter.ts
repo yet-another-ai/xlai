@@ -51,6 +51,39 @@ export function rustPayloadToGrammar(
   throw new Error(`unsupported grammar payload: ${String(ty)}`);
 }
 
+function tokenCountFromEncodeResult(encoded: unknown): number {
+  if (Array.isArray(encoded)) {
+    return encoded.length;
+  }
+
+  if (encoded && typeof encoded === 'object') {
+    const record = encoded as Record<string, unknown>;
+    const inputIds = record.input_ids ?? record.inputIds;
+    if (Array.isArray(inputIds)) {
+      return inputIds.length;
+    }
+    if (inputIds && typeof inputIds === 'object') {
+      const ids = inputIds as Record<string, unknown>;
+      const data = ids.data;
+      if (Array.isArray(data)) {
+        return data.length;
+      }
+      if (ArrayBuffer.isView(data)) {
+        return 'length' in data && typeof data.length === 'number'
+          ? data.length
+          : data.byteLength;
+      }
+      const dims = ids.dims;
+      if (Array.isArray(dims)) {
+        const last = dims[dims.length - 1];
+        return typeof last === 'number' && Number.isFinite(last) ? last : 0;
+      }
+    }
+  }
+
+  return 0;
+}
+
 /**
  * Browser adapter: loads `@huggingface/transformers` and `transformers-llguidance`, runs
  * `text-generation` with optional constrained decoding (per request).
@@ -207,6 +240,18 @@ export async function createXlaiTransformersJsAdapter(
       const continuation = full.startsWith(request.prompt)
         ? full.slice(request.prompt.length)
         : full;
+      const text = continuation.replace(/^\s+/, '');
+      const inputTokens = tokenCountFromEncodeResult(
+        pipeline.tokenizer.encode(request.prompt),
+      );
+      const outputTokens =
+        full.startsWith(request.prompt) && full.length >= request.prompt.length
+          ? Math.max(
+              0,
+              tokenCountFromEncodeResult(pipeline.tokenizer.encode(full)) -
+                inputTokens,
+            )
+          : tokenCountFromEncodeResult(pipeline.tokenizer.encode(text));
 
       let finishReason = 'completed';
       if (logitsProcessor?.guidance.canStop()) {
@@ -214,8 +259,14 @@ export async function createXlaiTransformersJsAdapter(
       }
 
       return {
-        text: continuation.replace(/^\s+/, ''),
+        text,
         finishReason,
+        usage: {
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+          source: 'tokenizer_exact',
+        },
       };
     },
     async embed(

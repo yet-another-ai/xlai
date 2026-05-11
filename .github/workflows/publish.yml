@@ -35,8 +35,10 @@ jobs:
         with:
           submodules: true
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup mise tools
+        uses: jdx/mise-action@v3
+        with:
+          cache: true
 
       - name: Run sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -82,10 +84,10 @@ jobs:
         with:
           submodules: true
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup mise tools
+        uses: jdx/mise-action@v3
         with:
-          targets: wasm32-unknown-unknown
+          cache: true
 
       - name: Run sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -100,12 +102,6 @@ jobs:
         name: Install pnpm
         with:
           cache: true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
 
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
@@ -129,8 +125,10 @@ jobs:
         with:
           submodules: true
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup mise tools
+        uses: jdx/mise-action@v3
+        with:
+          cache: true
 
       - name: Run sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -171,10 +169,10 @@ jobs:
         with:
           submodules: true
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup mise tools
+        uses: jdx/mise-action@v3
         with:
-          targets: wasm32-unknown-unknown
+          cache: true
 
       - name: Run sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -190,13 +188,6 @@ jobs:
         with:
           cache: true
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
-
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
@@ -207,4 +198,6 @@ jobs:
         working-directory: packages/xlai
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+        run: |
+          npm config set //registry.npmjs.org/:_authToken "${NODE_AUTH_TOKEN}"
+          npm publish --access public --registry https://registry.npmjs.org/

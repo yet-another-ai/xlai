@@ -77,10 +77,16 @@ export interface ChatOptions {
 
 export type AgentOptions = ChatOptions;
 
+export type TokenUsageSource =
+  | 'provider_reported'
+  | 'tokenizer_exact'
+  | 'estimated';
+
 export interface ChatUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  source?: TokenUsageSource;
 }
 
 export type ChatFinishReason =
@@ -104,6 +110,7 @@ export interface EmbeddingUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  source?: TokenUsageSource;
 }
 
 export interface EmbeddingResponse {

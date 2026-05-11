@@ -1,8 +1,10 @@
 use serde_json::Value;
 use xlai_core::{
     ChatChunk, ChatMessage, ChatResponse, ContentPart, ErrorKind, FinishReason, MessageRole,
-    StreamTextDelta, XlaiError,
+    StreamTextDelta, TokenUsage, XlaiError,
 };
+
+use crate::response::GeminiUsageMetadata;
 
 #[derive(Default)]
 pub(crate) struct SseParser {
@@ -34,6 +36,7 @@ pub(crate) struct StreamState {
     message_started: bool,
     content: String,
     finish_reason: Option<String>,
+    usage: Option<TokenUsage>,
 }
 
 impl StreamState {
@@ -50,6 +53,17 @@ impl StreamState {
                 format!("failed to parse stream event: {error}"),
             )
         })?;
+
+        if let Some(usage) = value.get("usageMetadata") {
+            let usage: GeminiUsageMetadata =
+                serde_json::from_value(usage.clone()).map_err(|error| {
+                    XlaiError::new(
+                        ErrorKind::Provider,
+                        format!("failed to parse Gemini usage metadata: {error}"),
+                    )
+                })?;
+            self.usage = Some(usage.into());
+        }
 
         if let Some(candidates) = value.get("candidates").and_then(Value::as_array)
             && let Some(candidate) = candidates.first()
@@ -103,7 +117,7 @@ impl StreamState {
                 metadata: Default::default(),
             },
             tool_calls: Vec::new(),
-            usage: None,
+            usage: self.usage,
             finish_reason,
             metadata: Default::default(),
         })

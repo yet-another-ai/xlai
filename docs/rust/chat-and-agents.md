@@ -22,4 +22,10 @@ The hook is **not** used for unary `prompt` / `execute`.
 
 In **JavaScript**, use `AgentSession.registerContextCompressor` before `streamPrompt` / `streamPromptWithContent`.
 
+## Token usage
+
+`ChatResponse.usage` and `EmbeddingResponse.usage` include input, output, and total token counts when the backend can provide them. The optional `source` field describes how exact the count is: `provider_reported` comes directly from the hosted API, `tokenizer_exact` comes from the active local tokenizer, and `estimated` is reserved for heuristics.
+
+For billing reconciliation, prefer provider-reported usage. The context-compressor `estimatedInputTokens` argument is only a pre-call context-management hint and should not be mixed with final response usage.
+
 For full tables and API notes, see the [README “Tool Calling” section](https://github.com/yetanother.ai/xlai/blob/main/README.md#tool-calling).

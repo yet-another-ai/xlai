@@ -105,6 +105,7 @@ mod tests {
                 input_tokens: 5,
                 output_tokens: 7,
                 total_tokens: 12,
+                source: Some(xlai_core::TokenUsageSource::ProviderReported),
             }),
             finish_reason: FinishReason::Stopped,
             metadata: BTreeMap::new(),
@@ -122,6 +123,7 @@ mod tests {
         assert_eq!(usage.input_tokens, 5);
         assert_eq!(usage.output_tokens, 7);
         assert_eq!(usage.total_tokens, 12);
+        assert_eq!(usage.source, Some("provider_reported"));
     }
 
     #[test]

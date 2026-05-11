@@ -62,7 +62,7 @@ mod wasm {
     use xlai_core::{
         BoxFuture, ChatContent, ChatMessage, ChatModel, ChatRequest, ChatResponse, EmbeddingModel,
         EmbeddingRequest, EmbeddingResponse, ErrorKind, FinishReason, MessageRole,
-        StructuredOutputFormat, TokenUsage, XlaiError,
+        StructuredOutputFormat, TokenUsage, TokenUsageSource, XlaiError,
     };
     use xlai_runtime::local_common::{
         LocalChatPrepareOptions, PreparedLocalChatRequest, ToolResponse, parse_tool_response,
@@ -174,6 +174,8 @@ mod wasm {
         output_tokens: Option<u32>,
         #[serde(default)]
         total_tokens: Option<u32>,
+        #[serde(default)]
+        source: Option<TokenUsageSource>,
     }
 
     fn js_provider_error(message: impl Into<String>) -> XlaiError {
@@ -266,6 +268,7 @@ mod wasm {
             input_tokens,
             output_tokens,
             total_tokens,
+            source: u.source,
         })
     }
 

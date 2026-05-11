@@ -2,9 +2,9 @@
 
 ## Requirements
 
-- **Rust** stable, minimum **1.94** (see `rust-toolchain.toml` in the repo)
+- **mise** for the pinned Node.js and Rust toolchains
 - **pnpm** (workspace uses `pnpm@10.x`)
-- For the browser package: **Node.js**, **wasm-pack**, and the `wasm32-unknown-unknown` target
+- For the browser package: **wasm-pack**; `mise install` also installs the `wasm32-unknown-unknown` Rust target
 
 The workspace uses Rust **edition 2024** and **Apache-2.0**.
 
@@ -13,6 +13,7 @@ The workspace uses Rust **edition 2024** and **Apache-2.0**.
 ```bash
 git clone https://github.com/yetanother.ai/xlai.git
 cd xlai
+mise install
 cargo build --workspace
 ```
 
@@ -25,7 +26,6 @@ cargo test --workspace
 ### Check `wasm32`
 
 ```bash
-rustup target add wasm32-unknown-unknown
 cargo check -p xlai-wasm --target wasm32-unknown-unknown --features qts
 ```
 
