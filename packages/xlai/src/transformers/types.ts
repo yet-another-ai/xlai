@@ -1,5 +1,5 @@
 import type { FileSystemApi, MemoryFileSystem } from '../filesystem';
-import type { ChatContent, ChatResponse } from '../types';
+import type { ChatContent, ChatResponse, TokenUsageSource } from '../types';
 
 /** Options forwarded to {@link import('./adapter').createXlaiTransformersJsAdapter}. */
 export type TransformersJsAdapterOptions = {
@@ -35,6 +35,7 @@ export type TransformersGenerateResponse = {
     inputTokens?: number;
     outputTokens?: number;
     totalTokens?: number;
+    source?: TokenUsageSource;
   };
 };
 

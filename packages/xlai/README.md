@@ -12,11 +12,13 @@ Vite-based TypeScript package for the `xlai-wasm` Rust crate inside the `pnpm` w
 
 ## Requirements
 
-- Node.js
+- `mise` for the pinned Node.js and Rust toolchains
 - `pnpm`
 - `wasm-pack`
-- Rust with the `wasm32-unknown-unknown` target installed
+- The `wasm32-unknown-unknown` Rust target from `mise install`
 
 ## Notes
 
 The generated wasm bindings are written into `pkg/` and kept out of version control.
+
+Chat and embedding responses include `usage` when a backend can provide token counts. The optional `usage.source` value is `provider_reported`, `tokenizer_exact`, or `estimated`; only the first two should be treated as exact final counts.

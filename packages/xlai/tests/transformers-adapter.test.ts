@@ -23,9 +23,18 @@ const mockState = vi.hoisted(() => {
   }
 
   const tokenizer = {
-    encode: vi.fn(() => ({
-      input_ids: { dims: [1, 3], data: [10, 11, 12] },
-    })),
+    encode: vi.fn((text: string) => {
+      const jsonSuffix = '{"answer":1}';
+      const baseText = text.replace(jsonSuffix, '').trim();
+      const count =
+        baseText.split(/\s+/).filter(Boolean).length +
+        (text.includes(jsonSuffix) ? 1 : 0);
+      return {
+        input_ids: {
+          data: Array.from({ length: count }, (_, index) => index),
+        },
+      };
+    }),
   };
 
   const pipelineCalls: Array<{
@@ -164,6 +173,12 @@ describe('transformers adapter', () => {
     ).resolves.toEqual({
       text: 'completion',
       finishReason: 'completed',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2,
+        source: 'tokenizer_exact',
+      },
     });
 
     await adapter.generate({
@@ -176,7 +191,7 @@ describe('transformers adapter', () => {
     expect(mockState.pipelineFactory).toHaveBeenCalledTimes(1);
     expect(mockState.extractTokenizerData).not.toHaveBeenCalled();
     expect(mockState.parserCreate).not.toHaveBeenCalled();
-    expect(mockState.tokenizer.encode).not.toHaveBeenCalled();
+    expect(mockState.tokenizer.encode).toHaveBeenCalled();
     expect(mockState.pipelineCalls[0]?.options).toMatchObject({
       max_new_tokens: 16,
       temperature: 0.25,
@@ -212,6 +227,12 @@ describe('transformers adapter', () => {
     ).resolves.toEqual({
       text: '{"answer":1}',
       finishReason: 'stopped',
+      usage: {
+        inputTokens: 2,
+        outputTokens: 1,
+        totalTokens: 3,
+        source: 'tokenizer_exact',
+      },
     });
 
     expect(mockState.extractTokenizerData).toHaveBeenCalledWith(

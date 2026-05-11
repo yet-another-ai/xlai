@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use xlai_core::{
     ChatContent, ChatMessage, ChatResponse, ContentPart, ErrorKind, FinishReason, MediaSource,
-    MessageRole, TokenUsage, ToolCall, XlaiError,
+    MessageRole, TokenUsage, TokenUsageSource, ToolCall, XlaiError,
 };
 
 pub(crate) const OPENAI_RESPONSE_OUTPUT_METADATA_KEY: &str = "openai_response_output";
@@ -203,6 +203,7 @@ impl From<OpenAiUsage> for TokenUsage {
             input_tokens: value.prompt,
             output_tokens: value.completion,
             total_tokens: value.total,
+            source: Some(TokenUsageSource::ProviderReported),
         }
     }
 }

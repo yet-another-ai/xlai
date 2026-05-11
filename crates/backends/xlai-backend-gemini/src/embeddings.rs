@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use xlai_core::{EmbeddingResponse, TokenUsage, XlaiError};
+use xlai_core::{EmbeddingResponse, TokenUsage, TokenUsageSource, XlaiError};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -139,6 +139,7 @@ impl From<GeminiEmbeddingUsage> for TokenUsage {
             input_tokens,
             output_tokens: 0,
             total_tokens: value.total_token_count.unwrap_or(input_tokens),
+            source: Some(TokenUsageSource::ProviderReported),
         }
     }
 }

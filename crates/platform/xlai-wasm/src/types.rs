@@ -373,6 +373,8 @@ pub(crate) struct WasmChatUsage {
     pub(crate) input_tokens: u32,
     pub(crate) output_tokens: u32,
     pub(crate) total_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) source: Option<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -411,7 +413,16 @@ impl From<TokenUsage> for WasmChatUsage {
             input_tokens: usage.input_tokens,
             output_tokens: usage.output_tokens,
             total_tokens: usage.total_tokens,
+            source: usage.source.map(token_usage_source_label),
         }
+    }
+}
+
+const fn token_usage_source_label(source: xlai_core::TokenUsageSource) -> &'static str {
+    match source {
+        xlai_core::TokenUsageSource::ProviderReported => "provider_reported",
+        xlai_core::TokenUsageSource::TokenizerExact => "tokenizer_exact",
+        xlai_core::TokenUsageSource::Estimated => "estimated",
     }
 }
 

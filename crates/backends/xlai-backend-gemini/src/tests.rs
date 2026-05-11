@@ -3,8 +3,10 @@ use crate::embeddings::{
     GeminiEmbeddingResponse,
 };
 use crate::request::GeminiChatRequest;
+use crate::response::GeminiChatResponse;
+use crate::stream::StreamState;
 use serde_json::json;
-use xlai_core::{ChatContent, ChatRequest, MessageRole};
+use xlai_core::{ChatContent, ChatRequest, MessageRole, TokenUsageSource};
 
 #[test]
 fn serializes_basic_request() {
@@ -106,4 +108,55 @@ fn gemini_embedding_response_maps_vectors_and_usage() {
     .expect("deserialize batch embedding response");
     let batch = batch.into_core_response().expect("map batch response");
     assert_eq!(batch.vectors, vec![vec![0.1, 0.2], vec![0.3, 0.4]]);
+}
+
+#[test]
+fn gemini_chat_response_maps_usage_metadata() {
+    let response: GeminiChatResponse = serde_json::from_value(json!({
+        "candidates": [{
+            "content": {
+                "parts": [{ "text": "Hello" }]
+            },
+            "finishReason": "STOP"
+        }],
+        "usageMetadata": {
+            "promptTokenCount": 4,
+            "candidatesTokenCount": 6,
+            "totalTokenCount": 10
+        }
+    }))
+    .expect("deserialize chat response");
+
+    let response = response.into_core_response().expect("map chat response");
+    let usage = response.usage.expect("usage");
+    assert_eq!(usage.input_tokens, 4);
+    assert_eq!(usage.output_tokens, 6);
+    assert_eq!(usage.total_tokens, 10);
+    assert_eq!(usage.source, Some(TokenUsageSource::ProviderReported));
+    assert_eq!(
+        response.metadata.get("usage_metadata"),
+        Some(&json!({
+            "promptTokenCount": 4,
+            "candidatesTokenCount": 6,
+            "totalTokenCount": 10
+        }))
+    );
+}
+
+#[test]
+fn gemini_stream_state_maps_usage_metadata() {
+    let mut state = StreamState::default();
+    let chunks = state
+        .process_event(
+            r#"{"candidates":[{"content":{"parts":[{"text":"Hi"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":3,"totalTokenCount":5}}"#,
+        )
+        .expect("process stream event");
+    assert!(!chunks.is_empty());
+
+    let response = state.into_chat_response().expect("finish stream");
+    let usage = response.usage.expect("usage");
+    assert_eq!(usage.input_tokens, 2);
+    assert_eq!(usage.output_tokens, 3);
+    assert_eq!(usage.total_tokens, 5);
+    assert_eq!(usage.source, Some(TokenUsageSource::ProviderReported));
 }
