@@ -33,6 +33,10 @@ runs:
       with:
         cache: true
 
+    - name: Install required Rust components
+      shell: bash
+      run: rustup component add rustfmt clippy
+
     - name: Install extra Rust targets
       if: inputs.rust-targets != ''
       shell: bash
