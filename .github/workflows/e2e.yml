@@ -72,7 +72,14 @@ jobs:
           rust-cache-workspaces: ${{ runner.os == 'Windows' && 'C:/w -> target' || '' }}
 
       - name: Install Hugging Face CLI
-        run: python -m pip install --upgrade "huggingface_hub[cli]"
+        shell: bash
+        run: |
+          python -m pip install --upgrade "huggingface_hub[cli]"
+          python - <<'PY' >> "$GITHUB_PATH"
+          import sysconfig
+
+          print(sysconfig.get_path("scripts"))
+          PY
 
       - name: Cache llama.cpp test fixture
         uses: actions/cache@v5
