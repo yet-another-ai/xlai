@@ -77,13 +77,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Run sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Setup mise tools
         uses: jdx/mise-action@v3
         with:
           cache: true
-
-      - name: Run sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
