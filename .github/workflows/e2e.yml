@@ -71,11 +71,6 @@ jobs:
           rust-cache-shared-key: e2e-rust
           rust-cache-workspaces: ${{ runner.os == 'Windows' && 'C:/w -> target' || '' }}
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-
       - name: Install Hugging Face CLI
         run: python -m pip install --upgrade "huggingface_hub[cli]"
 
@@ -151,14 +146,6 @@ jobs:
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
-
-      - name: Install wasm-pack
-        uses: taiki-e/install-action@wasm-pack
-
-      - uses: pnpm/action-setup@v5
-        name: Install pnpm
-        with:
-          cache: true
 
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile

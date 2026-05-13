@@ -95,14 +95,6 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Install wasm-pack
-        uses: taiki-e/install-action@wasm-pack
-
-      - uses: pnpm/action-setup@v5
-        name: Install pnpm
-        with:
-          cache: true
-
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
@@ -179,14 +171,6 @@ jobs:
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
-
-      - name: Install wasm-pack
-        uses: taiki-e/install-action@wasm-pack
-
-      - uses: pnpm/action-setup@v5
-        name: Install pnpm
-        with:
-          cache: true
 
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile

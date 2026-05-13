@@ -98,9 +98,7 @@ For crate boundaries and request flow, see [ARCHITECTURE.md](ARCHITECTURE.md). F
 
 ## Requirements
 
-- [mise](https://mise.jdx.dev/) for the pinned Node.js and Rust toolchains
-- `pnpm`
-- `wasm-pack` for the browser package
+- [mise](https://mise.jdx.dev/) for pinned Node.js, pnpm, Rust, Python, uv, and wasm-pack toolchains
 - minimum supported Rust version: `1.95`
 
 The workspace uses:

@@ -13,10 +13,8 @@ The npm package **`@yai-xlai/xlai`** is a Vite-friendly TypeScript layer on top 
 
 ## Requirements
 
-- **mise** for the pinned Node.js and Rust toolchains
-- **pnpm**
-- **wasm-pack**
-- The `wasm32-unknown-unknown` Rust target from `mise install`
+- **mise** for the pinned Node.js, pnpm, Rust, and wasm-pack toolchains
+- The `wasm32-unknown-unknown` Rust target, installed by `mise install`
 
 ## WASM surface
 

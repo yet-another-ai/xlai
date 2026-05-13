@@ -34,13 +34,10 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: actions/setup-python@v6
+      - name: Setup mise tools
+        uses: jdx/mise-action@v3
         with:
-          python-version: '3.12'
-
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
+          cache: true
 
       - name: Verify Hugging Face token is configured
         env:

@@ -2,9 +2,7 @@
 
 ## Requirements
 
-- **mise** for the pinned Node.js and Rust toolchains
-- **pnpm** (workspace uses `pnpm@10.x`)
-- For the browser package: **wasm-pack**; `mise install` also installs the `wasm32-unknown-unknown` Rust target
+- **mise** for the pinned Node.js, pnpm, Rust, Python, uv, and wasm-pack toolchains
 
 The workspace uses Rust **edition 2024** and **Apache-2.0**.
 
