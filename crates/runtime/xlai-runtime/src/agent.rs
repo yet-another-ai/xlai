@@ -474,13 +474,12 @@ impl Agent {
                     cancellation.clone(),
                     request_layer.clone(),
                 );
-                let mut round_events = Vec::new();
                 while let Some(item) = inner.next().await {
                     let item = item?;
                     if let ChatExecutionEvent::Model(ChatChunk::Finished(resp)) = &item {
                         final_response = Some(resp.clone());
                     }
-                    round_events.push(item);
+                    yield item;
                 }
 
                 let response = final_response.ok_or_else(|| {
@@ -497,18 +496,11 @@ impl Agent {
                 messages.push(assistant_message);
 
                 if response.tool_calls.is_empty() {
-                    for event in round_events {
-                        yield event;
-                    }
                     return;
                 }
 
                 if response.message.role == MessageRole::Assistant {
                     yield ChatExecutionEvent::Thinking(response.clone());
-                } else {
-                    for event in round_events {
-                        yield event;
-                    }
                 }
 
                 for call in &response.tool_calls {

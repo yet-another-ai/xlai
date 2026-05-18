@@ -124,10 +124,13 @@ async fn agent_stream_emits_thinking_for_intermediate_rounds() -> Result<(), Xla
     }
 
     assert_eq!(thinking_messages, vec!["Looking up weather"]);
-    assert_eq!(content_deltas, vec!["Paris is sunny."]);
+    assert_eq!(content_deltas, vec!["Looking up weather", "Paris is sunny."]);
     assert!(saw_tool_call);
     assert!(saw_tool_result);
-    assert_eq!(finished_messages, vec!["Paris is sunny."]);
+    assert_eq!(
+        finished_messages,
+        vec!["Looking up weather", "Paris is sunny."]
+    );
 
     Ok(())
 }
