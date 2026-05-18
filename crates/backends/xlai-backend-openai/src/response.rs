@@ -195,14 +195,33 @@ struct OpenAiUsage {
     completion: u32,
     #[serde(rename = "total_tokens")]
     total: u32,
+    #[serde(
+        default,
+        rename = "prompt_tokens_details",
+        alias = "input_tokens_details"
+    )]
+    prompt_details: Option<OpenAiPromptTokensDetails>,
+}
+
+#[derive(Deserialize)]
+struct OpenAiPromptTokensDetails {
+    #[serde(default)]
+    cached_tokens: Option<u32>,
 }
 
 impl From<OpenAiUsage> for TokenUsage {
     fn from(value: OpenAiUsage) -> Self {
+        let cached_input_tokens = value
+            .prompt_details
+            .and_then(|details| details.cached_tokens);
+        let uncached_input_tokens =
+            cached_input_tokens.map(|cached| value.prompt.saturating_sub(cached));
         Self {
             input_tokens: value.prompt,
             output_tokens: value.completion,
             total_tokens: value.total,
+            cached_input_tokens,
+            uncached_input_tokens,
             source: Some(TokenUsageSource::ProviderReported),
         }
     }
@@ -221,5 +240,35 @@ pub(crate) fn finish_reason_from_api(
         (Some("incomplete"), _) => FinishReason::Length,
         (Some("completed"), _) => FinishReason::Completed,
         _ => FinishReason::Completed,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::OpenAiChatResponse;
+
+    #[test]
+    fn maps_prompt_cache_usage_details() {
+        let response: OpenAiChatResponse = serde_json::from_value(json!({
+            "output": [],
+            "status": "completed",
+            "usage": {
+                "prompt_tokens": 20,
+                "completion_tokens": 3,
+                "total_tokens": 23,
+                "prompt_tokens_details": {
+                    "cached_tokens": 12
+                }
+            }
+        }))
+        .expect("deserialize response");
+
+        let response = response.into_core_response().expect("map response");
+        let usage = response.usage.expect("usage");
+        assert_eq!(usage.input_tokens, 20);
+        assert_eq!(usage.cached_input_tokens, Some(12));
+        assert_eq!(usage.uncached_input_tokens, Some(8));
     }
 }

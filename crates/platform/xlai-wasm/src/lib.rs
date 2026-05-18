@@ -105,6 +105,8 @@ mod tests {
                 input_tokens: 5,
                 output_tokens: 7,
                 total_tokens: 12,
+                cached_input_tokens: Some(2),
+                uncached_input_tokens: Some(3),
                 source: Some(xlai_core::TokenUsageSource::ProviderReported),
             }),
             finish_reason: FinishReason::Stopped,
@@ -123,6 +125,8 @@ mod tests {
         assert_eq!(usage.input_tokens, 5);
         assert_eq!(usage.output_tokens, 7);
         assert_eq!(usage.total_tokens, 12);
+        assert_eq!(usage.cached_input_tokens, Some(2));
+        assert_eq!(usage.uncached_input_tokens, Some(3));
         assert_eq!(usage.source, Some("provider_reported"));
     }
 

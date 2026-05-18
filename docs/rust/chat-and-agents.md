@@ -24,7 +24,7 @@ In **JavaScript**, use `AgentSession.registerContextCompressor` before `streamPr
 
 ## Token usage
 
-`ChatResponse.usage` and `EmbeddingResponse.usage` include input, output, and total token counts when the backend can provide them. The optional `source` field describes how exact the count is: `provider_reported` comes directly from the hosted API, `tokenizer_exact` comes from the active local tokenizer, and `estimated` is reserved for heuristics.
+`ChatResponse.usage` and `EmbeddingResponse.usage` include input, output, and total token counts when the backend can provide them. Hosted providers that report prompt-cache accounting may also include `cached_input_tokens` and `uncached_input_tokens`; local tokenizer counts leave those fields unset. The optional `source` field describes how exact the count is: `provider_reported` comes directly from the hosted API, `tokenizer_exact` comes from the active local tokenizer, and `estimated` is reserved for heuristics.
 
 For billing reconciliation, prefer provider-reported usage. The context-compressor `estimatedInputTokens` argument is only a pre-call context-management hint and should not be mixed with final response usage.
 

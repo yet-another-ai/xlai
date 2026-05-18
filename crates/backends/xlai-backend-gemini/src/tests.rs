@@ -122,7 +122,8 @@ fn gemini_chat_response_maps_usage_metadata() {
         "usageMetadata": {
             "promptTokenCount": 4,
             "candidatesTokenCount": 6,
-            "totalTokenCount": 10
+            "totalTokenCount": 10,
+            "cachedContentTokenCount": 3
         }
     }))
     .expect("deserialize chat response");
@@ -132,13 +133,16 @@ fn gemini_chat_response_maps_usage_metadata() {
     assert_eq!(usage.input_tokens, 4);
     assert_eq!(usage.output_tokens, 6);
     assert_eq!(usage.total_tokens, 10);
+    assert_eq!(usage.cached_input_tokens, Some(3));
+    assert_eq!(usage.uncached_input_tokens, Some(1));
     assert_eq!(usage.source, Some(TokenUsageSource::ProviderReported));
     assert_eq!(
         response.metadata.get("usage_metadata"),
         Some(&json!({
             "promptTokenCount": 4,
             "candidatesTokenCount": 6,
-            "totalTokenCount": 10
+            "totalTokenCount": 10,
+            "cachedContentTokenCount": 3
         }))
     );
 }
@@ -148,7 +152,7 @@ fn gemini_stream_state_maps_usage_metadata() {
     let mut state = StreamState::default();
     let chunks = state
         .process_event(
-            r#"{"candidates":[{"content":{"parts":[{"text":"Hi"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":3,"totalTokenCount":5}}"#,
+            r#"{"candidates":[{"content":{"parts":[{"text":"Hi"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":3,"totalTokenCount":5,"cachedContentTokenCount":1}}"#,
         )
         .expect("process stream event");
     assert!(!chunks.is_empty());
@@ -158,5 +162,7 @@ fn gemini_stream_state_maps_usage_metadata() {
     assert_eq!(usage.input_tokens, 2);
     assert_eq!(usage.output_tokens, 3);
     assert_eq!(usage.total_tokens, 5);
+    assert_eq!(usage.cached_input_tokens, Some(1));
+    assert_eq!(usage.uncached_input_tokens, Some(1));
     assert_eq!(usage.source, Some(TokenUsageSource::ProviderReported));
 }

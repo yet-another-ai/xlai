@@ -86,6 +86,8 @@ export interface ChatUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  cachedInputTokens?: number;
+  uncachedInputTokens?: number;
   source?: TokenUsageSource;
 }
 
@@ -110,6 +112,8 @@ export interface EmbeddingUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  cachedInputTokens?: number;
+  uncachedInputTokens?: number;
   source?: TokenUsageSource;
 }
 

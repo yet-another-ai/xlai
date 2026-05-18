@@ -22,7 +22,7 @@ The WebAssembly package mirrors the Rust split between **chat** and **agent** AP
 
 ## Token usage
 
-Chat and embedding responses expose `usage.inputTokens`, `usage.outputTokens`, and `usage.totalTokens` when available. `usage.source` is optional and distinguishes `provider_reported`, `tokenizer_exact`, and `estimated` counts. Use provider-reported counts for billing reconciliation; agent `estimatedInputTokens` values are context-management estimates only.
+Chat and embedding responses expose `usage.inputTokens`, `usage.outputTokens`, and `usage.totalTokens` when available. Hosted providers that report prompt-cache accounting may also expose `usage.cachedInputTokens` and `usage.uncachedInputTokens`; local tokenizer counts leave those fields unset. `usage.source` is optional and distinguishes `provider_reported`, `tokenizer_exact`, and `estimated` counts. Use provider-reported counts for billing reconciliation; agent `estimatedInputTokens` values are context-management estimates only.
 
 Peer dependencies and export maps are defined in [`packages/xlai/package.json`](https://github.com/yetanother.ai/xlai/blob/main/packages/xlai/package.json).
 

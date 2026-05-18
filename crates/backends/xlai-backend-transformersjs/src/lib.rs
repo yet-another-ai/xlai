@@ -175,6 +175,10 @@ mod wasm {
         #[serde(default)]
         total_tokens: Option<u32>,
         #[serde(default)]
+        cached_input_tokens: Option<u32>,
+        #[serde(default)]
+        uncached_input_tokens: Option<u32>,
+        #[serde(default)]
         source: Option<TokenUsageSource>,
     }
 
@@ -268,6 +272,8 @@ mod wasm {
             input_tokens,
             output_tokens,
             total_tokens,
+            cached_input_tokens: u.cached_input_tokens,
+            uncached_input_tokens: u.uncached_input_tokens,
             source: u.source,
         })
     }

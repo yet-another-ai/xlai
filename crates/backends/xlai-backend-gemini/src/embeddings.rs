@@ -126,19 +126,30 @@ pub(crate) struct GeminiEmbeddingValues {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GeminiEmbeddingUsage {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     prompt_token_count: Option<u32>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     total_token_count: Option<u32>,
+    #[serde(
+        default,
+        rename = "cachedContentTokenCount",
+        skip_serializing_if = "Option::is_none"
+    )]
+    cached_content_token_count: Option<u32>,
 }
 
 impl From<GeminiEmbeddingUsage> for TokenUsage {
     fn from(value: GeminiEmbeddingUsage) -> Self {
         let input_tokens = value.prompt_token_count.unwrap_or(0);
+        let cached_input_tokens = value.cached_content_token_count;
+        let uncached_input_tokens =
+            cached_input_tokens.map(|cached| input_tokens.saturating_sub(cached));
         Self {
             input_tokens,
             output_tokens: 0,
             total_tokens: value.total_token_count.unwrap_or(input_tokens),
+            cached_input_tokens,
+            uncached_input_tokens,
             source: Some(TokenUsageSource::ProviderReported),
         }
     }

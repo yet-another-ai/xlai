@@ -374,6 +374,10 @@ pub(crate) struct WasmChatUsage {
     pub(crate) output_tokens: u32,
     pub(crate) total_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) cached_input_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) uncached_input_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) source: Option<&'static str>,
 }
 
@@ -413,6 +417,8 @@ impl From<TokenUsage> for WasmChatUsage {
             input_tokens: usage.input_tokens,
             output_tokens: usage.output_tokens,
             total_tokens: usage.total_tokens,
+            cached_input_tokens: usage.cached_input_tokens,
+            uncached_input_tokens: usage.uncached_input_tokens,
             source: usage.source.map(token_usage_source_label),
         }
     }

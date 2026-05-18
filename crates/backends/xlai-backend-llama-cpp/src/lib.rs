@@ -457,6 +457,8 @@ impl LlamaCppChatModel {
                     .try_into()
                     .unwrap_or(u32::MAX)
                     .saturating_add(output_tokens),
+                cached_input_tokens: None,
+                uncached_input_tokens: None,
                 source: Some(xlai_core::TokenUsageSource::TokenizerExact),
             }),
             finish_reason,

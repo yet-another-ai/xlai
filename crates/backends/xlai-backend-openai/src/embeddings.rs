@@ -90,6 +90,8 @@ impl From<OpenAiEmbeddingUsage> for TokenUsage {
             input_tokens: value.prompt_tokens,
             output_tokens: 0,
             total_tokens: value.total_tokens,
+            cached_input_tokens: None,
+            uncached_input_tokens: None,
             source: Some(TokenUsageSource::ProviderReported),
         }
     }
