@@ -78,6 +78,10 @@ To publish more crates later: remove or relax `publish = false`, ensure every de
 With tokens set:
 
 ```bash
+mise install
+```
+
+```bash
 export CARGO_REGISTRY_TOKEN=…   # crates.io
 # In order:
 cargo publish -p xlai-core --locked

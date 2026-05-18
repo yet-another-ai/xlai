@@ -25,10 +25,17 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Run sccache
+      uses: mozilla-actions/sccache-action@v0.0.9
+
     - name: Setup mise tools
       uses: jdx/mise-action@v3
       with:
         cache: true
+
+    - name: Install required Rust components
+      shell: bash
+      run: rustup component add rustfmt clippy
 
     - name: Install extra Rust targets
       if: inputs.rust-targets != ''
@@ -36,9 +43,6 @@ runs:
       run: rustup target add ${RUST_TARGETS//,/ }
       env:
         RUST_TARGETS: ${{ inputs.rust-targets }}
-
-    - name: Run sccache
-      uses: mozilla-actions/sccache-action@v0.0.9
 
     - name: Cache Rust build artifacts
       uses: Swatinem/rust-cache@v2

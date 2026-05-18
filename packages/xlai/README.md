@@ -12,10 +12,8 @@ Vite-based TypeScript package for the `xlai-wasm` Rust crate inside the `pnpm` w
 
 ## Requirements
 
-- `mise` for the pinned Node.js and Rust toolchains
-- `pnpm`
-- `wasm-pack`
-- The `wasm32-unknown-unknown` Rust target from `mise install`
+- `mise` for the pinned Node.js, pnpm, Rust, and wasm-pack toolchains
+- The `wasm32-unknown-unknown` Rust target, installed by `mise install`
 
 ## Notes
 

@@ -35,13 +35,13 @@ jobs:
         with:
           submodules: true
 
+      - name: Run sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Setup mise tools
         uses: jdx/mise-action@v3
         with:
           cache: true
-
-      - name: Run sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
@@ -84,24 +84,16 @@ jobs:
         with:
           submodules: true
 
+      - name: Run sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Setup mise tools
         uses: jdx/mise-action@v3
         with:
           cache: true
 
-      - name: Run sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
-
-      - name: Install wasm-pack
-        uses: taiki-e/install-action@wasm-pack
-
-      - uses: pnpm/action-setup@v5
-        name: Install pnpm
-        with:
-          cache: true
 
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
@@ -125,13 +117,13 @@ jobs:
         with:
           submodules: true
 
+      - name: Run sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Setup mise tools
         uses: jdx/mise-action@v3
         with:
           cache: true
-
-      - name: Run sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
@@ -169,24 +161,16 @@ jobs:
         with:
           submodules: true
 
+      - name: Run sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Setup mise tools
         uses: jdx/mise-action@v3
         with:
           cache: true
 
-      - name: Run sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
-
-      - name: Install wasm-pack
-        uses: taiki-e/install-action@wasm-pack
-
-      - uses: pnpm/action-setup@v5
-        name: Install pnpm
-        with:
-          cache: true
 
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile

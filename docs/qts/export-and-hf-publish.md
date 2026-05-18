@@ -6,8 +6,8 @@ Protobuf-based voice-clone prompt export (`.pb`) is **not** supported here; use 
 
 ## Prerequisites
 
-- Python **3.12+**
-- [uv](https://docs.astral.sh/uv/)
+- [mise](https://mise.jdx.dev/) for pinned Python and uv
+- From the repo root: `mise install`
 - From the repo root: `uv sync`
 
 ## Export GGUF, vocoder ONNX, and reference-codec ONNX
