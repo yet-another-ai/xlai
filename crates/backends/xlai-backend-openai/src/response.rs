@@ -244,6 +244,7 @@ pub(crate) fn finish_reason_from_api(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::panic)]
 mod tests {
     use serde_json::json;
 
@@ -251,7 +252,7 @@ mod tests {
 
     #[test]
     fn maps_prompt_cache_usage_details() {
-        let response: OpenAiChatResponse = serde_json::from_value(json!({
+        let parsed = serde_json::from_value::<OpenAiChatResponse>(json!({
             "output": [],
             "status": "completed",
             "usage": {
@@ -262,11 +263,18 @@ mod tests {
                     "cached_tokens": 12
                 }
             }
-        }))
-        .expect("deserialize response");
+        }));
+        let Ok(response) = parsed else {
+            panic!("deserialize response");
+        };
 
-        let response = response.into_core_response().expect("map response");
-        let usage = response.usage.expect("usage");
+        let mapped = response.into_core_response();
+        let Ok(response) = mapped else {
+            panic!("map response");
+        };
+        let Some(usage) = response.usage else {
+            panic!("usage");
+        };
         assert_eq!(usage.input_tokens, 20);
         assert_eq!(usage.cached_input_tokens, Some(12));
         assert_eq!(usage.uncached_input_tokens, Some(8));
