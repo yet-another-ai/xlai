@@ -78,7 +78,7 @@ mod tests {
     use serde_json::json;
     use xlai_core::{
         ChatContent, ChatMessage, FinishReason, FsEntry, FsEntryKind, FsPath, MessageRole,
-        ReasoningEffort, TokenUsage,
+        ReasoningEffort, ReasoningSummary, TokenUsage,
     };
 
     use crate::factory::create_agent_session_inner;
@@ -181,6 +181,7 @@ mod tests {
             temperature: Some(0.2),
             max_output_tokens: Some(512),
             reasoning_effort: Some(ReasoningEffort::Medium),
+            reasoning_summary: Some(ReasoningSummary::Auto),
             content: None,
             retry_policy: None,
             chat_execution: None,
@@ -196,6 +197,7 @@ mod tests {
         assert_eq!(options.temperature, Some(0.2));
         assert_eq!(options.max_output_tokens, Some(512));
         assert_eq!(options.reasoning_effort, Some(ReasoningEffort::Medium));
+        assert_eq!(options.reasoning_summary, Some(ReasoningSummary::Auto));
     }
 
     #[test]
@@ -209,6 +211,7 @@ mod tests {
                 temperature: Some(0.1),
                 max_output_tokens: Some(256),
                 reasoning_effort: Some(ReasoningEffort::Low),
+                reasoning_summary: None,
                 retry_policy: None,
                 chat_execution: None,
                 runtime_chat_execution_defaults: None,
@@ -235,6 +238,7 @@ mod tests {
                 temperature: None,
                 max_output_tokens: None,
                 reasoning_effort: None,
+                reasoning_summary: None,
                 retry_policy: None,
                 chat_execution: None,
                 runtime_chat_execution_defaults: None,

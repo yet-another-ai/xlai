@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use serde_json::json;
 use xlai_core::{
-    ChatContent, ChatMessage, ChatRequest, MessageRole, ReasoningEffort, StructuredOutput,
+    ChatContent, ChatMessage, ChatRequest, MessageRole, ReasoningEffort, ReasoningSummary,
+    StructuredOutput,
 };
 
 use crate::request::OpenRouterChatRequest;
@@ -47,6 +48,38 @@ fn serializes_plain_text_user_message_for_responses_api() {
     assert!((temperature - 0.3).abs() < 1e-6);
     assert_eq!(value["max_output_tokens"], json!(42));
     assert_eq!(value["reasoning"]["effort"], json!("medium"));
+}
+
+#[test]
+fn serializes_reasoning_summary_for_responses_api() {
+    let config = test_config();
+    let request = ChatRequest {
+        model: None,
+        system_prompt: None,
+        messages: vec![ChatMessage {
+            role: MessageRole::User,
+            content: ChatContent::text("Summarize your reasoning."),
+            tool_name: None,
+            tool_call_id: None,
+            metadata: BTreeMap::new(),
+        }],
+        available_tools: Vec::new(),
+        structured_output: None,
+        metadata: BTreeMap::new(),
+        temperature: None,
+        max_output_tokens: None,
+        reasoning_effort: Some(ReasoningEffort::Low),
+        reasoning_summary: Some(ReasoningSummary::Detailed),
+        retry_policy: None,
+        ..Default::default()
+    };
+
+    let payload = OpenRouterChatRequest::from_core_request(&config, request, false)
+        .expect("payload should build");
+    let value = serde_json::to_value(payload).expect("payload should serialize");
+
+    assert_eq!(value["reasoning"]["effort"], json!("low"));
+    assert_eq!(value["reasoning"]["summary"], json!("detailed"));
 }
 
 #[test]

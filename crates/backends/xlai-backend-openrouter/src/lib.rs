@@ -233,6 +233,24 @@ impl ChatModel for OpenRouterChatModel {
                                 });
                             }
                         }
+                        Some("response.reasoning_summary_text.delta") => {
+                            let output_index = event_value
+                                .get("output_index")
+                                .and_then(Value::as_u64)
+                                .unwrap_or(0) as usize;
+                            let summary_index = event_value
+                                .get("summary_index")
+                                .and_then(Value::as_u64)
+                                .unwrap_or(0) as usize;
+                            if let Some(delta) = event_value.get("delta").and_then(Value::as_str) {
+                                let chunk = state.apply_reasoning_summary_delta(
+                                    output_index,
+                                    summary_index,
+                                    delta.to_owned(),
+                                );
+                                yield ChatChunk::ReasoningSummaryDelta(chunk);
+                            }
+                        }
                         Some("response.output_item.added") => {
                             if let Some(item) = event_value.get("item").and_then(Value::as_object)
                             {

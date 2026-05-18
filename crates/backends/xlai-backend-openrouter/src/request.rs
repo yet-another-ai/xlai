@@ -3,7 +3,7 @@ use serde::Serialize;
 use serde_json::Value;
 use xlai_core::{
     ChatMessage, ChatRequest, ContentPart, ErrorKind, ImageDetail, MediaSource, MessageRole,
-    StructuredOutputFormat, ToolCall, ToolDefinition, XlaiError,
+    ReasoningEffort, ReasoningSummary, StructuredOutputFormat, ToolCall, ToolDefinition, XlaiError,
 };
 
 use crate::OpenRouterConfig;
@@ -83,11 +83,10 @@ impl OpenRouterChatRequest {
                 .collect(),
             temperature: request.temperature,
             max_output_tokens: request.max_output_tokens,
-            reasoning: request
-                .reasoning_effort
-                .map(|effort| OpenRouterReasoningConfig {
-                    effort: reasoning_effort_openrouter(effort),
-                }),
+            reasoning: openrouter_reasoning_config(
+                request.reasoning_effort,
+                request.reasoning_summary,
+            ),
             tool_choice: tools.as_ref().map(|_| "auto"),
             tools,
             text,
@@ -245,7 +244,10 @@ const fn image_detail_openrouter(detail: ImageDetail) -> &'static str {
 
 #[derive(Serialize)]
 struct OpenRouterReasoningConfig {
-    effort: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    effort: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -294,10 +296,38 @@ fn tool_json_schema(tool: &ToolDefinition) -> Value {
     tool.resolved_input_schema().json_schema()
 }
 
-const fn reasoning_effort_openrouter(effort: xlai_core::ReasoningEffort) -> &'static str {
+const fn openrouter_reasoning_config(
+    effort: Option<ReasoningEffort>,
+    summary: Option<ReasoningSummary>,
+) -> Option<OpenRouterReasoningConfig> {
+    if effort.is_none() && summary.is_none() {
+        return None;
+    }
+
+    Some(OpenRouterReasoningConfig {
+        effort: match effort {
+            Some(effort) => Some(reasoning_effort_openrouter(effort)),
+            None => None,
+        },
+        summary: match summary {
+            Some(summary) => Some(reasoning_summary_openrouter(summary)),
+            None => None,
+        },
+    })
+}
+
+const fn reasoning_effort_openrouter(effort: ReasoningEffort) -> &'static str {
     match effort {
-        xlai_core::ReasoningEffort::Low => "low",
-        xlai_core::ReasoningEffort::Medium => "medium",
-        xlai_core::ReasoningEffort::High => "high",
+        ReasoningEffort::Low => "low",
+        ReasoningEffort::Medium => "medium",
+        ReasoningEffort::High => "high",
+    }
+}
+
+const fn reasoning_summary_openrouter(summary: ReasoningSummary) -> &'static str {
+    match summary {
+        ReasoningSummary::Auto => "auto",
+        ReasoningSummary::Concise => "concise",
+        ReasoningSummary::Detailed => "detailed",
     }
 }

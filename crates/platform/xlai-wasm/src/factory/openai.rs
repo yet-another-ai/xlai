@@ -97,6 +97,9 @@ pub(crate) fn create_chat_session_with_dyn_file_system(
     if let Some(reasoning_effort) = options.reasoning_effort {
         chat = chat.with_reasoning_effort(reasoning_effort);
     }
+    if let Some(reasoning_summary) = options.reasoning_summary {
+        chat = chat.with_reasoning_summary(reasoning_summary);
+    }
 
     if let Some(ref rp) = options.retry_policy {
         chat = chat.with_retry_policy(Some(rp.clone().into()));
@@ -159,6 +162,9 @@ pub(crate) fn create_agent_session_with_dyn_file_system(
 
     if let Some(reasoning_effort) = options.reasoning_effort {
         agent = agent.with_reasoning_effort(reasoning_effort);
+    }
+    if let Some(reasoning_summary) = options.reasoning_summary {
+        agent = agent.with_reasoning_summary(reasoning_summary);
     }
 
     if let Some(ref rp) = options.retry_policy {

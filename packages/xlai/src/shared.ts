@@ -10,6 +10,7 @@ import type {
   ChatContent,
   ChatOptions,
   ReasoningEffort,
+  ReasoningSummary,
   ChatResponse,
   ChatRetryPolicy,
   ChatSessionOptions,
@@ -32,6 +33,7 @@ export type ResolvedRequestOptions = {
   temperature?: number;
   maxOutputTokens?: number;
   reasoningEffort?: ReasoningEffort;
+  reasoningSummary?: ReasoningSummary;
   retryPolicy?: ChatRetryPolicy;
 };
 
@@ -150,6 +152,7 @@ export function resolveRequestOptions(
     temperature: options.temperature,
     maxOutputTokens: options.maxOutputTokens,
     reasoningEffort: options.reasoningEffort,
+    reasoningSummary: options.reasoningSummary,
     ...(options.retryPolicy !== undefined
       ? { retryPolicy: options.retryPolicy }
       : {}),
@@ -174,6 +177,7 @@ export function resolveSessionOptions(
     temperature: options.temperature,
     maxOutputTokens: options.maxOutputTokens,
     reasoningEffort: options.reasoningEffort,
+    reasoningSummary: options.reasoningSummary,
     ...(options.retryPolicy !== undefined
       ? { retryPolicy: options.retryPolicy }
       : {}),

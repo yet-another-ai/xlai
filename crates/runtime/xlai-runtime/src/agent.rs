@@ -13,8 +13,8 @@ use tera::Context;
 use xlai_core::{
     BoxFuture, BoxStream, CancellationSignal, ChatChunk, ChatContent, ChatExecutionConfig,
     ChatExecutionOverrides, ChatMessage, ChatResponse, ContentPart, ErrorKind, MaybeSend,
-    MessageRole, ReasoningEffort, RuntimeBound, StructuredOutput, ToolDefinition, ToolResult,
-    XlaiError,
+    MessageRole, ReasoningEffort, ReasoningSummary, RuntimeBound, StructuredOutput, ToolDefinition,
+    ToolResult, XlaiError,
 };
 
 use crate::chat::Chat;
@@ -162,6 +162,12 @@ impl Agent {
     #[must_use]
     pub fn with_reasoning_effort(mut self, reasoning_effort: ReasoningEffort) -> Self {
         self.chat = self.chat.with_reasoning_effort(reasoning_effort);
+        self
+    }
+
+    #[must_use]
+    pub fn with_reasoning_summary(mut self, reasoning_summary: ReasoningSummary) -> Self {
+        self.chat = self.chat.with_reasoning_summary(reasoning_summary);
         self
     }
 
@@ -497,10 +503,6 @@ impl Agent {
 
                 if response.tool_calls.is_empty() {
                     return;
-                }
-
-                if response.message.role == MessageRole::Assistant {
-                    yield ChatExecutionEvent::Thinking(response.clone());
                 }
 
                 for call in &response.tool_calls {

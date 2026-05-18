@@ -109,8 +109,7 @@ impl WasmAgentSession {
     }
 
     /// Runs the agent streaming loop and returns all execution events as a JSON array (`kind` +
-    /// `data` per item). Intermediate tool-loop assistant rounds are surfaced as `thinking`
-    /// events instead of normal `model` chunks.
+    /// `data` per item).
     #[wasm_bindgen(js_name = streamPrompt)]
     pub async fn stream_prompt(&self, content: String) -> Result<JsValue, JsValue> {
         let mut stream = self.inner.stream_prompt(content);
