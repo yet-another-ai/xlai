@@ -280,7 +280,11 @@ mod sse_parser_tests {
 
         assert_eq!(first.delta, "Checked ");
         assert_eq!(second.summary_index, 0);
-        let response = state.into_chat_response().expect("response");
+        let response = state.into_chat_response();
+        assert!(response.is_ok(), "response should build: {response:?}");
+        let Ok(response) = response else {
+            return;
+        };
         assert_eq!(
             response
                 .message
