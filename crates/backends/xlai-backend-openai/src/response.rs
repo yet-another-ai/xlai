@@ -4,7 +4,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use xlai_core::{
     ChatContent, ChatMessage, ChatResponse, ContentPart, ErrorKind, FinishReason, MediaSource,
-    MessageRole, TokenUsage, TokenUsageSource, ToolCall, XlaiError,
+    MessageRole, TokenUsage, TokenUsageSource, ToolCall, XLAI_REASONING_SUMMARY_METADATA_KEY,
+    XlaiError,
 };
 
 pub(crate) const OPENAI_RESPONSE_OUTPUT_METADATA_KEY: &str = "openai_response_output";
@@ -24,16 +25,20 @@ pub(crate) struct OpenAiChatResponse {
 impl OpenAiChatResponse {
     pub(crate) fn into_core_response(self) -> Result<ChatResponse, XlaiError> {
         let (content, tool_calls) = openai_response_output_to_chat(&self.output)?;
-        let message = attach_response_output_items(
-            ChatMessage {
-                role: MessageRole::Assistant,
-                content,
-                tool_name: None,
-                tool_call_id: None,
-                metadata: BTreeMap::new(),
-            }
-            .with_assistant_tool_calls(&tool_calls),
-            &self.output,
+        let reasoning_summary = reasoning_summary_from_response_output(&self.output);
+        let message = attach_reasoning_summary(
+            attach_response_output_items(
+                ChatMessage {
+                    role: MessageRole::Assistant,
+                    content,
+                    tool_name: None,
+                    tool_call_id: None,
+                    metadata: BTreeMap::new(),
+                }
+                .with_assistant_tool_calls(&tool_calls),
+                &self.output,
+            ),
+            &reasoning_summary,
         );
 
         let has_tool_calls = !tool_calls.is_empty();
@@ -88,6 +93,19 @@ pub(crate) fn attach_response_output_items(
     message
 }
 
+pub(crate) fn attach_reasoning_summary(
+    mut message: ChatMessage,
+    summary: &[String],
+) -> ChatMessage {
+    if !summary.is_empty() {
+        message.metadata.insert(
+            XLAI_REASONING_SUMMARY_METADATA_KEY.to_owned(),
+            Value::Array(summary.iter().cloned().map(Value::String).collect()),
+        );
+    }
+    message
+}
+
 pub(crate) fn response_output_items_from_message(message: &ChatMessage) -> Option<Vec<Value>> {
     message
         .metadata
@@ -136,6 +154,32 @@ pub(crate) fn openai_response_output_to_chat(
         ChatContent::from_parts(parts)
     };
     Ok((content, tool_calls))
+}
+
+pub(crate) fn reasoning_summary_from_response_output(output: &[Value]) -> Vec<String> {
+    let mut summaries = Vec::new();
+    for item in output {
+        let Some(obj) = item.as_object() else {
+            continue;
+        };
+        if obj.get("type").and_then(Value::as_str) != Some("reasoning") {
+            continue;
+        }
+        let Some(summary_items) = obj.get("summary").and_then(Value::as_array) else {
+            continue;
+        };
+        summaries.extend(
+            summary_items
+                .iter()
+                .filter_map(parse_reasoning_summary_part),
+        );
+    }
+    summaries
+}
+
+fn parse_reasoning_summary_part(value: &Value) -> Option<String> {
+    let obj = value.as_object()?;
+    obj.get("text").and_then(Value::as_str).map(str::to_owned)
 }
 
 fn parse_openai_response_content_part(value: &Value) -> Option<ContentPart> {
@@ -247,6 +291,7 @@ pub(crate) fn finish_reason_from_api(
 #[allow(clippy::expect_used, clippy::panic)]
 mod tests {
     use serde_json::json;
+    use xlai_core::XLAI_REASONING_SUMMARY_METADATA_KEY;
 
     use super::OpenAiChatResponse;
 
@@ -278,5 +323,46 @@ mod tests {
         assert_eq!(usage.input_tokens, 20);
         assert_eq!(usage.cached_input_tokens, Some(12));
         assert_eq!(usage.uncached_input_tokens, Some(8));
+    }
+
+    #[test]
+    fn maps_reasoning_summary_to_message_metadata() {
+        let parsed = serde_json::from_value::<OpenAiChatResponse>(json!({
+            "output": [
+                {
+                    "type": "reasoning",
+                    "summary": [
+                        { "type": "summary_text", "text": "Checked constraints." }
+                    ]
+                },
+                {
+                    "type": "message",
+                    "content": [
+                        { "type": "output_text", "text": "Final answer." }
+                    ]
+                }
+            ],
+            "status": "completed"
+        }));
+        let Ok(response) = parsed else {
+            panic!("deserialize response");
+        };
+
+        let mapped = response.into_core_response();
+        let Ok(response) = mapped else {
+            panic!("map response");
+        };
+
+        assert_eq!(
+            response
+                .message
+                .metadata
+                .get(XLAI_REASONING_SUMMARY_METADATA_KEY),
+            Some(&json!(["Checked constraints."]))
+        );
+        assert_eq!(
+            response.message.content.text_parts_concatenated(),
+            "Final answer."
+        );
     }
 }

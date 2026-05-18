@@ -5,8 +5,8 @@ use serde_json::Value as JsonValue;
 use xlai_core::{
     ChatContent, ChatExecutionOverrides, ChatResponse, ChatRetryPolicy, ExecutionLatencyMode,
     FinishReason, FsEntry, FsEntryKind, ImageGenerationBackground, ImageGenerationOutputFormat,
-    ImageGenerationQuality, MessageRole, ReasoningEffort, TokenUsage, TtsAudioFormat,
-    TtsDeliveryMode, TtsExecutionOverrides, VoiceSpec,
+    ImageGenerationQuality, MessageRole, ReasoningEffort, ReasoningSummary, TokenUsage,
+    TtsAudioFormat, TtsDeliveryMode, TtsExecutionOverrides, VoiceSpec,
 };
 
 pub(crate) const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
@@ -121,6 +121,8 @@ pub(crate) struct WasmChatRequest {
     pub(crate) max_output_tokens: Option<u32>,
     #[serde(default)]
     pub(crate) reasoning_effort: Option<ReasoningEffort>,
+    #[serde(default)]
+    pub(crate) reasoning_summary: Option<ReasoningSummary>,
     /// When set, used as the user message body instead of plain-text [`Self::prompt`].
     #[serde(default)]
     pub(crate) content: Option<ChatContent>,
@@ -153,6 +155,8 @@ pub(crate) struct WasmAgentRequest {
     pub(crate) max_output_tokens: Option<u32>,
     #[serde(default)]
     pub(crate) reasoning_effort: Option<ReasoningEffort>,
+    #[serde(default)]
+    pub(crate) reasoning_summary: Option<ReasoningSummary>,
     #[serde(default)]
     pub(crate) content: Option<ChatContent>,
     #[serde(default)]
@@ -192,6 +196,8 @@ pub(crate) struct WasmChatSessionOptions {
     pub(crate) max_output_tokens: Option<u32>,
     #[serde(default)]
     pub(crate) reasoning_effort: Option<ReasoningEffort>,
+    #[serde(default)]
+    pub(crate) reasoning_summary: Option<ReasoningSummary>,
     #[serde(default)]
     pub(crate) retry_policy: Option<WasmChatRetryPolicy>,
     #[serde(default)]
@@ -297,6 +303,7 @@ impl From<WasmChatRequest> for WasmChatSessionOptions {
             temperature: value.temperature,
             max_output_tokens: value.max_output_tokens,
             reasoning_effort: value.reasoning_effort,
+            reasoning_summary: value.reasoning_summary,
             retry_policy: value.retry_policy,
             chat_execution: value.chat_execution,
             runtime_chat_execution_defaults: value.runtime_chat_execution_defaults,
@@ -318,6 +325,7 @@ impl From<WasmAgentRequest> for WasmChatSessionOptions {
             temperature: value.temperature,
             max_output_tokens: value.max_output_tokens,
             reasoning_effort: value.reasoning_effort,
+            reasoning_summary: value.reasoning_summary,
             retry_policy: value.retry_policy,
             chat_execution: value.chat_execution,
             runtime_chat_execution_defaults: value.runtime_chat_execution_defaults,
@@ -342,6 +350,9 @@ pub(crate) struct WasmTransformersSessionOptions {
     /// Uniform options surface with the OpenAI path; ignored by the transformers.js backend.
     #[allow(dead_code)]
     pub(crate) reasoning_effort: Option<ReasoningEffort>,
+    /// Uniform options surface with the OpenAI path; ignored by the transformers.js backend.
+    #[allow(dead_code)]
+    pub(crate) reasoning_summary: Option<ReasoningSummary>,
     pub(crate) retry_policy: Option<WasmChatRetryPolicy>,
     pub(crate) chat_execution: Option<WasmChatExecutionOverrides>,
     pub(crate) runtime_chat_execution_defaults: Option<WasmChatExecutionOverrides>,

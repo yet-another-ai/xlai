@@ -11,8 +11,8 @@ use tera::Context;
 use xlai_core::{
     BoxFuture, BoxStream, CancellationSignal, ChatChunk, ChatContent, ChatExecutionConfig,
     ChatExecutionOverrides, ChatMessage, ChatRequest, ChatResponse, ChatRetryPolicy, ContentPart,
-    ErrorKind, MaybeSend, MessageRole, ReasoningEffort, RuntimeBound, StructuredOutput, ToolCall,
-    ToolCallExecutionMode, ToolDefinition, ToolResult, XlaiError,
+    ErrorKind, MaybeSend, MessageRole, ReasoningEffort, ReasoningSummary, RuntimeBound,
+    StructuredOutput, ToolCall, ToolCallExecutionMode, ToolDefinition, ToolResult, XlaiError,
 };
 
 use crate::{ChatExecutionHandle, EmbeddedPromptStore, XlaiRuntime};
@@ -39,16 +39,12 @@ struct RegisteredTool {
 
 /// One item from a chat/agent stream.
 ///
-/// Agent streams may classify intermediate assistant rounds as [`Self::Thinking`] so consumers can
-/// render them differently from the final assistant reply.
-///
 /// Serialized for WASM/JS as
-/// `{"kind":"model"|"thinking"|"toolCall"|"toolResult","data":...}` (camelCase).
+/// `{"kind":"model"|"toolCall"|"toolResult","data":...}` (camelCase).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "data", rename_all = "camelCase")]
 pub enum ChatExecutionEvent {
     Model(ChatChunk),
-    Thinking(ChatResponse),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
 }
@@ -67,6 +63,7 @@ pub struct Chat {
     temperature: Option<f32>,
     max_output_tokens: Option<u32>,
     reasoning_effort: Option<ReasoningEffort>,
+    reasoning_summary: Option<ReasoningSummary>,
     structured_output: Option<StructuredOutput>,
     retry_policy: Option<ChatRetryPolicy>,
     /// Session-level advisory execution overrides (merged on top of [`XlaiRuntime::chat_execution_defaults`]).
@@ -84,6 +81,7 @@ impl Chat {
             temperature: None,
             max_output_tokens: None,
             reasoning_effort: None,
+            reasoning_summary: None,
             structured_output: None,
             retry_policy: None,
             execution_overrides: ChatExecutionOverrides::default(),
@@ -159,6 +157,12 @@ impl Chat {
     #[must_use]
     pub fn with_reasoning_effort(mut self, reasoning_effort: ReasoningEffort) -> Self {
         self.reasoning_effort = Some(reasoning_effort);
+        self
+    }
+
+    #[must_use]
+    pub fn with_reasoning_summary(mut self, reasoning_summary: ReasoningSummary) -> Self {
+        self.reasoning_summary = Some(reasoning_summary);
         self
     }
 
@@ -415,6 +419,7 @@ impl Chat {
             temperature: self.temperature,
             max_output_tokens: self.max_output_tokens,
             reasoning_effort: self.reasoning_effort,
+            reasoning_summary: self.reasoning_summary,
             retry_policy: self.retry_policy.clone(),
             execution,
             cancellation,

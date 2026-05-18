@@ -5,9 +5,9 @@ use crate::{
     ChatContent, ChatMessage, ChatRequest, ChatRetryPolicy, ContentPart, EmbeddingRequest,
     ErrorKind, GeneratedImage, ImageGenerationBackground, ImageGenerationOutputFormat,
     ImageGenerationQuality, ImageGenerationRequest, ImageGenerationResponse, MediaSource,
-    MessageRole, ReasoningEffort, StructuredOutput, StructuredOutputFormat, ToolCall,
-    ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolSchema, TtsChunk,
-    TtsResponse, XlaiError,
+    MessageRole, ReasoningEffort, ReasoningSummary, StructuredOutput, StructuredOutputFormat,
+    ToolCall, ToolCallExecutionMode, ToolDefinition, ToolParameter, ToolParameterType, ToolSchema,
+    TtsChunk, TtsResponse, XlaiError,
 };
 
 #[test]
@@ -336,6 +336,23 @@ fn reasoning_effort_round_trips_snake_case_json() {
         return;
     };
     assert_eq!(back, ReasoningEffort::Medium);
+}
+
+#[test]
+fn reasoning_summary_round_trips_snake_case_json() {
+    let serialized = serde_json::to_value(ReasoningSummary::Concise);
+    assert!(serialized.is_ok(), "serialize");
+    let Ok(v) = serialized else {
+        return;
+    };
+    assert_eq!(v, json!("concise"));
+
+    let deserialized: Result<ReasoningSummary, _> = serde_json::from_value(v);
+    assert!(deserialized.is_ok(), "deserialize");
+    let Ok(back) = deserialized else {
+        return;
+    };
+    assert_eq!(back, ReasoningSummary::Concise);
 }
 
 #[test]

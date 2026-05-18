@@ -2,13 +2,14 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 use xlai_core::{
-    ChatContent, ChatMessage, ChatResponse, ErrorKind, FinishReason, MessageRole, ToolCall,
-    ToolCallChunk, XlaiError,
+    ChatContent, ChatMessage, ChatResponse, ErrorKind, FinishReason, MessageRole,
+    ReasoningSummaryDelta, ToolCall, ToolCallChunk, XlaiError,
 };
 
 use crate::response::{
-    OpenRouterChatResponse, attach_response_output_items, finish_reason_from_api,
-    openrouter_response_output_to_chat,
+    OpenRouterChatResponse, attach_reasoning_summary, attach_response_output_items,
+    finish_reason_from_api, openrouter_response_output_to_chat,
+    reasoning_summary_from_response_output,
 };
 
 pub(crate) struct StreamState {
@@ -17,6 +18,7 @@ pub(crate) struct StreamState {
     pub(crate) finish_reason: FinishReason,
     output_items: Vec<Value>,
     started_message_indices: BTreeSet<usize>,
+    reasoning_summary: BTreeMap<(usize, usize), String>,
 }
 
 impl Default for StreamState {
@@ -27,6 +29,7 @@ impl Default for StreamState {
             finish_reason: FinishReason::Completed,
             output_items: Vec::new(),
             started_message_indices: BTreeSet::new(),
+            reasoning_summary: BTreeMap::new(),
         }
     }
 }
@@ -80,6 +83,23 @@ impl StreamState {
         self.output_items.push(item);
     }
 
+    pub(crate) fn apply_reasoning_summary_delta(
+        &mut self,
+        output_index: usize,
+        summary_index: usize,
+        delta: String,
+    ) -> ReasoningSummaryDelta {
+        self.reasoning_summary
+            .entry((output_index, summary_index))
+            .or_default()
+            .push_str(&delta);
+        ReasoningSummaryDelta {
+            output_index,
+            summary_index,
+            delta,
+        }
+    }
+
     pub(crate) fn mark_message_started(&mut self, message_index: usize) -> bool {
         self.started_message_indices.insert(message_index)
     }
@@ -89,6 +109,14 @@ impl StreamState {
     }
 
     pub(crate) fn into_chat_response(self) -> Result<ChatResponse, XlaiError> {
+        let reasoning_summary = if self.output_items.is_empty() {
+            self.reasoning_summary
+                .into_values()
+                .filter(|summary| !summary.is_empty())
+                .collect::<Vec<_>>()
+        } else {
+            reasoning_summary_from_response_output(&self.output_items)
+        };
         let (content, tool_calls) = if self.output_items.is_empty() {
             let tool_calls = self
                 .tool_calls
@@ -102,16 +130,19 @@ impl StreamState {
         };
 
         Ok(ChatResponse {
-            message: attach_response_output_items(
-                ChatMessage {
-                    role: MessageRole::Assistant,
-                    content,
-                    tool_name: None,
-                    tool_call_id: None,
-                    metadata: BTreeMap::new(),
-                }
-                .with_assistant_tool_calls(&tool_calls),
-                &self.output_items,
+            message: attach_reasoning_summary(
+                attach_response_output_items(
+                    ChatMessage {
+                        role: MessageRole::Assistant,
+                        content,
+                        tool_name: None,
+                        tool_call_id: None,
+                        metadata: BTreeMap::new(),
+                    }
+                    .with_assistant_tool_calls(&tool_calls),
+                    &self.output_items,
+                ),
+                &reasoning_summary,
             ),
             tool_calls,
             usage: None,
@@ -224,4 +255,42 @@ pub(crate) fn maybe_completed_response(event: &Value) -> Result<Option<ChatRespo
             )
         })?;
     parsed.into_core_response().map(Some)
+}
+
+#[cfg(test)]
+mod sse_parser_tests {
+    use serde_json::json;
+    use xlai_core::XLAI_REASONING_SUMMARY_METADATA_KEY;
+
+    use super::{SseParser, StreamState};
+
+    #[test]
+    fn splits_events_on_lf_only_delimiter() {
+        let mut p = SseParser::default();
+        let ev = p.push(b"data: hello\n\n");
+        assert_eq!(ev, vec!["hello".to_owned()]);
+        assert!(p.buffer.is_empty());
+    }
+
+    #[test]
+    fn stream_state_preserves_reasoning_summary_deltas() {
+        let mut state = StreamState::default();
+        let first = state.apply_reasoning_summary_delta(0, 0, "Checked ".to_owned());
+        let second = state.apply_reasoning_summary_delta(0, 0, "constraints.".to_owned());
+
+        assert_eq!(first.delta, "Checked ");
+        assert_eq!(second.summary_index, 0);
+        let response = state.into_chat_response();
+        assert!(response.is_ok(), "response should build: {response:?}");
+        let Ok(response) = response else {
+            return;
+        };
+        assert_eq!(
+            response
+                .message
+                .metadata
+                .get(XLAI_REASONING_SUMMARY_METADATA_KEY),
+            Some(&json!(["Checked constraints."]))
+        );
+    }
 }

@@ -5,8 +5,8 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use xlai_core::{
     ChatContent, ChatMessage, ChatResponse, ChatRetryPolicy, ContentPart, ErrorKind, FinishReason,
-    MediaSource, MessageRole, ReasoningEffort, StructuredOutput, StructuredOutputFormat, ToolCall,
-    XlaiError,
+    MediaSource, MessageRole, ReasoningEffort, ReasoningSummary, StructuredOutput,
+    StructuredOutputFormat, ToolCall, XlaiError,
 };
 
 use super::common::*;
@@ -415,5 +415,33 @@ async fn chat_session_propagates_reasoning_effort() -> Result<(), XlaiError> {
     let requests = lock_unpoisoned(&requests);
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].reasoning_effort, Some(ReasoningEffort::High));
+    Ok(())
+}
+
+#[allow(clippy::panic_in_result_fn)]
+#[tokio::test]
+async fn chat_session_propagates_reasoning_summary() -> Result<(), XlaiError> {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let model = Arc::new(RecordingChatModel::new(
+        requests.clone(),
+        vec![ChatResponse {
+            message: assistant_message("done."),
+            tool_calls: Vec::new(),
+            usage: None,
+            finish_reason: FinishReason::Completed,
+            metadata: empty_metadata(),
+        }],
+    ));
+
+    let runtime = RuntimeBuilder::new().with_chat_model(model).build()?;
+    let chat = runtime
+        .chat_session()
+        .with_reasoning_summary(ReasoningSummary::Auto);
+
+    let _response = chat.prompt("Hello").await?;
+
+    let requests = lock_unpoisoned(&requests);
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].reasoning_summary, Some(ReasoningSummary::Auto));
     Ok(())
 }

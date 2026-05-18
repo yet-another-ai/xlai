@@ -21,6 +21,7 @@ pub struct ChatMessage {
 }
 
 pub const XLAI_ASSISTANT_TOOL_CALLS_METADATA_KEY: &str = "xlai_assistant_tool_calls";
+pub const XLAI_REASONING_SUMMARY_METADATA_KEY: &str = "xlai_reasoning_summary";
 
 impl ChatMessage {
     #[must_use]
@@ -388,6 +389,15 @@ pub enum ReasoningEffort {
     High,
 }
 
+/// Advisory reasoning summary hint for providers that can expose summarized reasoning.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReasoningSummary {
+    Auto,
+    Concise,
+    Detailed,
+}
+
 /// Structured output request for providers that can honor it.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -542,6 +552,8 @@ pub struct ChatRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<ReasoningEffort>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_summary: Option<ReasoningSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_policy: Option<ChatRetryPolicy>,
     /// Advisory execution hints merged from runtime/session/request layers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -569,6 +581,13 @@ pub struct ToolCallChunk {
     pub arguments_delta: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReasoningSummaryDelta {
+    pub output_index: usize,
+    pub summary_index: usize,
+    pub delta: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum ChatChunk {
     MessageStart {
@@ -577,6 +596,8 @@ pub enum ChatChunk {
     },
     /// Incremental text for multimodal part at `part_index` (usually `0` for plain assistant streams).
     ContentDelta(StreamTextDelta),
+    /// Incremental summarized reasoning text from Responses API reasoning output items.
+    ReasoningSummaryDelta(ReasoningSummaryDelta),
     ToolCallDelta(ToolCallChunk),
     Finished(ChatResponse),
 }

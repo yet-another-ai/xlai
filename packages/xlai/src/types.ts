@@ -61,6 +61,7 @@ export interface ChatRetryPolicy {
 }
 
 export type ReasoningEffort = 'low' | 'medium' | 'high';
+export type ReasoningSummary = 'auto' | 'concise' | 'detailed';
 
 export interface ChatOptions {
   prompt?: string;
@@ -72,6 +73,7 @@ export interface ChatOptions {
   temperature?: number;
   maxOutputTokens?: number;
   reasoningEffort?: ReasoningEffort;
+  reasoningSummary?: ReasoningSummary;
   retryPolicy?: ChatRetryPolicy;
 }
 
@@ -145,12 +147,9 @@ export interface ChatMessage {
 
 /**
  * One event from `AgentSession.streamPrompt` / `streamPromptWithContent` (WASM JSON).
- * Intermediate tool-loop assistant rounds are surfaced as `thinking` so consumers can render
- * them separately from the terminal assistant reply.
  */
 export type ChatExecutionEvent =
   | { kind: 'model'; data: unknown }
-  | { kind: 'thinking'; data: ChatResponse }
   | { kind: 'toolCall'; data: unknown }
   | { kind: 'toolResult'; data: unknown };
 
@@ -270,6 +269,7 @@ export interface ChatSessionOptions {
   temperature?: number;
   maxOutputTokens?: number;
   reasoningEffort?: ReasoningEffort;
+  reasoningSummary?: ReasoningSummary;
   retryPolicy?: ChatRetryPolicy;
   fileSystem?: FileSystemApi;
   /** When set, the WASM runtime behind the session includes local QTS. */
